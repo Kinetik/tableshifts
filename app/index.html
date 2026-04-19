@@ -1,0 +1,480 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TableShifts</title>
+    <link rel="stylesheet" href="styles.css?v=20260419-1" />
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">Skip to App</a>
+    <section id="loginView" class="login-view">
+      <div class="login-panel">
+        <h1 class="brand-title">TableShifts</h1>
+        <p class="hint">Sign in with your email and password.</p>
+
+        <label class="field">
+          Email
+          <input id="loginEmail" name="email" type="email" autocomplete="username" spellcheck="false" placeholder="name@company.com" />
+        </label>
+
+        <label class="field">
+          Password
+          <input id="loginPassword" name="password" type="password" autocomplete="current-password" placeholder="Password" />
+        </label>
+
+        <p id="loginError" class="error" role="alert" aria-live="polite"></p>
+        <button id="loginBtn" type="button">Enter</button>
+        <button id="showCreateAdminBtn" class="secondary full-btn" type="button">Create Admin Account</button>
+
+        <form id="createAdminForm" class="login-create" hidden>
+          <label class="field">
+            Name
+            <input id="newAdminName" type="text" autocomplete="name" />
+          </label>
+          <label class="field">
+            Email
+            <input id="newAdminEmail" type="email" autocomplete="email" spellcheck="false" />
+          </label>
+          <label class="field">
+            Password
+            <input id="newAdminPassword" type="password" autocomplete="new-password" />
+          </label>
+          <label class="field">
+            Repeat password
+            <input id="newAdminPassword2" type="password" autocomplete="new-password" />
+          </label>
+          <button type="submit">Create Admin Account</button>
+        </form>
+
+      </div>
+    </section>
+
+    <section id="appView" class="app-view" hidden>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">TABLESHIFTS</p>
+          <h1 id="pageTitle">Timesheet</h1>
+          <p id="sessionLabel" class="session-label"></p>
+        </div>
+        <div class="top-user">
+          <div id="topIdentity" class="top-identity"></div>
+          <div class="top-actions">
+            <button id="pendingApprovalsBtn" type="button" class="notice-btn" hidden></button>
+            <button id="saveBtn" type="button">Save</button>
+            <button id="logoutBtn" type="button">Logout</button>
+          </div>
+        </div>
+      </header>
+
+      <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
+
+      <main id="mainContent" tabindex="-1">
+        <section id="timesheetTab" class="tab-panel">
+          <div class="toolbar">
+            <label class="field">
+              Month
+              <input id="monthPicker" type="month" />
+            </label>
+            <label id="companyScopeWrap" class="field">
+              Company
+              <select id="companyScope"></select>
+            </label>
+            <label id="departmentScopeWrap" class="field">
+              Department
+              <select id="departmentScope"></select>
+            </label>
+            <label id="teamScopeWrap" class="field">
+              Team Leader
+              <select id="teamScope"></select>
+            </label>
+            <button id="exportCsvBtn" type="button">Export CSV</button>
+          </div>
+
+          <section class="sheet-shell">
+            <div id="timesheetGrid" class="sheet-grid"></div>
+          </section>
+        </section>
+
+        <section id="leaveTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Leave Requests</h2>
+              <p>Request, review, and approve CO or CM days.</p>
+            </div>
+          </div>
+
+          <form id="leaveRequestForm" class="setup-form">
+            <label class="field">
+              Type
+              <select id="leaveType">
+                <option value="vacation">Vacation CO</option>
+                <option value="medical">Medical CM</option>
+                <option value="special_event">Special Events</option>
+              </select>
+            </label>
+            <label class="field">
+              Start date
+              <input id="leaveStartDate" type="date" required />
+            </label>
+            <label class="field">
+              End date
+              <input id="leaveEndDate" type="date" required />
+            </label>
+            <label class="field">
+              Document
+              <input id="leaveDocument" type="file" />
+            </label>
+            <label class="field check-field">
+              <input id="leaveGenerateDocument" type="checkbox" checked />
+              Generate request document
+            </label>
+            <label class="field wide-field">
+              Notes
+              <input id="leaveNotes" type="text" placeholder="Optional reason" />
+            </label>
+            <div class="form-actions">
+              <button type="submit">Submit Request</button>
+            </div>
+          </form>
+
+          <div id="leaveRequestsList" class="directory"></div>
+        </section>
+
+        <section id="chartsTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Charts</h2>
+              <p>Visual overview for the current visible scope and selected month.</p>
+            </div>
+          </div>
+
+          <section class="chart-grid">
+            <article class="chart-card wide-chart">
+              <h3>Scope Totals</h3>
+              <div class="scope-lines">
+                <span>People <strong id="metricPeople">0</strong></span>
+                <span>Worked <strong id="metricWorked">0</strong></span>
+                <span>OT <strong id="metricOvertime">0</strong></span>
+                <span>CO <strong id="metricCo">0</strong></span>
+                <span>CM <strong id="metricCm">0</strong></span>
+                <span>SE <strong id="metricSe">0</strong></span>
+                <span>Diff <strong id="metricDifference">0</strong></span>
+              </div>
+              <section id="fulfillmentBox" class="fulfillment chart-fulfillment" hidden>
+                <div class="fulfillment-head">
+                  <span>Scope fulfillment</span>
+                  <strong id="fulfillmentText">0%</strong>
+                </div>
+                <div class="bar-track">
+                  <div id="fulfillmentBar" class="bar-fill"></div>
+                </div>
+                <p id="fulfillmentMeta"></p>
+              </section>
+            </article>
+            <article class="chart-card">
+              <h3>Hours vs Expected</h3>
+              <div id="hoursChart" class="bar-chart"></div>
+            </article>
+            <article class="chart-card">
+              <h3>Leave Mix</h3>
+              <div id="leaveChart" class="donut-chart"></div>
+              <div id="leaveLegend" class="chart-legend"></div>
+            </article>
+            <article class="chart-card wide-chart">
+              <h3>Overtime by Employee</h3>
+              <div id="overtimeChart" class="rank-chart"></div>
+            </article>
+          </section>
+        </section>
+
+        <section id="holidaysTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>National Holidays</h2>
+              <p>Set public days off by country, company, and department.</p>
+            </div>
+          </div>
+
+          <form id="holidayFetchForm" class="setup-form">
+            <label class="field">
+              Country
+              <select id="holidayCountry"></select>
+            </label>
+            <label class="field">
+              Year
+              <input id="holidayYear" type="number" min="2000" max="2100" />
+            </label>
+            <label class="field">
+              Company
+              <select id="holidayCompany"></select>
+            </label>
+            <label class="field">
+              Department
+              <select id="holidayDepartment"></select>
+            </label>
+            <div class="form-actions">
+              <button id="fetchHolidaysBtn" type="submit">Apply Public Holidays</button>
+            </div>
+          </form>
+
+          <form id="manualHolidayForm" class="setup-form wide">
+            <input id="manualHolidayId" type="hidden" />
+            <label class="field">
+              Date
+              <input id="manualHolidayDate" type="date" required />
+            </label>
+            <label class="field">
+              Holiday name
+              <input id="manualHolidayName" type="text" placeholder="Company holiday" required />
+            </label>
+            <div class="form-actions">
+              <button type="submit">Add Manual Holiday</button>
+            </div>
+          </form>
+
+          <p id="holidayStatus" class="hint" aria-live="polite"></p>
+          <div id="holidaysList" class="directory"></div>
+        </section>
+
+        <section id="usersTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>User Management</h2>
+              <p>Employees, roles, passwords, and reporting lines.</p>
+            </div>
+          </div>
+
+          <form id="employeeForm" class="setup-form">
+            <input type="hidden" id="employeeId" />
+            <label class="field">
+              Name
+              <input id="employeeName" type="text" required />
+            </label>
+            <label class="field">
+              Email
+              <input id="employeeEmail" name="employeeEmail" type="email" autocomplete="off" spellcheck="false" required />
+            </label>
+            <label class="field">
+              Identification Number
+              <input id="employeeIdentification" type="text" required />
+            </label>
+            <label class="field">
+              Position
+              <input id="employeePosition" type="text" required />
+            </label>
+            <label class="field">
+              Password
+              <input id="employeePassword" type="text" required />
+            </label>
+            <label class="field">
+              Start date
+              <input id="employeeStartDate" type="date" required />
+            </label>
+            <label class="field">
+              End date
+              <input id="employeeEndDate" type="date" />
+            </label>
+            <label class="field">
+              Role
+              <select id="employeeRole"></select>
+            </label>
+            <label class="field">
+              Company
+              <select id="employeeCompany"></select>
+            </label>
+            <label class="field">
+              Payroll company access
+              <div id="employeeCompanyAccess" class="check-list"></div>
+            </label>
+            <label class="field">
+              Department
+              <select id="employeeDepartment"></select>
+            </label>
+            <label class="field">
+              Reports to
+              <select id="employeeReportsTo"></select>
+            </label>
+            <label class="field">
+              Team leader
+              <select id="employeeTeamLeader"></select>
+            </label>
+            <label class="field">
+              Available CO days
+              <input id="employeeCo" type="number" min="0" step="0.5" value="21" />
+            </label>
+            <div class="form-actions">
+              <button type="submit">Save Employee</button>
+              <button id="resetEmployeeFormBtn" type="button" class="secondary">Clear</button>
+            </div>
+          </form>
+
+          <div id="usersList" class="directory"></div>
+          <section id="adminDangerZone" class="danger-zone" hidden>
+            <div>
+              <h3>Admin account danger area</h3>
+              <p>Deleting this Admin Account removes its companies, departments, users, timesheets, holidays, leave requests, and logs.</p>
+            </div>
+            <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
+          </section>
+        </section>
+
+        <section id="companiesTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Company Setup</h2>
+              <p>Create organizations and initial departments.</p>
+            </div>
+          </div>
+
+          <form id="companyForm" class="setup-form wide">
+            <label class="field">
+              Company name
+              <input id="companyName" type="text" required />
+            </label>
+            <label class="field">
+              Initial departments
+              <input id="companyDepartments" type="text" placeholder="Sales, Support, Production" />
+            </label>
+            <label class="field">
+              Company logo
+              <input id="companyLogo" type="file" accept="image/*" />
+            </label>
+            <div id="companyLogoPreview" class="logo-preview" aria-live="polite"></div>
+            <div class="form-actions">
+              <button type="submit">Create Company</button>
+            </div>
+          </form>
+
+          <div id="companiesList" class="directory"></div>
+          <div class="log-card">
+            <h3>Company setup log</h3>
+            <div id="companyLog" class="log-list"></div>
+          </div>
+        </section>
+
+        <section id="departmentsTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Department Setup</h2>
+              <p>Link departments to companies, leaders, managers, work days, and shift duration.</p>
+            </div>
+          </div>
+
+          <form id="departmentForm" class="setup-form">
+            <input type="hidden" id="departmentId" />
+            <label class="field">
+              Department name
+              <input id="departmentName" type="text" required />
+            </label>
+            <label class="field">
+              Company
+              <select id="departmentCompany"></select>
+            </label>
+            <label class="field">
+              Manager
+              <select id="departmentManager"></select>
+            </label>
+            <label class="field">
+              Team leader
+              <select id="departmentTeamLeader"></select>
+            </label>
+            <label class="field">
+              Shift hours
+              <input id="departmentShiftHours" type="number" min="1" max="24" step="0.5" value="8" />
+            </label>
+            <fieldset class="days-field">
+              <legend>Normal working days</legend>
+              <label><input type="checkbox" name="workDay" value="1" checked /> Mon</label>
+              <label><input type="checkbox" name="workDay" value="2" checked /> Tue</label>
+              <label><input type="checkbox" name="workDay" value="3" checked /> Wed</label>
+              <label><input type="checkbox" name="workDay" value="4" checked /> Thu</label>
+              <label><input type="checkbox" name="workDay" value="5" checked /> Fri</label>
+              <label><input type="checkbox" name="workDay" value="6" /> Sat</label>
+              <label><input type="checkbox" name="workDay" value="0" /> Sun</label>
+            </fieldset>
+            <div class="form-actions">
+              <button type="submit">Save Department</button>
+              <button id="resetDepartmentFormBtn" type="button" class="secondary">Clear</button>
+            </div>
+          </form>
+
+          <div id="departmentsList" class="directory"></div>
+          <div class="log-card">
+            <h3>Department setup log</h3>
+            <div id="departmentLog" class="log-list"></div>
+          </div>
+        </section>
+      </main>
+    </section>
+
+    <div id="cellEditor" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <strong id="editorTitle">Shift</strong>
+            <span id="editorSubtitle"></span>
+          </div>
+          <button id="closeEditorBtn" type="button" class="icon-btn">Close</button>
+        </div>
+        <div class="quick-buttons">
+          <button data-quick="normal" type="button">Normal</button>
+          <button data-quick="overtime" type="button">OT</button>
+          <button data-quick="vacation" type="button">CO</button>
+          <button data-quick="medical" type="button">CM</button>
+          <button data-quick="special_event" type="button">Special Event</button>
+          <button data-quick="absence" type="button">Absence</button>
+        </div>
+        <label class="field">
+          Type
+          <select id="entryType">
+            <option value="normal">Normal</option>
+            <option value="overtime">Overtime</option>
+            <option value="weekend">Weekend</option>
+            <option value="vacation">Vacation CO</option>
+            <option value="medical">Medical CM</option>
+            <option value="special_event">Special Events</option>
+            <option value="absence">Absence AB</option>
+          </select>
+        </label>
+        <label class="field">
+          Total hours
+          <input id="entryHours" type="number" min="0" max="24" step="0.25" />
+        </label>
+        <label id="entryFileWrap" class="field">
+          Leave document
+          <input id="entryFile" type="file" />
+        </label>
+        <div id="entryFileMeta" class="attachment-meta"></div>
+        <p id="editorHelp" class="hint"></p>
+        <div class="form-actions">
+          <button id="saveEntryBtn" type="button">Save Entry</button>
+          <button id="deleteEntryBtn" type="button" class="danger">Clear Entry</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="leavePreviewModal" class="modal" hidden>
+      <div class="modal-card document-modal">
+        <div class="modal-head">
+          <div>
+            <strong>Leave request document</strong>
+            <span>Preview before saving</span>
+          </div>
+          <button id="cancelLeavePreviewBtn" type="button" class="icon-btn">Cancel</button>
+        </div>
+        <div id="leaveDocumentPreview" class="document-preview"></div>
+        <div class="form-actions">
+          <button id="confirmLeavePreviewBtn" type="button">Confirm Request</button>
+          <button id="cancelLeavePreviewBottomBtn" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="env.js?v=20260419-2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabaseClient.js?v=20260419-2"></script>
+    <script src="data.js?v=20260419-2"></script>
+    <script src="app.js?v=20260419-2"></script>
+  </body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "tableshifts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "db:apply": "node scripts/apply-schema.mjs"
+  },
+  "devDependencies": {
+    "pg": "^8.20.0"
+  }
+}
