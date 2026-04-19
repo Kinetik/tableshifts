@@ -51,25 +51,41 @@
     </section>
 
     <section id="appView" class="app-view" hidden>
-      <header class="topbar">
-        <div>
-          <p class="eyebrow">TABLESHIFTS</p>
-          <h1 id="pageTitle">Timesheet</h1>
-          <p id="sessionLabel" class="session-label"></p>
-        </div>
-        <div class="top-user">
-          <div id="topIdentity" class="top-identity"></div>
-          <div class="top-actions">
-            <button id="pendingApprovalsBtn" type="button" class="notice-btn" hidden></button>
-            <button id="saveBtn" type="button">Save</button>
-            <button id="logoutBtn" type="button">Logout</button>
+      <aside class="app-sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark">TS</span>
+          <div>
+            <strong>TableShifts</strong>
+            <span>Workforce time</span>
           </div>
         </div>
-      </header>
 
-      <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
+        <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
 
-      <main id="mainContent" tabindex="-1">
+        <div class="sidebar-footer">
+          <span>Preview workflow</span>
+          <strong>Test before production</strong>
+        </div>
+      </aside>
+
+      <div class="app-workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">TABLESHIFTS</p>
+            <h1 id="pageTitle">Timesheet</h1>
+            <p id="sessionLabel" class="session-label"></p>
+          </div>
+          <div class="top-user">
+            <div id="topIdentity" class="top-identity"></div>
+            <div class="top-actions">
+              <button id="pendingApprovalsBtn" type="button" class="notice-btn" hidden></button>
+              <button id="saveBtn" type="button">Save</button>
+              <button id="logoutBtn" type="button">Logout</button>
+            </div>
+          </div>
+        </header>
+
+        <main id="mainContent" tabindex="-1">
         <section id="timesheetTab" class="tab-panel">
           <div class="toolbar">
             <label class="field">
@@ -405,7 +421,8 @@
             <div id="departmentLog" class="log-list"></div>
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </section>
 
     <div id="cellEditor" class="modal" hidden>
