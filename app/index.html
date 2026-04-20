@@ -27,6 +27,10 @@
         <button id="loginBtn" type="button">Enter</button>
         <button id="showCreateAdminBtn" class="secondary full-btn" type="button">Create Admin Account</button>
 
+        <div class="individual-login">
+          <button id="individualTableBtn" class="secondary full-btn" type="button">Individual TableShifts</button>
+        </div>
+
         <form id="createAdminForm" class="login-create" hidden>
           <label class="field">
             Name
@@ -48,6 +52,41 @@
         </form>
 
       </div>
+    </section>
+
+    <section id="individualView" class="individual-view" hidden>
+      <header class="individual-topbar">
+        <div>
+          <p class="eyebrow">TABLESHIFTS</p>
+          <h1>Individual TableShifts</h1>
+          <p id="individualLinkLabel" class="session-label"></p>
+        </div>
+        <div class="top-actions">
+          <button id="individualCopyLinkBtn" type="button" class="secondary">Copy Link</button>
+          <button id="individualBackBtn" type="button">Back to Login</button>
+        </div>
+      </header>
+
+      <main class="individual-main">
+        <div class="toolbar individual-toolbar">
+          <label class="field">
+            Month
+            <input id="individualMonthPicker" type="month" />
+          </label>
+          <button id="individualExportBtn" type="button">Export CSV</button>
+          <button id="individualTemplateBtn" type="button" class="secondary">Generate Import Template</button>
+          <label class="field file-action">
+            Import Employee CSV
+            <input id="individualImportFile" type="file" accept=".csv,text/csv" />
+          </label>
+        </div>
+
+        <section class="sheet-shell">
+          <div id="individualGrid" class="sheet-grid individual-grid"></div>
+        </section>
+        <button id="individualNewRowBtn" type="button" class="new-row-btn">New row</button>
+        <p class="hint">Anyone with this link can edit this individual table. It is separate from the company app.</p>
+      </main>
     </section>
 
     <section id="appView" class="app-view" hidden>

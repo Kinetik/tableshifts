@@ -213,6 +213,12 @@ select:focus {
   width: 100%;
 }
 
+.individual-login {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
 .login-create {
   display: grid;
   gap: 10px;
@@ -605,6 +611,15 @@ main:focus-visible {
   min-width: 0;
 }
 
+.individual-grid {
+  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(30px, 1fr)) repeat(5, minmax(54px, 0.5fr));
+}
+
+.individual-grid.meta-expanded {
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(5, minmax(58px, 0.55fr));
+  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 300px);
+}
+
 .sheet-grid.totals-expanded {
   grid-template-columns: minmax(170px, 1fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
   min-width: calc(180px + var(--days) * 34px + 650px);
@@ -630,7 +645,7 @@ main:focus-visible {
   gap: 2px;
   padding: 4px 3px;
   background: #f2f7f4;
-  font-size: 0.82rem;
+  font-size: 0.88rem;
   font-weight: 900;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -638,10 +653,11 @@ main:focus-visible {
 
 .sheet-header span {
   color: var(--muted);
-  font-size: 0.64rem;
+  font-size: 0.68rem;
 }
 
-.sheet-grid:not(.totals-expanded) .detail-total {
+.sheet-grid:not(.totals-expanded) .detail-total,
+.individual-grid:not(.meta-expanded) .manual-meta {
   width: 0;
   min-width: 0;
   overflow: hidden;
@@ -684,7 +700,7 @@ main:focus-visible {
 
 .name-cell span {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.72rem;
 }
 
 .day-cell {
@@ -704,6 +720,32 @@ main:focus-visible {
   background: var(--yellow);
 }
 
+.day-cell[data-entry-type="vacation"] {
+  background: #e4f7e8;
+}
+
+.day-cell[data-entry-type="medical"] {
+  background: #ffe8e8;
+}
+
+.day-cell[data-entry-type="absence"] {
+  color: #ffffff;
+  background: #1d2521;
+}
+
+.day-cell[data-entry-type="absence"] span,
+.day-cell[data-entry-type="absence"] .empty-cell {
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.day-cell[data-entry-type="overtime"] {
+  background: #fff0d8;
+}
+
+.day-cell[data-entry-type="special_event"] {
+  background: #eeeeef;
+}
+
 .day-cell.editable {
   cursor: pointer;
 }
@@ -720,23 +762,92 @@ main:focus-visible {
 }
 
 .day-cell strong {
-  font-size: 0.68rem;
+  font-size: 0.76rem;
 }
 
 .day-cell span,
 .empty-cell {
   color: var(--muted);
-  font-size: 0.62rem;
+  font-size: 0.68rem;
 }
 
 .total-cell {
   display: grid;
   place-items: center;
   padding: 3px;
-  font-size: 0.76rem;
+  font-size: 0.82rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   background: #fbfdfc;
+}
+
+.individual-view {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.individual-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(18px);
+}
+
+.individual-main {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.individual-toolbar {
+  align-items: end;
+}
+
+.file-action input {
+  padding-top: 7px;
+}
+
+.new-row-btn {
+  justify-self: start;
+}
+
+.inline-cell-input {
+  width: 100%;
+  min-height: 28px;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 5px;
+  background: transparent;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.inline-cell-input:focus {
+  outline: 2px solid rgba(19, 108, 73, 0.28);
+  background: #ffffff;
+}
+
+.strong-input {
+  text-align: left;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.compact-input {
+  padding: 2px;
+  text-transform: uppercase;
+}
+
+.manual-more {
+  background: #f8fbf9;
 }
 
 .positive {
@@ -757,6 +868,92 @@ main:focus-visible {
   justify-content: space-between;
   gap: 14px;
   margin-bottom: 16px;
+}
+
+.section-head.compact {
+  margin-bottom: 10px;
+}
+
+.section-head.compact h2 {
+  margin-bottom: 3px;
+  font-size: 1rem;
+}
+
+.section-head.compact p {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.management-shell {
+  display: grid;
+  gap: 14px;
+}
+
+.management-block,
+.management-logs {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.hierarchy-company,
+.hierarchy-department {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.hierarchy-company + .hierarchy-company {
+  margin-top: 10px;
+}
+
+.hierarchy-company > summary,
+.hierarchy-department > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.hierarchy-company summary::marker,
+.hierarchy-department summary::marker {
+  color: var(--accent);
+}
+
+.hierarchy-company em,
+.hierarchy-department em,
+.hierarchy-people em {
+  display: block;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.hierarchy-children {
+  display: grid;
+  gap: 8px;
+  padding: 0 12px 12px 28px;
+}
+
+.hierarchy-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 12px 12px 22px;
+}
+
+.hierarchy-people > span {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #f8fbf9;
+  font-size: 0.82rem;
+  font-weight: 850;
 }
 
 .directory {

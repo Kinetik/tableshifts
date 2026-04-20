@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = "tableshifts.full.v2";
   const SESSION_KEY = "tableshifts.session.v2";
+  const INDIVIDUAL_STORAGE_PREFIX = "tableshifts.individual.";
   const ROLES = {
     admin_account: "Admin Account",
     employee: "Employee",
@@ -37,6 +38,8 @@
   let db = loadDb();
   const supabaseState = window.TableShiftsSupabase || { configured: false, client: null, mode: "local" };
   const supabase = supabaseState.client;
+  let individualTable = null;
+  let individualMetaExpanded = false;
   let session = {
     userId: "",
     activeCompanyId: db.companies[0]?.id || "",
@@ -51,6 +54,17 @@
 
   const el = {
     loginView: byId("loginView"),
+    individualView: byId("individualView"),
+    individualTableBtn: byId("individualTableBtn"),
+    individualBackBtn: byId("individualBackBtn"),
+    individualCopyLinkBtn: byId("individualCopyLinkBtn"),
+    individualLinkLabel: byId("individualLinkLabel"),
+    individualMonthPicker: byId("individualMonthPicker"),
+    individualExportBtn: byId("individualExportBtn"),
+    individualTemplateBtn: byId("individualTemplateBtn"),
+    individualImportFile: byId("individualImportFile"),
+    individualGrid: byId("individualGrid"),
+    individualNewRowBtn: byId("individualNewRowBtn"),
     appView: byId("appView"),
     loginEmail: byId("loginEmail"),
     loginPassword: byId("loginPassword"),
@@ -178,8 +192,14 @@
   init();
 
   async function init() {
+    mergeSetupPanels();
     bindLogin();
     bindApp();
+    bindIndividual();
+    if (individualIdFromUrl()) {
+      await openIndividualTable(individualIdFromUrl());
+      return;
+    }
     await restoreSession();
   }
 
@@ -188,6 +208,7 @@
     el.showCreateAdminBtn.addEventListener("click", () => {
       el.createAdminForm.hidden = !el.createAdminForm.hidden;
     });
+    el.individualTableBtn.addEventListener("click", () => openIndividualTable());
     el.createAdminForm.addEventListener("submit", createPayrollAdminFromLogin);
     el.loginEmail.addEventListener("keydown", (event) => {
       if (event.key === "Enter") login();
@@ -195,6 +216,82 @@
     el.loginPassword.addEventListener("keydown", (event) => {
       if (event.key === "Enter") login();
     });
+  }
+
+  function bindIndividual() {
+    el.individualBackBtn.addEventListener("click", () => {
+      individualTable = null;
+      history.replaceState(null, "", location.pathname);
+      el.individualView.hidden = true;
+      el.appView.hidden = true;
+      el.loginView.hidden = false;
+    });
+    el.individualCopyLinkBtn.addEventListener("click", async () => {
+      const link = individualShareLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        flash(el.individualCopyLinkBtn, "Copied");
+      } catch (error) {
+        window.prompt("Copy this link", link);
+      }
+    });
+    el.individualMonthPicker.addEventListener("change", () => {
+      if (!individualTable) return;
+      individualTable.month = el.individualMonthPicker.value || getCurrentMonth();
+      saveIndividualTable();
+      renderIndividualTable();
+    });
+    el.individualExportBtn.addEventListener("click", exportIndividualCsv);
+    el.individualTemplateBtn.addEventListener("click", downloadIndividualTemplate);
+    el.individualImportFile.addEventListener("change", importIndividualCsv);
+    el.individualNewRowBtn.addEventListener("click", () => {
+      ensureIndividualTable();
+      individualTable.rows.push(defaultIndividualRow());
+      saveIndividualTable();
+      renderIndividualTable();
+    });
+  }
+
+  function mergeSetupPanels() {
+    const usersSection = byId("usersTab");
+    const companySection = byId("companiesTab");
+    const departmentSection = byId("departmentsTab");
+    if (!usersSection || !companySection || !departmentSection || usersSection.dataset.merged === "true") return;
+    usersSection.dataset.merged = "true";
+    usersSection.querySelector(".section-head h2").textContent = "Organization Management";
+    usersSection.querySelector(".section-head p").textContent = "Companies, departments, users, access, and reporting lines.";
+
+    const managementShell = document.createElement("div");
+    managementShell.className = "management-shell";
+    const hierarchyBlock = document.createElement("section");
+    hierarchyBlock.className = "management-block hierarchy-block";
+    hierarchyBlock.innerHTML = `<div class="section-head compact"><div><h2>Organization hierarchy</h2><p>Expand companies to review departments and employees.</p></div></div>`;
+    hierarchyBlock.appendChild(byId("companiesList"));
+
+    const companyBlock = document.createElement("section");
+    companyBlock.className = "management-block";
+    companyBlock.innerHTML = `<div class="section-head compact"><div><h2>Company</h2><p>Create companies with optional initial departments and logo.</p></div></div>`;
+    companyBlock.appendChild(byId("companyForm"));
+
+    const departmentBlock = document.createElement("section");
+    departmentBlock.className = "management-block";
+    departmentBlock.innerHTML = `<div class="section-head compact"><div><h2>Department</h2><p>Assign leaders, managers, work days, and shift duration.</p></div></div>`;
+    departmentBlock.appendChild(byId("departmentForm"));
+
+    const userBlock = document.createElement("section");
+    userBlock.className = "management-block";
+    userBlock.innerHTML = `<div class="section-head compact"><div><h2>Users</h2><p>Create employees, payroll admins, and reporting lines.</p></div></div>`;
+    userBlock.appendChild(byId("employeeForm"));
+    userBlock.appendChild(byId("usersList"));
+
+    const logsBlock = document.createElement("section");
+    logsBlock.className = "management-logs";
+    logsBlock.appendChild(byId("companyLog").closest(".log-card"));
+    logsBlock.appendChild(byId("departmentLog").closest(".log-card"));
+
+    managementShell.append(hierarchyBlock, companyBlock, departmentBlock, userBlock, logsBlock);
+    usersSection.appendChild(managementShell);
+    usersSection.appendChild(byId("adminDangerZone"));
   }
 
   function bindApp() {
@@ -585,7 +682,8 @@
 
   function showActiveTab() {
     ["timesheet", "leave", "charts", "companies", "departments", "holidays", "users"].forEach((tab) => {
-      byId(`${tab}Tab`).hidden = session.activeTab !== tab;
+      const panel = byId(`${tab}Tab`);
+      if (panel) panel.hidden = session.activeTab !== tab;
     });
     if (session.activeTab === "charts") renderCharts();
     if (session.activeTab === "leave") renderLeaveRequests();
@@ -676,6 +774,7 @@
       cell.dataset.workday = isWorkDay ? "true" : "false";
       if (holiday) cell.dataset.holiday = "true";
       if (entry) {
+        cell.dataset.entryType = entry.type;
         const parts = entryParts(entry, department);
         cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${parts}</span>`;
       } else if (pendingLeaveForEmployee(employee.id, day.iso)) {
@@ -1739,19 +1838,47 @@
 
   function renderCompanySetup() {
     el.companiesList.innerHTML = accessibleCompanies().map((company) => {
-      const count = departments().filter((department) => department.companyId === company.id).length;
-      return `<article class="directory-row">
-        <div class="company-row-title">
-          ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
-          <div><strong>${escapeHtml(company.name)}</strong><span>${count} departments</span></div>
+      const companyDepartments = departments().filter((department) => department.companyId === company.id);
+      const companyUsers = users().filter((user) => user.companyId === company.id);
+      return `<details class="hierarchy-company" open>
+        <summary>
+          <span class="company-row-title">
+            ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
+            <span><strong>${escapeHtml(company.name)}</strong><em>${companyDepartments.length} departments - ${companyUsers.length} users</em></span>
+          </span>
+          <button type="button" class="danger mini" data-delete-company="${company.id}">Delete</button>
+        </summary>
+        <div class="hierarchy-children">
+          ${companyDepartments.length ? companyDepartments.map((department) => hierarchyDepartmentRow(department)).join("") : `<p class="hint">No departments yet.</p>`}
         </div>
-        <button type="button" class="danger" data-delete-company="${company.id}">Delete</button>
-      </article>`;
+      </details>`;
     }).join("");
     el.companiesList.querySelectorAll("[data-delete-company]").forEach((button) => {
       button.addEventListener("click", () => deleteCompany(button.dataset.deleteCompany));
     });
+    el.companiesList.querySelectorAll("[data-edit-dept]").forEach((button) => {
+      button.addEventListener("click", () => editDepartment(button.dataset.editDept));
+    });
+    el.companiesList.querySelectorAll("[data-delete-dept]").forEach((button) => {
+      button.addEventListener("click", () => deleteDepartment(button.dataset.deleteDept));
+    });
     renderLogs();
+  }
+
+  function hierarchyDepartmentRow(department) {
+    const people = users().filter((user) => user.departmentId === department.id);
+    return `<details class="hierarchy-department">
+      <summary>
+        <span><strong>${escapeHtml(department.name)}</strong><em>${people.length} users - ${department.shiftHours}h shift</em></span>
+        <span class="row-actions">
+          <button type="button" class="secondary mini" data-edit-dept="${department.id}">Edit</button>
+          <button type="button" class="danger mini" data-delete-dept="${department.id}">Delete</button>
+        </span>
+      </summary>
+      <div class="hierarchy-people">
+        ${people.length ? people.map((user) => `<span>${escapeHtml(user.name)} <em>${ROLES[user.role]}</em></span>`).join("") : `<p class="hint">No users assigned.</p>`}
+      </div>
+    </details>`;
   }
 
   async function createCompany(event) {
@@ -1800,10 +1927,18 @@
 
   function deleteCompany(id) {
     const company = companyById(id);
-    if (!window.confirm(`Delete company ${company.name}? Departments, users, and entries for it will be removed.`)) return;
+    const childDepartments = allDepartments().filter((department) => department.companyId === id);
+    if (childDepartments.length) {
+      window.alert(`Delete the departments inside ${company.name} before deleting the company.`);
+      return;
+    }
+    const companyUsers = users().filter((user) => user.companyId === id);
+    if (companyUsers.length) {
+      window.alert(`Move or delete the employees inside ${company.name} before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
     db.companies = db.companies.filter((item) => item.id !== id);
-    db.departments = db.departments.filter((item) => item.companyId !== id);
-    db.users = db.users.filter((item) => item.role === "admin_account" || item.role === "payroll_admin" || item.companyId !== id);
     delete db.entries[id];
     addLog("company", `Deleted company ${company.name}`);
     session.activeCompanyId = accessibleCompanies()[0]?.id || "";
@@ -1884,9 +2019,13 @@
 
   function deleteDepartment(id) {
     const department = departmentById(id);
-    if (!window.confirm(`Delete department ${department.name}? Employees will keep no department until reassigned.`)) return;
+    const assigned = users().filter((user) => user.departmentId === id);
+    if (assigned.length) {
+      window.alert(`Move or delete the employees in ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
     db.departments = db.departments.filter((item) => item.id !== id);
-    db.users = db.users.map((user) => user.departmentId === id ? { ...user, departmentId: "", reportsToId: "", teamLeaderId: "" } : user);
     addLog("department", `Deleted department ${department.name}`);
     saveDb();
     renderAll();
@@ -1946,6 +2085,311 @@
       ]);
     });
     download(`tableshifts-${session.month}.csv`, rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  async function openIndividualTable(id = "") {
+    const tableId = id || makeId("table");
+    individualTable = await loadIndividualTable(tableId);
+    el.loginView.hidden = true;
+    el.appView.hidden = true;
+    el.individualView.hidden = false;
+    history.replaceState(null, "", `${location.pathname}?table=${encodeURIComponent(individualTable.id)}`);
+    el.individualMonthPicker.value = individualTable.month;
+    renderIndividualTable();
+    saveIndividualTable();
+  }
+
+  async function loadIndividualTable(id) {
+    if (supabaseState.configured && supabase) {
+      const { data, error } = await supabase.rpc("get_individual_table", { token_value: id });
+      if (!error && data) {
+        return migrateIndividualTable({ ...data, id });
+      }
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(`${INDIVIDUAL_STORAGE_PREFIX}${id}`));
+      if (stored) return migrateIndividualTable(stored);
+    } catch (error) {
+      // Local fallback starts with a clean table.
+    }
+    return migrateIndividualTable({ id, month: getCurrentMonth(), rows: [defaultIndividualRow()], entries: {} });
+  }
+
+  function migrateIndividualTable(table) {
+    return {
+      id: table.id || makeId("table"),
+      month: table.month || getCurrentMonth(),
+      rows: Array.isArray(table.rows) && table.rows.length ? table.rows.map((row) => ({
+        id: row.id || makeId("row"),
+        name: row.name || "",
+        company: row.company || "",
+        department: row.department || "",
+        identificationNumber: row.identificationNumber || "",
+        position: row.position || ""
+      })) : [defaultIndividualRow()],
+      entries: table.entries || {}
+    };
+  }
+
+  function defaultIndividualRow() {
+    return {
+      id: makeId("row"),
+      name: "",
+      company: "",
+      department: "",
+      identificationNumber: "",
+      position: ""
+    };
+  }
+
+  async function saveIndividualTable() {
+    if (!individualTable) return;
+    localStorage.setItem(`${INDIVIDUAL_STORAGE_PREFIX}${individualTable.id}`, JSON.stringify(individualTable));
+    if (supabaseState.configured && supabase) {
+      await supabase.rpc("save_individual_table", {
+        token_value: individualTable.id,
+        data_value: individualTable
+      });
+    }
+  }
+
+  function ensureIndividualTable() {
+    if (!individualTable) individualTable = migrateIndividualTable({ id: makeId("table") });
+  }
+
+  function renderIndividualTable() {
+    ensureIndividualTable();
+    const days = daysInMonth(individualTable.month);
+    el.individualMonthPicker.value = individualTable.month;
+    el.individualLinkLabel.textContent = individualShareLink();
+    el.individualGrid.style.setProperty("--days", days.length);
+    el.individualGrid.classList.toggle("meta-expanded", individualMetaExpanded);
+    el.individualGrid.replaceChildren();
+    const detailHeaders = ["Company", "Department", "ID", "Position"];
+    const headers = ["Employee", "More", ...detailHeaders, ...days.map((day) => dayHeader(day)), "Worked", "OT", "CO", "CM", "SE"];
+    headers.forEach((header, index) => {
+      const cell = div("sheet-header");
+      if (index === 0) cell.classList.add("sticky-name");
+      if (detailHeaders.includes(header)) cell.classList.add("manual-meta");
+      if (header === "More") {
+        cell.classList.add("manual-more");
+        cell.innerHTML = `<button id="individualMoreBtn" type="button" class="mini toggle-totals" aria-expanded="${individualMetaExpanded}">${individualMetaExpanded ? "Less" : "More"}</button>`;
+      } else {
+        cell.innerHTML = header;
+      }
+      el.individualGrid.appendChild(cell);
+    });
+    byId("individualMoreBtn")?.addEventListener("click", () => {
+      individualMetaExpanded = !individualMetaExpanded;
+      renderIndividualTable();
+    });
+    individualTable.rows.forEach((row) => renderIndividualRow(row, days));
+  }
+
+  function renderIndividualRow(row, days) {
+    const nameCell = div("name-cell sticky-name");
+    nameCell.innerHTML = `<input class="inline-cell-input strong-input" data-row-field="${row.id}:name" value="${escapeAttr(row.name)}" placeholder="Employee name" />`;
+    el.individualGrid.appendChild(nameCell);
+
+    const moreCell = div("total-cell manual-more");
+    moreCell.textContent = individualMetaExpanded ? "<" : "...";
+    el.individualGrid.appendChild(moreCell);
+
+    ["company", "department", "identificationNumber", "position"].forEach((field) => {
+      const cell = div("total-cell manual-meta");
+      cell.innerHTML = `<input class="inline-cell-input" data-row-field="${row.id}:${field}" value="${escapeAttr(row[field])}" placeholder="${escapeAttr(individualFieldLabel(field))}" />`;
+      el.individualGrid.appendChild(cell);
+    });
+
+    days.forEach((day) => {
+      const entry = individualTable.entries[row.id]?.[day.iso] || "";
+      const cell = div("day-cell editable manual-day");
+      cell.dataset.workday = isWeekday(day.date) ? "true" : "false";
+      const entryType = individualEntryType(entry);
+      if (entryType) cell.dataset.entryType = entryType;
+      cell.innerHTML = `<input class="inline-cell-input compact-input" data-individual-entry="${row.id}:${day.iso}" value="${escapeAttr(entry)}" placeholder="" />`;
+      el.individualGrid.appendChild(cell);
+    });
+
+    const totals = individualTotals(row, days);
+    ["worked", "overtime", "co", "cm", "se"].forEach((field) => {
+      const cell = div("total-cell");
+      cell.textContent = field === "worked" || field === "overtime" ? `${formatHours(totals[field])}h` : `${totals[field]}d`;
+      el.individualGrid.appendChild(cell);
+    });
+
+    el.individualGrid.querySelectorAll(`[data-row-field^="${row.id}:"]`).forEach((input) => {
+      input.addEventListener("change", handleIndividualRowChange);
+      input.addEventListener("blur", handleIndividualRowChange);
+    });
+    el.individualGrid.querySelectorAll(`[data-individual-entry^="${row.id}:"]`).forEach((input) => {
+      input.addEventListener("change", handleIndividualEntryChange);
+    });
+  }
+
+  function handleIndividualRowChange(event) {
+    const [rowId, field] = event.target.dataset.rowField.split(":");
+    const row = individualTable.rows.find((item) => item.id === rowId);
+    if (!row) return;
+    row[field] = clean(event.target.value);
+    if (field === "name" && !row.name) {
+      if (window.confirm("Delete this row?")) {
+        individualTable.rows = individualTable.rows.filter((item) => item.id !== rowId);
+        delete individualTable.entries[rowId];
+        saveIndividualTable();
+        renderIndividualTable();
+        return;
+      }
+    }
+    saveIndividualTable();
+  }
+
+  function handleIndividualEntryChange(event) {
+    const [rowId, iso] = event.target.dataset.individualEntry.split(":");
+    individualTable.entries[rowId] = individualTable.entries[rowId] || {};
+    const value = clean(event.target.value).toUpperCase();
+    if (value) {
+      individualTable.entries[rowId][iso] = value;
+    } else {
+      delete individualTable.entries[rowId][iso];
+    }
+    saveIndividualTable();
+    renderIndividualTable();
+  }
+
+  function individualTotals(row, days) {
+    return days.reduce((acc, day) => {
+      const raw = clean(individualTable.entries[row.id]?.[day.iso]).toUpperCase();
+      if (!raw) return acc;
+      if (raw === "CO") acc.co += 1;
+      else if (raw === "CM") acc.cm += 1;
+      else if (raw === "SE") acc.se += 1;
+      else if (raw.includes("+")) {
+        const [base, extra] = raw.split("+").map(Number);
+        acc.worked += Number(base || 0) + Number(extra || 0);
+        acc.overtime += Number(extra || 0);
+      } else if (raw === "OT") {
+        acc.worked += 10;
+        acc.overtime += 2;
+      } else if (/^\d+(\.\d+)?$/.test(raw)) {
+        acc.worked += Number(raw);
+      } else if (raw === "N") {
+        acc.worked += 8;
+      }
+      return acc;
+    }, { worked: 0, overtime: 0, co: 0, cm: 0, se: 0 });
+  }
+
+  function individualEntryType(rawValue) {
+    const raw = clean(rawValue).toUpperCase();
+    if (raw === "CO") return "vacation";
+    if (raw === "CM") return "medical";
+    if (raw === "SE") return "special_event";
+    if (raw === "AB") return "absence";
+    if (raw === "OT" || raw.includes("+")) return "overtime";
+    if (raw === "N" || /^\d+(\.\d+)?$/.test(raw)) return "normal";
+    return "";
+  }
+
+  function exportIndividualCsv() {
+    ensureIndividualTable();
+    const days = daysInMonth(individualTable.month);
+    const rows = [["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "OT", "CO", "CM", "SE"]];
+    individualTable.rows.forEach((row) => {
+      const totals = individualTotals(row, days);
+      rows.push([
+        row.name,
+        row.company,
+        row.department,
+        row.identificationNumber,
+        row.position,
+        ...days.map((day) => individualTable.entries[row.id]?.[day.iso] || ""),
+        formatHours(totals.worked),
+        formatHours(totals.overtime),
+        totals.co,
+        totals.cm,
+        totals.se
+      ]);
+    });
+    download(`individual-tableshifts-${individualTable.month}.csv`, rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  function downloadIndividualTemplate() {
+    const rows = [
+      ["Employee", "Company", "Department", "Identification Number", "Position"],
+      ["Jane Example", "Example Company", "Operations", "EMP-001", "Operator"]
+    ];
+    download("individual-tableshifts-import-template.csv", rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  async function importIndividualCsv() {
+    const file = el.individualImportFile.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsv(text);
+    const [, ...dataRows] = rows;
+    dataRows.forEach((cells) => {
+      if (!clean(cells[0])) return;
+      individualTable.rows.push({
+        id: makeId("row"),
+        name: clean(cells[0]),
+        company: clean(cells[1]),
+        department: clean(cells[2]),
+        identificationNumber: clean(cells[3]),
+        position: clean(cells[4])
+      });
+    });
+    el.individualImportFile.value = "";
+    saveIndividualTable();
+    renderIndividualTable();
+  }
+
+  function parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let quoted = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (char === '"' && quoted && next === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === "," && !quoted) {
+        row.push(cell);
+        cell = "";
+      } else if ((char === "\n" || char === "\r") && !quoted) {
+        if (char === "\r" && next === "\n") index += 1;
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += char;
+      }
+    }
+    row.push(cell);
+    if (row.some((value) => value !== "")) rows.push(row);
+    return rows;
+  }
+
+  function individualFieldLabel(field) {
+    return {
+      company: "Company",
+      department: "Department",
+      identificationNumber: "ID",
+      position: "Position"
+    }[field] || field;
+  }
+
+  function individualShareLink() {
+    return `${location.origin}${location.pathname}?table=${encodeURIComponent(individualTable?.id || "")}`;
+  }
+
+  function individualIdFromUrl() {
+    return new URLSearchParams(location.search).get("table") || "";
   }
 
   function getEntry(employeeId, iso) {
@@ -2045,10 +2489,8 @@
       { id: "charts", label: "Charts" }
     ];
     if (canManageSetup()) {
-      tabs.push({ id: "companies", label: "Company Setup" });
-      tabs.push({ id: "departments", label: "Department Setup" });
+      tabs.push({ id: "users", label: "Management" });
       tabs.push({ id: "holidays", label: "National Holidays" });
-      tabs.push({ id: "users", label: "User Management" });
     }
     return tabs;
   }

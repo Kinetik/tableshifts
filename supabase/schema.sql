@@ -178,6 +178,14 @@ create table if not exists public.audit_logs (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.individual_tables (
+  id uuid primary key default gen_random_uuid(),
+  share_token text not null unique,
+  table_data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_profiles_environment on public.profiles(environment_id);
 create index if not exists idx_companies_environment on public.companies(environment_id);
 create index if not exists idx_departments_company on public.departments(company_id);
@@ -187,6 +195,7 @@ create index if not exists idx_leave_environment_status on public.leave_requests
 create index if not exists idx_holidays_scope on public.national_holidays(environment_id, holiday_date);
 create index if not exists idx_documents_environment on public.documents(environment_id);
 create index if not exists idx_audit_environment_created on public.audit_logs(environment_id, created_at desc);
+create index if not exists idx_individual_tables_share_token on public.individual_tables(share_token);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -220,6 +229,10 @@ for each row execute function public.set_updated_at();
 
 drop trigger if exists trg_timesheet_entries_updated_at on public.timesheet_entries;
 create trigger trg_timesheet_entries_updated_at before update on public.timesheet_entries
+for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_individual_tables_updated_at on public.individual_tables;
+create trigger trg_individual_tables_updated_at before update on public.individual_tables
 for each row execute function public.set_updated_at();
 
 create or replace function public.current_environment_id()
@@ -340,6 +353,7 @@ alter table public.leave_requests enable row level security;
 alter table public.national_holidays enable row level security;
 alter table public.documents enable row level security;
 alter table public.audit_logs enable row level security;
+alter table public.individual_tables enable row level security;
 
 drop policy if exists "environment owner can read own environment" on public.admin_environments;
 create policy "environment owner can read own environment" on public.admin_environments
@@ -478,6 +492,46 @@ for select using (environment_id = public.current_environment_id());
 drop policy if exists "audit insert same environment" on public.audit_logs;
 create policy "audit insert same environment" on public.audit_logs
 for insert with check (environment_id = public.current_environment_id());
+
+drop policy if exists "individual tables public link read" on public.individual_tables;
+create policy "individual tables public link read" on public.individual_tables
+for select using (false);
+
+drop policy if exists "individual tables public link insert" on public.individual_tables;
+create policy "individual tables public link insert" on public.individual_tables
+for insert with check (false);
+
+drop policy if exists "individual tables public link update" on public.individual_tables;
+create policy "individual tables public link update" on public.individual_tables
+for update using (false) with check (false);
+
+create or replace function public.get_individual_table(token_value text)
+returns jsonb
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select table_data
+  from public.individual_tables
+  where share_token = token_value
+  limit 1
+$$;
+
+create or replace function public.save_individual_table(token_value text, data_value jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.individual_tables (share_token, table_data)
+  values (token_value, data_value)
+  on conflict (share_token) do update
+  set table_data = excluded.table_data,
+      updated_at = now();
+end;
+$$;
 
 insert into storage.buckets (id, name, public)
 values ('company-logos', 'company-logos', false)
