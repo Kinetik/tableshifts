@@ -643,8 +643,8 @@ main:focus-visible {
 }
 
 .individual-grid.totals-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
-  min-width: calc(180px + 58px + var(--days) * 34px + 650px);
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
+  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 650px);
 }
 
 .individual-grid.meta-expanded.totals-expanded {
@@ -690,13 +690,20 @@ main:focus-visible {
 
 .sheet-grid:not(.totals-expanded) .detail-total,
 .individual-grid:not(.meta-expanded) .manual-meta {
-  width: 0;
   min-width: 0;
   overflow: hidden;
   border-right: 0;
   padding: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+.individual-grid.totals-expanded:not(.meta-expanded) .manual-meta {
+  border-right: 1px solid var(--line);
+}
+
+.individual-grid:not(.meta-expanded):not(.totals-expanded) .manual-meta {
+  width: 0;
 }
 
 .toggle-totals {
@@ -1304,6 +1311,26 @@ main:focus-visible {
   width: min(760px, 100%);
   max-height: calc(100vh - 36px);
   overflow: auto;
+}
+
+.holiday-preview-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(420px, 48vh);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.holiday-preview-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.5fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.compact-form {
+  margin-top: 14px;
+  grid-template-columns: minmax(140px, 0.45fr) minmax(180px, 1fr) auto;
 }
 
 .modal-head {

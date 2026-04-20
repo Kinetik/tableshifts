@@ -75,6 +75,15 @@
           </label>
           <button id="individualExportBtn" type="button">Export CSV</button>
           <button id="individualTemplateBtn" type="button" class="secondary">Generate Import Template</button>
+          <label class="field">
+            Holiday country
+            <select id="individualHolidayCountry"></select>
+          </label>
+          <label class="field">
+            Holiday year
+            <input id="individualHolidayYear" type="number" min="2000" max="2100" />
+          </label>
+          <button id="individualHolidayBtn" type="button" class="secondary">Add Public Holidays</button>
           <label class="field file-action">
             Import Employee CSV
             <input id="individualImportFile" type="file" accept=".csv,text/csv" />
@@ -550,6 +559,7 @@
             <option value="medical">Medical CM</option>
             <option value="special_event">Special Events</option>
             <option value="absence">Absence AB</option>
+            <option value="holiday">Holiday H</option>
           </select>
         </label>
         <label class="field">
@@ -582,6 +592,36 @@
         <div class="form-actions">
           <button id="confirmLeavePreviewBtn" type="button">Confirm Request</button>
           <button id="cancelLeavePreviewBottomBtn" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="individualHolidayModal" class="modal" hidden>
+      <div class="modal-card document-modal">
+        <div class="modal-head">
+          <div>
+            <strong>Public holidays</strong>
+            <span id="individualHolidaySubtitle">Preview before applying</span>
+          </div>
+          <button id="closeIndividualHolidayBtn" type="button" class="icon-btn">Close</button>
+        </div>
+        <div id="individualHolidayList" class="holiday-preview-list"></div>
+        <form id="individualHolidayAddForm" class="setup-form compact-form">
+          <label class="field">
+            Date
+            <input id="individualHolidayDate" type="date" />
+          </label>
+          <label class="field">
+            Name
+            <input id="individualHolidayName" type="text" placeholder="Holiday name" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="secondary">Add another</button>
+          </div>
+        </form>
+        <div class="form-actions">
+          <button id="applyIndividualHolidaysBtn" type="button">Apply Holidays</button>
+          <button id="cancelIndividualHolidaysBtn" type="button" class="secondary">Cancel</button>
         </div>
       </div>
     </div>
