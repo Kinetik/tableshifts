@@ -370,10 +370,16 @@ for select using (id = auth.uid() or environment_id = public.current_environment
 drop policy if exists "profiles manage same environment" on public.profiles;
 create policy "profiles manage same environment" on public.profiles
 for all using (
-  public.current_role() in ('admin_account', 'payroll_admin')
+  (
+    public.current_role() = 'admin_account'
+    or (public.current_role() = 'payroll_admin' and role not in ('admin_account', 'payroll_admin'))
+  )
   and environment_id = public.current_environment_id()
 ) with check (
-  public.current_role() in ('admin_account', 'payroll_admin')
+  (
+    public.current_role() = 'admin_account'
+    or (public.current_role() = 'payroll_admin' and role not in ('admin_account', 'payroll_admin'))
+  )
   and environment_id = public.current_environment_id()
 );
 

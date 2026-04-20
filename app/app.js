@@ -562,6 +562,7 @@
       email,
       password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           full_name: name,
           account_type: "admin_account"
@@ -591,11 +592,13 @@
   async function syncSupabaseProfile(userId) {
     const profile = await waitForSupabaseProfile(userId);
     if (!profile) return null;
-    const user = profileToLocalUser(profile);
-    db.users = db.users || [];
-    const existingIndex = db.users.findIndex((item) => item.id === user.id);
-    if (existingIndex >= 0) db.users[existingIndex] = { ...db.users[existingIndex], ...user };
-    else db.users.push(user);
+    await loadSupabaseWorkspace(profile);
+    const user = userById(profile.id) || profileToLocalUser(profile);
+    if (!userById(user.id)) {
+      db.users = db.users || [];
+      db.users.push(user);
+      saveDb();
+    }
     saveDb();
     return user;
   }
@@ -616,7 +619,63 @@
     return null;
   }
 
-  function profileToLocalUser(profile) {
+  async function loadSupabaseWorkspace(profile) {
+    if (!useSupabaseAuth() || !profile?.environment_id) return;
+    const environmentId = profile.environment_id;
+    const [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult] = await Promise.all([
+      supabase.from("admin_environments").select("*").eq("id", environmentId).maybeSingle(),
+      supabase.from("profiles").select("*").eq("environment_id", environmentId),
+      supabase.from("companies").select("*").eq("environment_id", environmentId),
+      supabase.from("departments").select("*").eq("environment_id", environmentId),
+      supabase.from("payroll_company_access").select("*").eq("environment_id", environmentId),
+      supabase.from("national_holidays").select("*").eq("environment_id", environmentId)
+    ]);
+    [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult].forEach((result) => {
+      if (result.error) throw result.error;
+    });
+    const ownerId = environmentResult.data?.owner_user_id || profile.id;
+    const accessByUser = new Map();
+    (accessResult.data || []).forEach((item) => {
+      if (!accessByUser.has(item.payroll_user_id)) accessByUser.set(item.payroll_user_id, []);
+      accessByUser.get(item.payroll_user_id).push(item.company_id);
+    });
+    db.users = (profilesResult.data || []).map((item) => profileToLocalUser(item, ownerId, accessByUser.get(item.id) || []));
+    db.companies = (companiesResult.data || []).map((company) => ({
+      id: company.id,
+      name: company.name,
+      logo: company.logo_path ? { path: company.logo_path, name: "Company logo" } : null,
+      ownerAdminId: ownerId,
+      createdBy: company.created_by || ownerId,
+      createdAt: company.created_at || new Date().toISOString()
+    }));
+    db.departments = (departmentsResult.data || []).map((department) => ({
+      id: department.id,
+      name: department.name,
+      companyId: department.company_id,
+      adminOwnerId: ownerId,
+      managerId: department.manager_user_id || "",
+      teamLeaderId: department.team_leader_user_id || "",
+      shiftHours: Number(department.shift_hours || 8),
+      workDays: department.work_days || [1, 2, 3, 4, 5],
+      createdAt: department.created_at || new Date().toISOString(),
+      updatedAt: department.updated_at || new Date().toISOString()
+    }));
+    db.holidays = (holidaysResult.data || []).map((holiday) => ({
+      id: holiday.id,
+      adminOwnerId: ownerId,
+      companyId: holiday.company_id || "all",
+      departmentId: holiday.department_id || "all",
+      countryCode: holiday.country_code,
+      date: holiday.holiday_date,
+      name: holiday.name
+    }));
+    db.entries = db.entries || {};
+    db.leaveRequests = db.leaveRequests || [];
+    db.logs = db.logs || { company: [], department: [] };
+    saveDb();
+  }
+
+  function profileToLocalUser(profile, environmentOwnerId = "", permittedCompanyIds = []) {
     return {
       id: profile.id,
       name: profile.full_name,
@@ -632,9 +691,9 @@
       startDate: profile.start_date || todayIso(),
       endDate: profile.end_date || "",
       coAvailable: Number(profile.co_available || 0),
-      adminOwnerId: profile.role === "admin_account" ? profile.id : "",
+      adminOwnerId: profile.role === "admin_account" ? profile.id : environmentOwnerId,
       environmentId: profile.environment_id || "",
-      permittedCompanyIds: [],
+      permittedCompanyIds,
       createdAt: profile.created_at || new Date().toISOString()
     };
   }
@@ -658,6 +717,81 @@
     if (/invalid login credentials/i.test(message)) return "Email or password is not correct.";
     if (/already registered|already exists|user already/i.test(message)) return "An account with this email already exists.";
     return message;
+  }
+
+  async function currentAccessToken() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data?.session?.access_token) throw new Error("Your session expired. Please log in again.");
+    return data.session.access_token;
+  }
+
+  async function upsertSupabaseUser(user, password, permittedCompanyIds = []) {
+    const token = await currentAccessToken();
+    const response = await fetch("/api/upsert-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ user, password, permittedCompanyIds })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not save the Supabase account.");
+    return profileToLocalUser(payload.profile, payload.environmentOwnerId, payload.permittedCompanyIds || []);
+  }
+
+  async function deleteSupabaseUser(userId) {
+    if (!useSupabaseAuth()) return;
+    const token = await currentAccessToken();
+    const response = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ userId })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not delete the Supabase account.");
+  }
+
+  async function saveCompanyToSupabase(company) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("companies").upsert({
+      id: company.id,
+      environment_id: currentUser().environmentId,
+      name: company.name,
+      logo_path: company.logo?.path || null,
+      created_by: company.createdBy || currentUser().id
+    }, { onConflict: "id" });
+    if (error) throw error;
+  }
+
+  async function deleteCompanyFromSupabase(id) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("companies").delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async function saveDepartmentToSupabase(department) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("departments").upsert({
+      id: department.id,
+      environment_id: currentUser().environmentId,
+      company_id: department.companyId,
+      name: department.name,
+      manager_user_id: department.managerId || null,
+      team_leader_user_id: department.teamLeaderId || null,
+      shift_hours: department.shiftHours,
+      work_days: department.workDays
+    }, { onConflict: "id" });
+    if (error) throw error;
+  }
+
+  async function deleteDepartmentFromSupabase(id) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("departments").delete().eq("id", id);
+    if (error) throw error;
   }
 
   function renderAll() {
@@ -1783,9 +1917,9 @@
     return Array.from(el.adminUserCompanyAccess.querySelectorAll("input:checked")).map((input) => input.value);
   }
 
-  function saveAdminUser(event) {
+  async function saveAdminUser(event) {
     event.preventDefault();
-    const id = el.adminUserId.value || makeId("u");
+    const id = el.adminUserId.value || "";
     const existing = userById(id);
     const role = el.adminUserRole.value;
     const user = {
@@ -1816,10 +1950,18 @@
       window.alert("That email is already used by another user.");
       return;
     }
-    if (existing) {
-      db.users = db.users.map((item) => (item.id === id ? user : item));
-    } else {
-      db.users.push(user);
+    try {
+      const savedUser = useSupabaseAuth()
+        ? await upsertSupabaseUser(user, user.password, user.permittedCompanyIds)
+        : { ...user, id: user.id || makeId("u") };
+      if (existing) {
+        db.users = db.users.map((item) => (item.id === savedUser.id ? { ...item, ...savedUser } : item));
+      } else {
+        db.users.push(savedUser);
+      }
+    } catch (error) {
+      window.alert(error.message || "Could not save account.");
+      return;
     }
     saveDb();
     resetAdminUserForm();
@@ -1886,9 +2028,9 @@
     }
   }
 
-  function saveEmployee(event) {
+  async function saveEmployee(event) {
     event.preventDefault();
-    const id = el.employeeId.value || makeId("u");
+    const id = el.employeeId.value || "";
     const existing = userById(id);
     const user = {
       id,
@@ -1918,10 +2060,18 @@
       window.alert("That email is already used by another user.");
       return;
     }
-    if (existing) {
-      db.users = db.users.map((item) => (item.id === id ? user : item));
-    } else {
-      db.users.push(user);
+    try {
+      const savedUser = useSupabaseAuth()
+        ? await upsertSupabaseUser(user, user.password, user.permittedCompanyIds)
+        : { ...user, id: user.id || makeId("u") };
+      if (existing) {
+        db.users = db.users.map((item) => (item.id === savedUser.id ? { ...item, ...savedUser } : item));
+      } else {
+        db.users.push(savedUser);
+      }
+    } catch (error) {
+      window.alert(error.message || "Could not save employee.");
+      return;
     }
     saveDb();
     resetEmployeeForm();
@@ -1953,9 +2103,15 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteEmployee(id) {
+  async function deleteEmployee(id) {
     const user = userById(id);
     if (!window.confirm(`Delete employee ${user.name}? This also removes timesheet entries.`)) return;
+    try {
+      await deleteSupabaseUser(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete account from Supabase.");
+      return;
+    }
     db.users = db.users.filter((item) => item.id !== id);
     Object.values(db.entries).forEach((companyData) => {
       Object.values(companyData).forEach((monthData) => delete monthData[id]);
@@ -2113,26 +2269,40 @@
     if (!name) return;
     const logo = el.companyLogo.files[0] ? await readFileMeta(el.companyLogo.files[0]) : null;
     const company = {
-      id: makeId("org"),
+      id: recordId("org"),
       name,
       logo,
       ownerAdminId: activeAdminId(),
       createdBy: currentUser().id,
       createdAt: new Date().toISOString()
     };
+    try {
+      await saveCompanyToSupabase(company);
+    } catch (error) {
+      window.alert(error.message || "Could not save company to Supabase.");
+      return;
+    }
     db.companies.push(company);
     if (currentUser().role === "payroll_admin") {
       currentUser().permittedCompanyIds = Array.from(new Set([...(currentUser().permittedCompanyIds || []), company.id]));
     }
+    const newDepartments = [];
     addLog("company", `Created company ${name}`);
     clean(el.companyDepartments.value)
       .split(",")
       .map(clean)
       .filter(Boolean)
       .forEach((departmentName) => {
-        db.departments.push(defaultDepartment(departmentName, company.id));
+        const department = defaultDepartment(departmentName, company.id);
+        db.departments.push(department);
+        newDepartments.push(department);
         addLog("company", `Added department ${departmentName} to ${name}`);
       });
+    try {
+      await Promise.all(newDepartments.map((department) => saveDepartmentToSupabase(department)));
+    } catch (error) {
+      window.alert(error.message || "Company was saved, but one or more departments could not be saved to Supabase.");
+    }
     el.companyForm.reset();
     el.companyLogoPreview.innerHTML = "";
     session.activeCompanyId = company.id;
@@ -2151,7 +2321,7 @@
     el.companyLogoPreview.innerHTML = `<img src="${escapeAttr(logo.dataUrl)}" alt="Company logo preview" /><span>${escapeHtml(logo.name)}</span>`;
   }
 
-  function deleteCompany(id) {
+  async function deleteCompany(id) {
     const company = companyById(id);
     const childDepartments = allDepartments().filter((department) => department.companyId === id);
     if (childDepartments.length) {
@@ -2164,6 +2334,12 @@
       return;
     }
     if (!window.confirm(`Delete company ${company.name}?`)) return;
+    try {
+      await deleteCompanyFromSupabase(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete company from Supabase.");
+      return;
+    }
     db.companies = db.companies.filter((item) => item.id !== id);
     delete db.entries[id];
     addLog("company", `Deleted company ${company.name}`);
@@ -2198,10 +2374,10 @@
     el.departmentTeamLeader.innerHTML = option("", "None") + leaders.map((user) => option(user.id, user.name)).join("");
   }
 
-  function saveDepartment(event) {
+  async function saveDepartment(event) {
     event.preventDefault();
     const existing = departmentById(el.departmentId.value);
-    const id = existing?.id || makeId("dep");
+    const id = existing?.id || recordId("dep");
     const companyManager = users().find((user) => user.companyId === el.departmentCompany.value && user.role === "company_manager");
       const department = {
       id,
@@ -2223,6 +2399,12 @@
       db.departments.push(department);
       addLog("department", `Created department ${department.name} for ${companyById(department.companyId)?.name || "company"}`);
     }
+    try {
+      await saveDepartmentToSupabase(department);
+    } catch (error) {
+      window.alert(error.message || "Could not save department to Supabase.");
+      return;
+    }
     saveDb();
     resetDepartmentForm();
     renderAll();
@@ -2243,7 +2425,7 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteDepartment(id) {
+  async function deleteDepartment(id) {
     const department = departmentById(id);
     const assigned = users().filter((user) => user.departmentId === id);
     if (assigned.length) {
@@ -2251,6 +2433,12 @@
       return;
     }
     if (!window.confirm(`Delete department ${department.name}?`)) return;
+    try {
+      await deleteDepartmentFromSupabase(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete department from Supabase.");
+      return;
+    }
     db.departments = db.departments.filter((item) => item.id !== id);
     addLog("department", `Deleted department ${department.name}`);
     saveDb();
@@ -2949,7 +3137,7 @@
     const now = new Date().toISOString();
     const companyManager = users().find((user) => user.companyId === companyId && user.role === "company_manager");
     return {
-      id: makeId("dep"),
+      id: recordId("dep"),
       name,
       companyId,
       adminOwnerId: companyById(companyId)?.ownerAdminId || activeAdminId(),
@@ -3098,6 +3286,10 @@
 
   function makeId(prefix) {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function recordId(prefix) {
+    return useSupabaseAuth() && window.crypto?.randomUUID ? window.crypto.randomUUID() : makeId(prefix);
   }
 
   function clean(value) {
