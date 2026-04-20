@@ -2394,7 +2394,9 @@
     el.individualGrid.style.setProperty("--days", days.length);
     el.individualGrid.classList.toggle("meta-expanded", individualMetaExpanded);
     el.individualGrid.classList.toggle("totals-expanded", individualTotalsExpanded);
-    el.individualGrid.closest(".individual-sheet-shell")?.classList.toggle("individual-expanded", individualMetaExpanded || individualTotalsExpanded);
+    const individualShell = el.individualGrid.closest(".individual-sheet-shell");
+    individualShell?.classList.toggle("individual-expanded", individualMetaExpanded || individualTotalsExpanded);
+    individualShell?.style.setProperty("--individual-rows", String((individualTable.rows?.length || 0) + 1));
     el.individualGrid.replaceChildren();
     const metaHeaders = ["Company", "Department", "ID", "Position"];
     const detailHeaders = ["Norm", "Diff", "OT", "CO", "CM", "SE"];

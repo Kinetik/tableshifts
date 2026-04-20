@@ -628,15 +628,17 @@ main:focus-visible {
 }
 
 .individual-sheet-shell {
-  overflow-x: hidden;
-  overflow-y: clip;
-  scrollbar-gutter: stable;
+  --individual-rows: 2;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  height: calc((var(--individual-rows) * 48px) + 18px);
+  min-height: calc((var(--individual-rows) * 48px) + 18px);
   contain: layout paint;
 }
 
 .individual-sheet-shell.individual-expanded {
-  overflow-x: auto;
-  overflow-y: clip;
+  overflow-x: scroll;
+  overflow-y: hidden;
 }
 
 .sheet-grid {
@@ -693,7 +695,17 @@ main:focus-visible {
   min-height: 48px;
   height: 48px;
   max-height: 48px;
+  line-height: 1.15;
   overflow: hidden;
+}
+
+.individual-grid .sheet-header {
+  padding: 3px;
+}
+
+.individual-grid .total-cell,
+.individual-grid .toggle-total-cell {
+  padding: 3px;
 }
 
 .sheet-header {
