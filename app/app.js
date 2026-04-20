@@ -2398,7 +2398,16 @@
     el.individualGrid.replaceChildren();
     const metaHeaders = ["Company", "Department", "ID", "Position"];
     const detailHeaders = ["Norm", "Diff", "OT", "CO", "CM", "SE"];
-    const headers = ["Employee", "More", ...(individualMetaExpanded ? metaHeaders : []), ...days.map((day) => dayHeader(day)), "Worked", ...detailHeaders, "More", "Fill", "Clear"];
+    const headers = [
+      "Employee",
+      "More",
+      ...(individualMetaExpanded ? metaHeaders : []),
+      ...days.map((day) => dayHeader(day)),
+      "Worked",
+      ...detailHeaders,
+      "More",
+      ...(individualTotalsExpanded ? ["Fill", "Clear"] : [])
+    ];
     headers.forEach((header, index) => {
       const cell = div("sheet-header");
       if (index === 0) cell.classList.add("sticky-name");
@@ -2478,12 +2487,14 @@
     const endMoreCell = div("total-cell toggle-total-cell");
     endMoreCell.textContent = individualTotalsExpanded ? "<" : "...";
     el.individualGrid.appendChild(endMoreCell);
-    const fillCell = div("total-cell");
-    fillCell.innerHTML = `<button type="button" class="mini" data-individual-fill="${row.id}">Fill</button>`;
-    el.individualGrid.appendChild(fillCell);
-    const clearCell = div("total-cell");
-    clearCell.innerHTML = `<button type="button" class="mini danger" data-individual-clear="${row.id}">Clear</button>`;
-    el.individualGrid.appendChild(clearCell);
+    if (individualTotalsExpanded) {
+      const fillCell = div("total-cell");
+      fillCell.innerHTML = `<button type="button" class="mini" data-individual-fill="${row.id}">Fill</button>`;
+      el.individualGrid.appendChild(fillCell);
+      const clearCell = div("total-cell");
+      clearCell.innerHTML = `<button type="button" class="mini danger" data-individual-clear="${row.id}">Clear</button>`;
+      el.individualGrid.appendChild(clearCell);
+    }
 
     el.individualGrid.querySelectorAll(`[data-row-field^="${row.id}:"]`).forEach((input) => {
       input.addEventListener("change", handleIndividualRowChange);

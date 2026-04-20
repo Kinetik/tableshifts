@@ -646,22 +646,22 @@ main:focus-visible {
 }
 
 .individual-grid {
-  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(var(--days), minmax(30px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
+  grid-template-columns: minmax(210px, 1.05fr) minmax(70px, 0.45fr) repeat(var(--days), minmax(30px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) minmax(70px, 0.45fr);
 }
 
 .individual-grid.meta-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
-  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 230px);
+  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(4, minmax(116px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) minmax(70px, 0.45fr);
+  min-width: calc(240px + 70px + 464px + var(--days) * 34px + 140px);
 }
 
 .individual-grid.totals-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
-  min-width: calc(180px + 58px + var(--days) * 34px + 650px);
+  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(62px, 0.55fr)) repeat(2, minmax(66px, 0.5fr));
+  min-width: calc(240px + 70px + var(--days) * 34px + 628px);
 }
 
 .individual-grid.meta-expanded.totals-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
-  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 650px);
+  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(4, minmax(116px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(62px, 0.55fr)) repeat(2, minmax(66px, 0.5fr));
+  min-width: calc(240px + 70px + 464px + var(--days) * 34px + 628px);
 }
 
 .individual-grid {
