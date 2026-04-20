@@ -40,6 +40,7 @@
   const supabase = supabaseState.client;
   let individualTable = null;
   let individualMetaExpanded = false;
+  let individualTotalsExpanded = false;
   let session = {
     userId: "",
     activeCompanyId: db.companies[0]?.id || "",
@@ -137,6 +138,21 @@
     manualHolidayName: byId("manualHolidayName"),
     holidaysList: byId("holidaysList"),
     usersTab: byId("usersTab"),
+    adminsTab: byId("adminsTab"),
+    adminUserForm: byId("adminUserForm"),
+    adminUserId: byId("adminUserId"),
+    adminUserName: byId("adminUserName"),
+    adminUserEmail: byId("adminUserEmail"),
+    adminUserIdentification: byId("adminUserIdentification"),
+    adminUserPosition: byId("adminUserPosition"),
+    adminUserPassword: byId("adminUserPassword"),
+    adminUserStartDate: byId("adminUserStartDate"),
+    adminUserEndDate: byId("adminUserEndDate"),
+    adminUserRole: byId("adminUserRole"),
+    adminUserCompany: byId("adminUserCompany"),
+    adminUserCompanyAccess: byId("adminUserCompanyAccess"),
+    resetAdminUserFormBtn: byId("resetAdminUserFormBtn"),
+    adminsList: byId("adminsList"),
     companiesTab: byId("companiesTab"),
     departmentsTab: byId("departmentsTab"),
     timesheetTab: byId("timesheetTab"),
@@ -192,7 +208,7 @@
   init();
 
   async function init() {
-    mergeSetupPanels();
+    arrangeManagementPanels();
     bindLogin();
     bindApp();
     bindIndividual();
@@ -252,46 +268,24 @@
     });
   }
 
-  function mergeSetupPanels() {
+  function arrangeManagementPanels() {
     const usersSection = byId("usersTab");
     const companySection = byId("companiesTab");
     const departmentSection = byId("departmentsTab");
-    if (!usersSection || !companySection || !departmentSection || usersSection.dataset.merged === "true") return;
-    usersSection.dataset.merged = "true";
-    usersSection.querySelector(".section-head h2").textContent = "Organization Management";
-    usersSection.querySelector(".section-head p").textContent = "Companies, departments, users, access, and reporting lines.";
-
-    const managementShell = document.createElement("div");
-    managementShell.className = "management-shell";
-    const hierarchyBlock = document.createElement("section");
-    hierarchyBlock.className = "management-block hierarchy-block";
-    hierarchyBlock.innerHTML = `<div class="section-head compact"><div><h2>Organization hierarchy</h2><p>Expand companies to review departments and employees.</p></div></div>`;
-    hierarchyBlock.appendChild(byId("companiesList"));
-
-    const companyBlock = document.createElement("section");
-    companyBlock.className = "management-block";
-    companyBlock.innerHTML = `<div class="section-head compact"><div><h2>Company</h2><p>Create companies with optional initial departments and logo.</p></div></div>`;
-    companyBlock.appendChild(byId("companyForm"));
+    if (!usersSection || !companySection || !departmentSection || companySection.dataset.arranged === "true") return;
+    companySection.dataset.arranged = "true";
+    companySection.querySelector(".section-head h2").textContent = "Companies";
+    companySection.querySelector(".section-head p").textContent = "Create companies, expand them, and manage their departments.";
+    usersSection.querySelector(".section-head h2").textContent = "Employees";
+    usersSection.querySelector(".section-head p").textContent = "Employees, team leaders, department managers, passwords, and reporting lines.";
 
     const departmentBlock = document.createElement("section");
     departmentBlock.className = "management-block";
-    departmentBlock.innerHTML = `<div class="section-head compact"><div><h2>Department</h2><p>Assign leaders, managers, work days, and shift duration.</p></div></div>`;
+    departmentBlock.innerHTML = `<div class="section-head compact"><div><h2>Department inside company</h2><p>Create or edit a department for the selected company.</p></div></div>`;
     departmentBlock.appendChild(byId("departmentForm"));
-
-    const userBlock = document.createElement("section");
-    userBlock.className = "management-block";
-    userBlock.innerHTML = `<div class="section-head compact"><div><h2>Users</h2><p>Create employees, payroll admins, and reporting lines.</p></div></div>`;
-    userBlock.appendChild(byId("employeeForm"));
-    userBlock.appendChild(byId("usersList"));
-
-    const logsBlock = document.createElement("section");
-    logsBlock.className = "management-logs";
-    logsBlock.appendChild(byId("companyLog").closest(".log-card"));
-    logsBlock.appendChild(byId("departmentLog").closest(".log-card"));
-
-    managementShell.append(hierarchyBlock, companyBlock, departmentBlock, userBlock, logsBlock);
-    usersSection.appendChild(managementShell);
-    usersSection.appendChild(byId("adminDangerZone"));
+    companySection.insertBefore(departmentBlock, byId("companiesList"));
+    byId("companyLog").closest(".log-card").remove();
+    byId("departmentLog").closest(".log-card").remove();
   }
 
   function bindApp() {
@@ -347,6 +341,9 @@
     el.employeeRole.addEventListener("change", syncCompanyAccessVisibility);
     el.employeeStartDate.addEventListener("change", updateCoEntitlementFromDates);
     el.employeeEndDate.addEventListener("change", updateCoEntitlementFromDates);
+    el.adminUserForm.addEventListener("submit", saveAdminUser);
+    el.resetAdminUserFormBtn.addEventListener("click", resetAdminUserForm);
+    el.adminUserRole.addEventListener("change", syncAdminCompanyAccessVisibility);
     el.leaveRequestForm.addEventListener("submit", submitLeaveRequest);
     el.confirmLeavePreviewBtn.addEventListener("click", confirmLeaveRequestDraft);
     el.cancelLeavePreviewBtn.addEventListener("click", cancelLeaveRequestDraft);
@@ -396,7 +393,7 @@
       : user.companyId;
     session.activeTab = "timesheet";
     session.month = getCurrentMonth();
-    el.monthPicker.value = session.month;
+    fillMonthSelect(el.monthPicker, session.month);
     el.loginView.hidden = true;
     el.appView.hidden = false;
     saveSession();
@@ -446,7 +443,7 @@
       if (companies.length && !companies.some((company) => company.id === session.activeCompanyId)) {
         session.activeCompanyId = companies[0].id;
       }
-      el.monthPicker.value = session.month;
+      fillMonthSelect(el.monthPicker, session.month);
       el.loginView.hidden = true;
       el.appView.hidden = false;
       renderAll();
@@ -627,7 +624,7 @@
       : user.companyId;
     session.activeTab = "timesheet";
     session.month = getCurrentMonth();
-    el.monthPicker.value = session.month;
+    fillMonthSelect(el.monthPicker, session.month);
     el.loginView.hidden = true;
     el.appView.hidden = false;
     saveSession();
@@ -651,6 +648,7 @@
       renderDepartmentSetup();
       renderHolidaySetup();
       renderUserManagement();
+      renderAdminsManagement();
     }
   }
 
@@ -664,10 +662,8 @@
     el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager", "payroll_admin", "admin_account"].includes(user.role);
     el.pendingApprovalsBtn.textContent = pendingCount ? `${pendingCount} pending leave` : "No pending leave";
     el.pendingApprovalsBtn.classList.toggle("has-pending", pendingCount > 0);
-    el.monthPicker.value = session.month;
-    el.tabs.innerHTML = tabsForUser()
-      .map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`)
-      .join("");
+    fillMonthSelect(el.monthPicker, session.month);
+    el.tabs.innerHTML = navHtml();
     el.tabs.querySelectorAll("button").forEach((button) => {
       button.addEventListener("click", () => {
         session.activeTab = button.dataset.tab;
@@ -680,8 +676,18 @@
     showActiveTab();
   }
 
+  function navHtml() {
+    const tabs = tabsForUser();
+    const plain = tabs.filter((tab) => !tab.group);
+    const management = tabs.filter((tab) => tab.group === "management");
+    return [
+      ...plain.map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`),
+      management.length ? `<details class="nav-group" open><summary>Management</summary>${management.map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`).join("")}</details>` : ""
+    ].join("");
+  }
+
   function showActiveTab() {
-    ["timesheet", "leave", "charts", "companies", "departments", "holidays", "users"].forEach((tab) => {
+    ["timesheet", "leave", "charts", "companies", "departments", "holidays", "users", "admins"].forEach((tab) => {
       const panel = byId(`${tab}Tab`);
       if (panel) panel.hidden = session.activeTab !== tab;
     });
@@ -964,6 +970,20 @@
     el.cellEditor.hidden = false;
   }
 
+  function openIndividualEditor(rowId, iso) {
+    const row = individualTable.rows.find((item) => item.id === rowId);
+    const entry = normalizeIndividualEntry(individualTable.entries[rowId]?.[iso]) || { type: "normal", hours: 8 };
+    session.editingEntry = { individual: true, rowId, iso };
+    el.editorTitle.textContent = row?.name || "Individual row";
+    el.editorSubtitle.textContent = iso;
+    el.entryType.value = entry.type;
+    el.entryHours.value = entry.hours || "";
+    el.entryFile.value = "";
+    renderEntryAttachmentMeta(null);
+    updateEditorHelp();
+    el.cellEditor.hidden = false;
+  }
+
   function closeEditor() {
     session.editingEntry = null;
     el.cellEditor.hidden = true;
@@ -972,6 +992,14 @@
   function applyQuick(type) {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      el.entryType.value = type;
+      if (type === "normal" || type === "weekend") el.entryHours.value = 8;
+      if (type === "overtime") el.entryHours.value = 10;
+      if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence") el.entryHours.value = 0;
+      updateEditorHelp();
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
@@ -985,6 +1013,15 @@
   function updateEditorHelp() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      el.editorHelp.textContent = el.entryType.value === "overtime"
+        ? "Overtime is normal shift plus extra time. In individual tables, 10h records 8h normal and 2h overtime."
+        : "Normal shift for individual tables is 8h on weekdays.";
+      el.entryFileWrap.hidden = true;
+      el.entryFile.value = "";
+      renderEntryAttachmentMeta(null);
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
@@ -1034,6 +1071,17 @@
   async function saveEntryFromEditor() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      let hours = Number(el.entryHours.value || 0);
+      if (!Number.isFinite(hours)) hours = 0;
+      if (el.entryType.value === "overtime" && hours < 8) hours = 8;
+      individualTable.entries[editing.rowId] = individualTable.entries[editing.rowId] || {};
+      individualTable.entries[editing.rowId][editing.iso] = { type: el.entryType.value, hours };
+      await saveIndividualTable();
+      closeEditor();
+      renderIndividualTable();
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
@@ -1056,6 +1104,13 @@
   function deleteEntryFromEditor() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      if (individualTable.entries[editing.rowId]) delete individualTable.entries[editing.rowId][editing.iso];
+      saveIndividualTable();
+      closeEditor();
+      renderIndividualTable();
+      return;
+    }
     deleteEntry(editing.employeeId, editing.iso);
     saveDb();
     closeEditor();
@@ -1149,6 +1204,7 @@
     const companyIds = new Set(accessibleCompanies().map((company) => company.id));
     const list = users().filter((user) => {
       if (user.role === "admin_account") return false;
+      if (["payroll_admin", "company_manager"].includes(user.role)) return false;
       if (currentUser().role === "admin_account" && user.role === "payroll_admin") return user.adminOwnerId === currentUser().id;
       return companyIds.has(user.companyId);
     });
@@ -1611,8 +1667,8 @@
 
   function fillEmployeeFormOptions() {
     const roleChoices = currentUser().role === "admin_account"
-      ? ["payroll_admin", "employee", "team_leader", "department_manager", "company_manager"]
-      : ["employee", "team_leader", "department_manager", "company_manager"];
+      ? ["employee", "team_leader", "department_manager"]
+      : ["employee", "team_leader", "department_manager"];
     el.employeeRole.innerHTML = roleChoices
       .map((role) => option(role, ROLES[role]))
       .join("");
@@ -1637,6 +1693,123 @@
         input.checked = input.value === el.employeeCompany.value;
       });
     }
+  }
+
+  function renderAdminsManagement() {
+    fillAdminFormOptions();
+    const companyIds = new Set(accessibleCompanies().map((company) => company.id));
+    const list = users().filter((user) => {
+      if (!["payroll_admin", "company_manager"].includes(user.role)) return false;
+      if (currentUser().role === "admin_account" && user.role === "payroll_admin") return user.adminOwnerId === currentUser().id;
+      return user.role === "payroll_admin" ? user.adminOwnerId === activeAdminId() : companyIds.has(user.companyId);
+    });
+    el.adminsList.innerHTML = list.length ? list.map((user) => userCard(user)).join("") : `<p class="hint">No admin users yet.</p>`;
+    el.adminsList.querySelectorAll("[data-edit-user]").forEach((button) => {
+      button.addEventListener("click", () => editAdminUser(button.dataset.editUser));
+    });
+    el.adminsList.querySelectorAll("[data-delete-user]").forEach((button) => {
+      button.addEventListener("click", () => deleteEmployee(button.dataset.deleteUser));
+    });
+  }
+
+  function fillAdminFormOptions() {
+    const roleChoices = currentUser().role === "admin_account" ? ["payroll_admin", "company_manager"] : ["company_manager"];
+    el.adminUserRole.innerHTML = roleChoices.map((role) => option(role, ROLES[role])).join("");
+    const companies = accessibleCompanies();
+    el.adminUserCompany.innerHTML = companies.map((company) => option(company.id, company.name, company.id === session.activeCompanyId)).join("");
+    el.adminUserCompanyAccess.innerHTML = companies.map((company) => `
+      <label>
+        <input type="checkbox" value="${escapeAttr(company.id)}" />
+        <span>${escapeHtml(company.name)}</span>
+      </label>
+    `).join("");
+    syncAdminCompanyAccessVisibility();
+  }
+
+  function syncAdminCompanyAccessVisibility() {
+    const isPayroll = el.adminUserRole.value === "payroll_admin";
+    el.adminUserCompany.closest(".field").hidden = isPayroll;
+    el.adminUserCompanyAccess.closest(".field").hidden = !isPayroll;
+    if (isPayroll && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
+      el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
+        input.checked = input.value === session.activeCompanyId;
+      });
+    }
+  }
+
+  function selectedAdminCompanyAccess() {
+    return Array.from(el.adminUserCompanyAccess.querySelectorAll("input:checked")).map((input) => input.value);
+  }
+
+  function saveAdminUser(event) {
+    event.preventDefault();
+    const id = el.adminUserId.value || makeId("u");
+    const existing = userById(id);
+    const role = el.adminUserRole.value;
+    const user = {
+      id,
+      name: clean(el.adminUserName.value),
+      email: clean(el.adminUserEmail.value).toLowerCase(),
+      identificationNumber: clean(el.adminUserIdentification.value),
+      position: clean(el.adminUserPosition.value),
+      password: el.adminUserPassword.value,
+      startDate: el.adminUserStartDate.value,
+      endDate: el.adminUserEndDate.value,
+      role,
+      companyId: role === "company_manager" ? el.adminUserCompany.value : "",
+      departmentId: "",
+      reportsToId: "",
+      teamLeaderId: "",
+      coAvailable: 0,
+      adminOwnerId: activeAdminId(),
+      permittedCompanyIds: role === "payroll_admin" ? selectedAdminCompanyAccess() : [],
+      createdAt: existing?.createdAt || new Date().toISOString()
+    };
+    if (!user.name || !user.email || !user.identificationNumber || !user.position || !user.password || !user.startDate) {
+      window.alert("Name, email, identification number, position, password, and start date are required.");
+      return;
+    }
+    const emailTaken = users().some((item) => item.id !== id && clean(item.email).toLowerCase() === user.email);
+    if (emailTaken) {
+      window.alert("That email is already used by another user.");
+      return;
+    }
+    if (existing) {
+      db.users = db.users.map((item) => (item.id === id ? user : item));
+    } else {
+      db.users.push(user);
+    }
+    saveDb();
+    resetAdminUserForm();
+    renderAll();
+  }
+
+  function editAdminUser(id) {
+    const user = userById(id);
+    el.adminUserId.value = user.id;
+    el.adminUserName.value = user.name;
+    el.adminUserEmail.value = user.email || "";
+    el.adminUserIdentification.value = user.identificationNumber || "";
+    el.adminUserPosition.value = user.position || "";
+    el.adminUserPassword.value = user.password || "";
+    el.adminUserStartDate.value = user.startDate || todayIso();
+    el.adminUserEndDate.value = user.endDate || "";
+    el.adminUserRole.value = user.role;
+    fillAdminFormOptions();
+    el.adminUserRole.value = user.role;
+    el.adminUserCompany.value = user.companyId || session.activeCompanyId;
+    el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
+      input.checked = (user.permittedCompanyIds || []).includes(input.value);
+    });
+    syncAdminCompanyAccessVisibility();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetAdminUserForm() {
+    el.adminUserForm.reset();
+    el.adminUserId.value = "";
+    fillAdminFormOptions();
+    el.adminUserStartDate.value = todayIso();
   }
 
   function selectedCompanyAccess() {
@@ -1846,7 +2019,10 @@
             ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
             <span><strong>${escapeHtml(company.name)}</strong><em>${companyDepartments.length} departments - ${companyUsers.length} users</em></span>
           </span>
-          <button type="button" class="danger mini" data-delete-company="${company.id}">Delete</button>
+          <span class="row-actions">
+            <button type="button" class="secondary mini" data-add-dept-company="${company.id}">Add department</button>
+            <button type="button" class="danger mini" data-delete-company="${company.id}">Delete</button>
+          </span>
         </summary>
         <div class="hierarchy-children">
           ${companyDepartments.length ? companyDepartments.map((department) => hierarchyDepartmentRow(department)).join("") : `<p class="hint">No departments yet.</p>`}
@@ -1855,6 +2031,14 @@
     }).join("");
     el.companiesList.querySelectorAll("[data-delete-company]").forEach((button) => {
       button.addEventListener("click", () => deleteCompany(button.dataset.deleteCompany));
+    });
+    el.companiesList.querySelectorAll("[data-add-dept-company]").forEach((button) => {
+      button.addEventListener("click", () => {
+        resetDepartmentForm();
+        el.departmentCompany.value = button.dataset.addDeptCompany;
+        fillDepartmentManagerOptions();
+        el.departmentName.focus();
+      });
     });
     el.companiesList.querySelectorAll("[data-edit-dept]").forEach((button) => {
       button.addEventListener("click", () => editDepartment(button.dataset.editDept));
@@ -2094,7 +2278,7 @@
     el.appView.hidden = true;
     el.individualView.hidden = false;
     history.replaceState(null, "", `${location.pathname}?table=${encodeURIComponent(individualTable.id)}`);
-    el.individualMonthPicker.value = individualTable.month;
+    fillMonthSelect(el.individualMonthPicker, individualTable.month);
     renderIndividualTable();
     saveIndividualTable();
   }
@@ -2160,28 +2344,38 @@
   function renderIndividualTable() {
     ensureIndividualTable();
     const days = daysInMonth(individualTable.month);
-    el.individualMonthPicker.value = individualTable.month;
+    fillMonthSelect(el.individualMonthPicker, individualTable.month);
     el.individualLinkLabel.textContent = individualShareLink();
     el.individualGrid.style.setProperty("--days", days.length);
     el.individualGrid.classList.toggle("meta-expanded", individualMetaExpanded);
+    el.individualGrid.classList.toggle("totals-expanded", individualTotalsExpanded);
     el.individualGrid.replaceChildren();
-    const detailHeaders = ["Company", "Department", "ID", "Position"];
-    const headers = ["Employee", "More", ...detailHeaders, ...days.map((day) => dayHeader(day)), "Worked", "OT", "CO", "CM", "SE"];
+    const metaHeaders = ["Company", "Department", "ID", "Position"];
+    const detailHeaders = ["Norm", "Diff", "OT", "CO", "CM", "SE"];
+    const headers = ["Employee", "More", ...metaHeaders, ...days.map((day) => dayHeader(day)), "Worked", ...detailHeaders, "More", "Fill", "Clear"];
     headers.forEach((header, index) => {
       const cell = div("sheet-header");
       if (index === 0) cell.classList.add("sticky-name");
-      if (detailHeaders.includes(header)) cell.classList.add("manual-meta");
+      if (metaHeaders.includes(header)) cell.classList.add("manual-meta");
+      if (detailHeaders.includes(header)) cell.classList.add("detail-total");
       if (header === "More") {
-        cell.classList.add("manual-more");
-        cell.innerHTML = `<button id="individualMoreBtn" type="button" class="mini toggle-totals" aria-expanded="${individualMetaExpanded}">${individualMetaExpanded ? "Less" : "More"}</button>`;
+        const isStartMore = index === 1;
+        cell.classList.add(isStartMore ? "manual-more" : "toggle-total-cell");
+        cell.innerHTML = `<button type="button" class="mini toggle-totals" data-individual-more="${isStartMore ? "meta" : "totals"}" aria-expanded="${isStartMore ? individualMetaExpanded : individualTotalsExpanded}">${isStartMore ? (individualMetaExpanded ? "Less" : "More") : (individualTotalsExpanded ? "Less" : "More")}</button>`;
       } else {
         cell.innerHTML = header;
       }
       el.individualGrid.appendChild(cell);
     });
-    byId("individualMoreBtn")?.addEventListener("click", () => {
-      individualMetaExpanded = !individualMetaExpanded;
-      renderIndividualTable();
+    el.individualGrid.querySelectorAll("[data-individual-more]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.individualMore === "meta") {
+          individualMetaExpanded = !individualMetaExpanded;
+        } else {
+          individualTotalsExpanded = !individualTotalsExpanded;
+        }
+        renderIndividualTable();
+      });
     });
     individualTable.rows.forEach((row) => renderIndividualRow(row, days));
   }
@@ -2202,29 +2396,57 @@
     });
 
     days.forEach((day) => {
-      const entry = individualTable.entries[row.id]?.[day.iso] || "";
+      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]);
       const cell = div("day-cell editable manual-day");
       cell.dataset.workday = isWeekday(day.date) ? "true" : "false";
-      const entryType = individualEntryType(entry);
-      if (entryType) cell.dataset.entryType = entryType;
-      cell.innerHTML = `<input class="inline-cell-input compact-input" data-individual-entry="${row.id}:${day.iso}" value="${escapeAttr(entry)}" placeholder="" />`;
+      if (entry) {
+        cell.dataset.entryType = entry.type;
+        cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${individualEntryParts(entry)}</span>`;
+      } else {
+        cell.innerHTML = `<span class="empty-cell"></span>`;
+      }
+      cell.tabIndex = 0;
+      cell.setAttribute("role", "button");
+      cell.addEventListener("click", () => openIndividualEditor(row.id, day.iso));
+      cell.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openIndividualEditor(row.id, day.iso);
+        }
+      });
       el.individualGrid.appendChild(cell);
     });
 
     const totals = individualTotals(row, days);
-    ["worked", "overtime", "co", "cm", "se"].forEach((field) => {
-      const cell = div("total-cell");
-      cell.textContent = field === "worked" || field === "overtime" ? `${formatHours(totals[field])}h` : `${totals[field]}d`;
-      el.individualGrid.appendChild(cell);
-    });
+    addIndividualTotalCell(`${formatHours(totals.worked)}h`);
+    addIndividualTotalCell(`${formatHours(totals.expected)}h`, "detail-total");
+    addIndividualTotalCell(`${formatSigned(totals.difference)}h`, `detail-total ${totals.difference < 0 ? "negative" : totals.difference > 0 ? "positive" : ""}`);
+    addIndividualTotalCell(`${formatHours(totals.overtime)}h`, "detail-total");
+    addIndividualTotalCell(`${totals.co}d`, "detail-total");
+    addIndividualTotalCell(`${totals.cm}d`, "detail-total");
+    addIndividualTotalCell(`${totals.se}d`, "detail-total");
+    const endMoreCell = div("total-cell toggle-total-cell");
+    endMoreCell.textContent = individualTotalsExpanded ? "<" : "...";
+    el.individualGrid.appendChild(endMoreCell);
+    const fillCell = div("total-cell");
+    fillCell.innerHTML = `<button type="button" class="mini" data-individual-fill="${row.id}">Fill</button>`;
+    el.individualGrid.appendChild(fillCell);
+    const clearCell = div("total-cell");
+    clearCell.innerHTML = `<button type="button" class="mini danger" data-individual-clear="${row.id}">Clear</button>`;
+    el.individualGrid.appendChild(clearCell);
 
     el.individualGrid.querySelectorAll(`[data-row-field^="${row.id}:"]`).forEach((input) => {
       input.addEventListener("change", handleIndividualRowChange);
       input.addEventListener("blur", handleIndividualRowChange);
     });
-    el.individualGrid.querySelectorAll(`[data-individual-entry^="${row.id}:"]`).forEach((input) => {
-      input.addEventListener("change", handleIndividualEntryChange);
-    });
+    el.individualGrid.querySelector(`[data-individual-fill="${row.id}"]`)?.addEventListener("click", () => fillIndividualRow(row, days));
+    el.individualGrid.querySelector(`[data-individual-clear="${row.id}"]`)?.addEventListener("click", () => clearIndividualRow(row));
+  }
+
+  function addIndividualTotalCell(text, extraClass) {
+    const cell = div(`total-cell ${extraClass || ""}`);
+    cell.textContent = text;
+    el.individualGrid.appendChild(cell);
   }
 
   function handleIndividualRowChange(event) {
@@ -2244,57 +2466,79 @@
     saveIndividualTable();
   }
 
-  function handleIndividualEntryChange(event) {
-    const [rowId, iso] = event.target.dataset.individualEntry.split(":");
-    individualTable.entries[rowId] = individualTable.entries[rowId] || {};
-    const value = clean(event.target.value).toUpperCase();
-    if (value) {
-      individualTable.entries[rowId][iso] = value;
-    } else {
-      delete individualTable.entries[rowId][iso];
+  function individualTotals(row, days) {
+    return days.reduce((acc, day) => {
+      if (isWeekday(day.date)) acc.expected += 8;
+      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]);
+      if (!entry) return acc;
+      if (entry.type === "vacation") {
+        acc.co += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "medical") {
+        acc.cm += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "special_event") {
+        acc.se += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "absence") {
+        return acc;
+      } else {
+        const hours = Number(entry.hours || 0);
+        acc.worked += hours;
+        if (entry.type === "overtime") acc.overtime += Math.max(0, hours - 8);
+      }
+      acc.difference = acc.worked - acc.expected;
+      return acc;
+    }, { expected: 0, worked: 0, difference: 0, overtime: 0, co: 0, cm: 0, se: 0 });
+  }
+
+  function normalizeIndividualEntry(value) {
+    if (!value) return null;
+    if (typeof value === "object") return { type: value.type || "normal", hours: Number(value.hours || 0) };
+    const raw = clean(value).toUpperCase();
+    if (!raw) return null;
+    if (raw === "CO") return { type: "vacation", hours: 0 };
+    if (raw === "CM") return { type: "medical", hours: 0 };
+    if (raw === "SE") return { type: "special_event", hours: 0 };
+    if (raw === "AB") return { type: "absence", hours: 0 };
+    if (raw === "OT") return { type: "overtime", hours: 10 };
+    if (raw.includes("+")) {
+      const [base, extra] = raw.split("+").map(Number);
+      return { type: "overtime", hours: Number(base || 0) + Number(extra || 0) };
     }
-    saveIndividualTable();
+    if (raw === "N") return { type: "normal", hours: 8 };
+    if (/^\d+(\.\d+)?$/.test(raw)) return { type: "normal", hours: Number(raw) };
+    return null;
+  }
+
+  function individualEntryParts(entry) {
+    if (entry.type === "overtime") return `8+${formatHours(Math.max(0, Number(entry.hours || 0) - 8))}`;
+    if (entry.type === "vacation" || entry.type === "medical" || entry.type === "special_event") return "day";
+    return formatHours(Number(entry.hours || 0));
+  }
+
+  async function fillIndividualRow(row, days) {
+    individualTable.entries[row.id] = individualTable.entries[row.id] || {};
+    days.forEach((day) => {
+      if (isWeekday(day.date) && !individualTable.entries[row.id][day.iso]) {
+        individualTable.entries[row.id][day.iso] = { type: "normal", hours: 8 };
+      }
+    });
+    await saveIndividualTable();
     renderIndividualTable();
   }
 
-  function individualTotals(row, days) {
-    return days.reduce((acc, day) => {
-      const raw = clean(individualTable.entries[row.id]?.[day.iso]).toUpperCase();
-      if (!raw) return acc;
-      if (raw === "CO") acc.co += 1;
-      else if (raw === "CM") acc.cm += 1;
-      else if (raw === "SE") acc.se += 1;
-      else if (raw.includes("+")) {
-        const [base, extra] = raw.split("+").map(Number);
-        acc.worked += Number(base || 0) + Number(extra || 0);
-        acc.overtime += Number(extra || 0);
-      } else if (raw === "OT") {
-        acc.worked += 10;
-        acc.overtime += 2;
-      } else if (/^\d+(\.\d+)?$/.test(raw)) {
-        acc.worked += Number(raw);
-      } else if (raw === "N") {
-        acc.worked += 8;
-      }
-      return acc;
-    }, { worked: 0, overtime: 0, co: 0, cm: 0, se: 0 });
-  }
-
-  function individualEntryType(rawValue) {
-    const raw = clean(rawValue).toUpperCase();
-    if (raw === "CO") return "vacation";
-    if (raw === "CM") return "medical";
-    if (raw === "SE") return "special_event";
-    if (raw === "AB") return "absence";
-    if (raw === "OT" || raw.includes("+")) return "overtime";
-    if (raw === "N" || /^\d+(\.\d+)?$/.test(raw)) return "normal";
-    return "";
+  async function clearIndividualRow(row) {
+    if (!window.confirm(`Clear all entries for ${row.name || "this row"} in ${individualTable.month}?`)) return;
+    delete individualTable.entries[row.id];
+    await saveIndividualTable();
+    renderIndividualTable();
   }
 
   function exportIndividualCsv() {
     ensureIndividualTable();
     const days = daysInMonth(individualTable.month);
-    const rows = [["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "OT", "CO", "CM", "SE"]];
+    const rows = [["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Difference", "OT", "CO", "CM", "SE"]];
     individualTable.rows.forEach((row) => {
       const totals = individualTotals(row, days);
       rows.push([
@@ -2303,8 +2547,10 @@
         row.department,
         row.identificationNumber,
         row.position,
-        ...days.map((day) => individualTable.entries[row.id]?.[day.iso] || ""),
+        ...days.map((day) => individualExportCell(individualTable.entries[row.id]?.[day.iso])),
         formatHours(totals.worked),
+        formatHours(totals.expected),
+        formatSigned(totals.difference),
         formatHours(totals.overtime),
         totals.co,
         totals.cm,
@@ -2312,6 +2558,14 @@
       ]);
     });
     download(`individual-tableshifts-${individualTable.month}.csv`, rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  function individualExportCell(value) {
+    const entry = normalizeIndividualEntry(value);
+    if (!entry) return "";
+    if (entry.type === "normal") return formatHours(entry.hours);
+    if (entry.type === "overtime") return formatHours(entry.hours);
+    return ENTRY_LABELS[entry.type] || "";
   }
 
   function downloadIndividualTemplate() {
@@ -2489,7 +2743,9 @@
       { id: "charts", label: "Charts" }
     ];
     if (canManageSetup()) {
-      tabs.push({ id: "users", label: "Management" });
+      tabs.push({ id: "companies", label: "Companies", group: "management" });
+      tabs.push({ id: "admins", label: "Admins", group: "management" });
+      tabs.push({ id: "users", label: "Employees", group: "management" });
       tabs.push({ id: "holidays", label: "National Holidays" });
     }
     return tabs;
@@ -2550,6 +2806,24 @@
 
   function dayHeader(day) {
     return `<strong>${day.day}</strong><span>${day.weekday}</span>`;
+  }
+
+  function fillMonthSelect(select, selectedMonth) {
+    if (!select) return;
+    const selected = selectedMonth || getCurrentMonth();
+    const [selectedYear, selectedNumber] = selected.split("-").map(Number);
+    const center = selectedYear && selectedNumber ? new Date(selectedYear, selectedNumber - 1, 1) : new Date();
+    const months = [];
+    for (let offset = -18; offset <= 18; offset += 1) {
+      const date = new Date(center.getFullYear(), center.getMonth() + offset, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      months.push({ value, label: date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
+    }
+    if (!months.some((month) => month.value === selected)) {
+      months.push({ value: selected, label: selected });
+      months.sort((a, b) => a.value.localeCompare(b.value));
+    }
+    select.innerHTML = months.map((month) => option(month.value, month.label, month.value === selected)).join("");
   }
 
   function users() {

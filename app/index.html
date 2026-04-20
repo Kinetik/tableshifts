@@ -71,7 +71,7 @@
         <div class="toolbar individual-toolbar">
           <label class="field">
             Month
-            <input id="individualMonthPicker" type="month" />
+            <select id="individualMonthPicker"></select>
           </label>
           <button id="individualExportBtn" type="button">Export CSV</button>
           <button id="individualTemplateBtn" type="button" class="secondary">Generate Import Template</button>
@@ -129,7 +129,7 @@
           <div class="toolbar">
             <label class="field">
               Month
-              <input id="monthPicker" type="month" />
+              <select id="monthPicker"></select>
             </label>
             <label id="companyScopeWrap" class="field">
               Company
@@ -372,6 +372,65 @@
             </div>
             <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
           </section>
+        </section>
+
+        <section id="adminsTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Admins</h2>
+              <p>Create Payroll Admins and Company Managers separately from employee records.</p>
+            </div>
+          </div>
+
+          <form id="adminUserForm" class="setup-form">
+            <input type="hidden" id="adminUserId" />
+            <label class="field">
+              Name
+              <input id="adminUserName" type="text" required />
+            </label>
+            <label class="field">
+              Email
+              <input id="adminUserEmail" type="email" autocomplete="off" spellcheck="false" required />
+            </label>
+            <label class="field">
+              Identification Number
+              <input id="adminUserIdentification" type="text" required />
+            </label>
+            <label class="field">
+              Position
+              <input id="adminUserPosition" type="text" required />
+            </label>
+            <label class="field">
+              Password
+              <input id="adminUserPassword" type="text" required />
+            </label>
+            <label class="field">
+              Start date
+              <input id="adminUserStartDate" type="date" required />
+            </label>
+            <label class="field">
+              End date
+              <input id="adminUserEndDate" type="date" />
+            </label>
+            <label class="field">
+              Role
+              <select id="adminUserRole"></select>
+            </label>
+            <label class="field">
+              Company
+              <select id="adminUserCompany"></select>
+            </label>
+            <label class="field">
+              Payroll company access
+              <div id="adminUserCompanyAccess" class="check-list"></div>
+            </label>
+            <div class="form-actions">
+              <button type="submit">Save Admin</button>
+              <button id="resetAdminUserFormBtn" type="button" class="secondary">Clear</button>
+            </div>
+          </form>
+
+          <div id="adminsList" class="directory"></div>
         </section>
 
         <section id="companiesTab" class="tab-panel" hidden>

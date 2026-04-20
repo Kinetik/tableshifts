@@ -480,6 +480,27 @@ select:focus {
   background: rgba(19, 108, 73, 0.92);
 }
 
+.nav-group {
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.nav-group summary {
+  padding: 8px 10px;
+  color: rgba(238, 247, 241, 0.58);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-group button {
+  margin-left: 10px;
+  width: calc(100% - 10px);
+}
+
 main {
   min-width: 0;
   padding: 18px clamp(16px, 3vw, 34px) 32px;
@@ -601,7 +622,8 @@ main:focus-visible {
   scrollbar-width: thin;
 }
 
-.sheet-shell:has(.totals-expanded) {
+.sheet-shell:has(.totals-expanded),
+.sheet-shell:has(.meta-expanded) {
   overflow-x: auto;
 }
 
@@ -612,12 +634,22 @@ main:focus-visible {
 }
 
 .individual-grid {
-  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(30px, 1fr)) repeat(5, minmax(54px, 0.5fr));
+  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(30px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
 }
 
 .individual-grid.meta-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(5, minmax(58px, 0.55fr));
-  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 300px);
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
+  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 230px);
+}
+
+.individual-grid.totals-expanded {
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
+  min-width: calc(180px + 58px + var(--days) * 34px + 650px);
+}
+
+.individual-grid.meta-expanded.totals-expanded {
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, minmax(110px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
+  min-width: calc(180px + 58px + 440px + var(--days) * 34px + 650px);
 }
 
 .sheet-grid.totals-expanded {
