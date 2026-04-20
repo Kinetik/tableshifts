@@ -648,22 +648,22 @@ main:focus-visible {
 }
 
 .individual-grid {
-  grid-template-columns: minmax(210px, 1.05fr) minmax(70px, 0.45fr) repeat(var(--days), minmax(30px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) minmax(70px, 0.45fr);
+  grid-template-columns: 230px 64px repeat(var(--days), minmax(30px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) 64px;
 }
 
 .individual-grid.meta-expanded {
-  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(4, minmax(116px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) minmax(70px, 0.45fr);
-  min-width: calc(240px + 70px + 464px + var(--days) * 34px + 140px);
+  grid-template-columns: 230px 64px repeat(4, 116px) repeat(var(--days), 42px) 68px repeat(6, 0) 64px;
+  min-width: calc(230px + 64px + 464px + var(--days) * 42px + 132px);
 }
 
 .individual-grid.totals-expanded {
-  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(62px, 0.55fr)) repeat(2, minmax(66px, 0.5fr));
-  min-width: calc(240px + 70px + var(--days) * 34px + 628px);
+  grid-template-columns: 230px 64px repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
+  min-width: calc(230px + 64px + var(--days) * 42px + 688px);
 }
 
 .individual-grid.meta-expanded.totals-expanded {
-  grid-template-columns: minmax(230px, 1fr) minmax(70px, 0.45fr) repeat(4, minmax(116px, 0.75fr)) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(62px, 0.55fr)) repeat(2, minmax(66px, 0.5fr));
-  min-width: calc(240px + 70px + 464px + var(--days) * 34px + 628px);
+  grid-template-columns: 230px 64px repeat(4, 116px) repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
+  min-width: calc(230px + 64px + 464px + var(--days) * 42px + 688px);
 }
 
 .individual-grid {
@@ -706,6 +706,17 @@ main:focus-visible {
 .individual-grid .total-cell,
 .individual-grid .toggle-total-cell {
   padding: 2px;
+}
+
+.individual-grid .manual-more {
+  position: sticky;
+  left: 230px;
+  z-index: 4;
+  background: #f7fbf8;
+}
+
+.individual-grid .sheet-header.manual-more {
+  z-index: 7;
 }
 
 .sheet-header {
@@ -889,9 +900,9 @@ main:focus-visible {
 
 .individual-toolbar {
   display: grid;
-  grid-template-columns: minmax(160px, 0.65fr) minmax(420px, 1.3fr) minmax(330px, 1fr) 250px;
+  grid-template-columns: minmax(160px, 0.65fr) minmax(460px, 1.35fr) minmax(330px, 1fr) 250px;
   gap: 10px;
-  align-items: stretch;
+  align-items: end;
 }
 
 .toolbar-cluster {
@@ -935,8 +946,9 @@ main:focus-visible {
 }
 
 .individual-export-btn {
-  align-self: stretch;
-  min-height: 66px;
+  align-self: end;
+  min-height: 44px;
+  height: 44px;
   width: 250px;
   justify-self: end;
   font-size: 1rem;
