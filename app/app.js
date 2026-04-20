@@ -41,6 +41,7 @@
   let individualTable = null;
   let individualMetaExpanded = false;
   let individualTotalsExpanded = false;
+  let pendingIndividualHolidays = [];
   let session = {
     userId: "",
     activeCompanyId: db.companies[0]?.id || "",
@@ -64,6 +65,18 @@
     individualExportBtn: byId("individualExportBtn"),
     individualTemplateBtn: byId("individualTemplateBtn"),
     individualImportFile: byId("individualImportFile"),
+    individualHolidayCountry: byId("individualHolidayCountry"),
+    individualHolidayYear: byId("individualHolidayYear"),
+    individualHolidayBtn: byId("individualHolidayBtn"),
+    individualHolidayModal: byId("individualHolidayModal"),
+    individualHolidaySubtitle: byId("individualHolidaySubtitle"),
+    individualHolidayList: byId("individualHolidayList"),
+    individualHolidayAddForm: byId("individualHolidayAddForm"),
+    individualHolidayDate: byId("individualHolidayDate"),
+    individualHolidayName: byId("individualHolidayName"),
+    applyIndividualHolidaysBtn: byId("applyIndividualHolidaysBtn"),
+    closeIndividualHolidayBtn: byId("closeIndividualHolidayBtn"),
+    cancelIndividualHolidaysBtn: byId("cancelIndividualHolidaysBtn"),
     individualGrid: byId("individualGrid"),
     individualNewRowBtn: byId("individualNewRowBtn"),
     appView: byId("appView"),
@@ -260,12 +273,21 @@
     el.individualExportBtn.addEventListener("click", exportIndividualCsv);
     el.individualTemplateBtn.addEventListener("click", downloadIndividualTemplate);
     el.individualImportFile.addEventListener("change", importIndividualCsv);
+    el.individualHolidayBtn.addEventListener("click", fetchIndividualHolidays);
+    el.individualHolidayAddForm.addEventListener("submit", addPendingIndividualHoliday);
+    el.applyIndividualHolidaysBtn.addEventListener("click", applyIndividualHolidays);
+    el.closeIndividualHolidayBtn.addEventListener("click", closeIndividualHolidayModal);
+    el.cancelIndividualHolidaysBtn.addEventListener("click", closeIndividualHolidayModal);
     el.individualNewRowBtn.addEventListener("click", () => {
       ensureIndividualTable();
-      individualTable.rows.push(defaultIndividualRow());
+      const row = defaultIndividualRow();
+      individualTable.rows.push(row);
+      stampIndividualHolidaysForRow(row);
       saveIndividualTable();
       renderIndividualTable();
     });
+    el.individualHolidayCountry.innerHTML = HOLIDAY_COUNTRIES.map(([code, name]) => option(code, `${name} (${code})`, code === "RO")).join("");
+    el.individualHolidayYear.value = new Date().getFullYear();
   }
 
   function arrangeManagementPanels() {
@@ -659,7 +681,7 @@
     el.sessionLabel.textContent = company?.name || "";
     el.topIdentity.innerHTML = `<strong>${escapeHtml(user.name)}</strong><span>${ROLES[user.role]} - ${escapeHtml(user.email || "")}</span>`;
     const pendingCount = pendingApprovalsForCurrentUser().length;
-    el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager", "payroll_admin", "admin_account"].includes(user.role);
+    el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager"].includes(user.role);
     el.pendingApprovalsBtn.textContent = pendingCount ? `${pendingCount} pending leave` : "No pending leave";
     el.pendingApprovalsBtn.classList.toggle("has-pending", pendingCount > 0);
     fillMonthSelect(el.monthPicker, session.month);
@@ -948,7 +970,7 @@
 
   function canEditEmployee(employee) {
     const user = currentUser();
-    if (["admin_account", "payroll_admin"].includes(user.role)) return accessibleCompanies(user).some((company) => company.id === employee.companyId);
+    if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return employee.companyId === user.companyId;
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.id === user.id || employee.teamLeaderId === user.id;
@@ -963,6 +985,7 @@
     el.editorTitle.textContent = employee.name;
     el.editorSubtitle.textContent = iso;
     el.entryType.value = entry.type;
+    syncEntryTypeOptions(false);
     el.entryHours.value = entry.hours || "";
     el.entryFile.value = "";
     renderEntryAttachmentMeta(entry);
@@ -977,6 +1000,7 @@
     el.editorTitle.textContent = row?.name || "Individual row";
     el.editorSubtitle.textContent = iso;
     el.entryType.value = entry.type;
+    syncEntryTypeOptions(true);
     el.entryHours.value = entry.hours || "";
     el.entryFile.value = "";
     renderEntryAttachmentMeta(null);
@@ -989,6 +1013,11 @@
     el.cellEditor.hidden = true;
   }
 
+  function syncEntryTypeOptions(isIndividual) {
+    const holidayOption = el.entryType.querySelector("option[value='holiday']");
+    if (holidayOption) holidayOption.hidden = !isIndividual;
+  }
+
   function applyQuick(type) {
     const editing = session.editingEntry;
     if (!editing) return;
@@ -996,7 +1025,7 @@
       el.entryType.value = type;
       if (type === "normal" || type === "weekend") el.entryHours.value = 8;
       if (type === "overtime") el.entryHours.value = 10;
-      if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence") el.entryHours.value = 0;
+      if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence" || type === "holiday") el.entryHours.value = 0;
       updateEditorHelp();
       return;
     }
@@ -1006,7 +1035,7 @@
     el.entryType.value = type;
     if (type === "normal" || type === "weekend") el.entryHours.value = normalHours;
     if (type === "overtime") el.entryHours.value = normalHours + 2;
-    if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence") el.entryHours.value = 0;
+    if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence" || type === "holiday") el.entryHours.value = 0;
     updateEditorHelp();
   }
 
@@ -1219,6 +1248,10 @@
 
   async function submitLeaveRequest(event) {
     event.preventDefault();
+    if (["admin_account", "payroll_admin"].includes(currentUser().role)) {
+      window.alert("Admin Account and Payroll Admin users can view leave requests, but cannot create them.");
+      return;
+    }
     const startDate = el.leaveStartDate.value;
     const endDate = el.leaveEndDate.value || startDate;
     if (!startDate || !endDate || endDate < startDate) {
@@ -1278,6 +1311,7 @@
 
   function renderLeaveRequests() {
     if (!el.leaveRequestsList) return;
+    el.leaveRequestForm.hidden = ["admin_account", "payroll_admin"].includes(currentUser().role);
     const list = visibleLeaveRequests();
     el.leaveRequestsList.innerHTML = list.length
       ? list.map((request) => request.source === "timesheet" ? timesheetLeaveCard(request) : leaveRequestCard(request)).join("")
@@ -1304,6 +1338,14 @@
 
   function visibleLeaveRequests() {
     const user = currentUser();
+    if (["admin_account", "payroll_admin"].includes(user.role)) {
+      const companyIds = new Set(accessibleCompanies(user).map((company) => company.id));
+      const requests = (db.leaveRequests || [])
+        .filter((request) => companyIds.has(request.companyId))
+        .map((request) => ({ ...request, source: "request" }));
+      return [...requests, ...visibleTimesheetLeaveEntries()]
+        .sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
+    }
     const requests = (db.leaveRequests || [])
       .filter((request) => ["admin_account", "payroll_admin"].includes(user.role) || request.companyId === session.activeCompanyId || request.employeeId === user.id)
       .filter((request) => request.employeeId === user.id || canApproveLeave(request))
@@ -1316,7 +1358,7 @@
     const user = currentUser();
     const employee = userById(request.employeeId);
     if (!employee || user.id === employee.id) return false;
-    if (["admin_account", "payroll_admin"].includes(user.role)) return accessibleCompanies(user).some((company) => company.id === employee.companyId);
+    if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return employee.companyId === user.companyId;
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.teamLeaderId === user.id;
@@ -2279,6 +2321,7 @@
     el.individualView.hidden = false;
     history.replaceState(null, "", `${location.pathname}?table=${encodeURIComponent(individualTable.id)}`);
     fillMonthSelect(el.individualMonthPicker, individualTable.month);
+    el.individualHolidayYear.value = individualTable.month.slice(0, 4);
     renderIndividualTable();
     saveIndividualTable();
   }
@@ -2311,7 +2354,8 @@
         identificationNumber: row.identificationNumber || "",
         position: row.position || ""
       })) : [defaultIndividualRow()],
-      entries: table.entries || {}
+      entries: table.entries || {},
+      holidays: Array.isArray(table.holidays) ? table.holidays : []
     };
   }
 
@@ -2345,6 +2389,7 @@
     ensureIndividualTable();
     const days = daysInMonth(individualTable.month);
     fillMonthSelect(el.individualMonthPicker, individualTable.month);
+    if (!el.individualHolidayYear.value) el.individualHolidayYear.value = individualTable.month.slice(0, 4);
     el.individualLinkLabel.textContent = individualShareLink();
     el.individualGrid.style.setProperty("--days", days.length);
     el.individualGrid.classList.toggle("meta-expanded", individualMetaExpanded);
@@ -2352,7 +2397,7 @@
     el.individualGrid.replaceChildren();
     const metaHeaders = ["Company", "Department", "ID", "Position"];
     const detailHeaders = ["Norm", "Diff", "OT", "CO", "CM", "SE"];
-    const headers = ["Employee", "More", ...metaHeaders, ...days.map((day) => dayHeader(day)), "Worked", ...detailHeaders, "More", "Fill", "Clear"];
+    const headers = ["Employee", "More", ...(individualMetaExpanded ? metaHeaders : []), ...days.map((day) => dayHeader(day)), "Worked", ...detailHeaders, "More", "Fill", "Clear"];
     headers.forEach((header, index) => {
       const cell = div("sheet-header");
       if (index === 0) cell.classList.add("sticky-name");
@@ -2389,16 +2434,20 @@
     moreCell.textContent = individualMetaExpanded ? "<" : "...";
     el.individualGrid.appendChild(moreCell);
 
-    ["company", "department", "identificationNumber", "position"].forEach((field) => {
-      const cell = div("total-cell manual-meta");
-      cell.innerHTML = `<input class="inline-cell-input" data-row-field="${row.id}:${field}" value="${escapeAttr(row[field])}" placeholder="${escapeAttr(individualFieldLabel(field))}" />`;
-      el.individualGrid.appendChild(cell);
-    });
+    if (individualMetaExpanded) {
+      ["company", "department", "identificationNumber", "position"].forEach((field) => {
+        const cell = div("total-cell manual-meta");
+        cell.innerHTML = `<input class="inline-cell-input" data-row-field="${row.id}:${field}" value="${escapeAttr(row[field])}" placeholder="${escapeAttr(individualFieldLabel(field))}" />`;
+        el.individualGrid.appendChild(cell);
+      });
+    }
 
     days.forEach((day) => {
-      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]);
+      const holiday = individualHolidayOn(day.iso);
+      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]) || (holiday ? { type: "holiday", hours: 0, name: holiday.name } : null);
       const cell = div("day-cell editable manual-day");
-      cell.dataset.workday = isWeekday(day.date) ? "true" : "false";
+      cell.dataset.workday = isWeekday(day.date) && !holiday ? "true" : "false";
+      if (holiday) cell.dataset.holiday = "true";
       if (entry) {
         cell.dataset.entryType = entry.type;
         cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${individualEntryParts(entry)}</span>`;
@@ -2468,7 +2517,8 @@
 
   function individualTotals(row, days) {
     return days.reduce((acc, day) => {
-      if (isWeekday(day.date)) acc.expected += 8;
+      const holiday = individualHolidayOn(day.iso);
+      if (isWeekday(day.date) && !holiday) acc.expected += 8;
       const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]);
       if (!entry) return acc;
       if (entry.type === "vacation") {
@@ -2481,6 +2531,8 @@
         acc.se += 1;
         if (isWeekday(day.date)) acc.worked += 8;
       } else if (entry.type === "absence") {
+        return acc;
+      } else if (entry.type === "holiday") {
         return acc;
       } else {
         const hours = Number(entry.hours || 0);
@@ -2501,6 +2553,7 @@
     if (raw === "CM") return { type: "medical", hours: 0 };
     if (raw === "SE") return { type: "special_event", hours: 0 };
     if (raw === "AB") return { type: "absence", hours: 0 };
+    if (raw === "H") return { type: "holiday", hours: 0 };
     if (raw === "OT") return { type: "overtime", hours: 10 };
     if (raw.includes("+")) {
       const [base, extra] = raw.split("+").map(Number);
@@ -2514,13 +2567,14 @@
   function individualEntryParts(entry) {
     if (entry.type === "overtime") return `8+${formatHours(Math.max(0, Number(entry.hours || 0) - 8))}`;
     if (entry.type === "vacation" || entry.type === "medical" || entry.type === "special_event") return "day";
+    if (entry.type === "holiday") return "";
     return formatHours(Number(entry.hours || 0));
   }
 
   async function fillIndividualRow(row, days) {
     individualTable.entries[row.id] = individualTable.entries[row.id] || {};
     days.forEach((day) => {
-      if (isWeekday(day.date) && !individualTable.entries[row.id][day.iso]) {
+      if (isWeekday(day.date) && !individualHolidayOn(day.iso) && !individualTable.entries[row.id][day.iso]) {
         individualTable.entries[row.id][day.iso] = { type: "normal", hours: 8 };
       }
     });
@@ -2533,6 +2587,127 @@
     delete individualTable.entries[row.id];
     await saveIndividualTable();
     renderIndividualTable();
+  }
+
+  function individualHolidayOn(iso) {
+    return (individualTable?.holidays || []).find((holiday) => holiday.date === iso);
+  }
+
+  async function fetchIndividualHolidays() {
+    ensureIndividualTable();
+    const year = Number(el.individualHolidayYear.value || individualTable.month.slice(0, 4));
+    const countryCode = el.individualHolidayCountry.value || "RO";
+    if (!year || year < 2000 || year > 2100) {
+      window.alert("Choose a valid holiday year.");
+      return;
+    }
+    el.individualHolidayBtn.disabled = true;
+    el.individualHolidayBtn.textContent = "Fetching...";
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
+      if (!response.ok) throw new Error("Holiday request failed");
+      const holidays = await response.json();
+      pendingIndividualHolidays = holidays.map((holiday) => ({
+        id: makeId("ihol"),
+        date: holiday.date,
+        name: holiday.localName || holiday.name || "Public holiday",
+        countryCode
+      }));
+      openIndividualHolidayModal(countryCode, year);
+    } catch (error) {
+      pendingIndividualHolidays = [];
+      openIndividualHolidayModal(countryCode, year);
+      window.alert("Could not fetch public holidays. You can add them manually in the preview.");
+    } finally {
+      el.individualHolidayBtn.disabled = false;
+      el.individualHolidayBtn.textContent = "Add Public Holidays";
+    }
+  }
+
+  function openIndividualHolidayModal(countryCode, year) {
+    el.individualHolidaySubtitle.textContent = `${countryCode} ${year} - remove rows or add another before applying`;
+    renderPendingIndividualHolidays();
+    el.individualHolidayModal.hidden = false;
+  }
+
+  function closeIndividualHolidayModal() {
+    pendingIndividualHolidays = [];
+    el.individualHolidayModal.hidden = true;
+    el.individualHolidayAddForm.reset();
+  }
+
+  function renderPendingIndividualHolidays() {
+    el.individualHolidayList.innerHTML = pendingIndividualHolidays.length
+      ? pendingIndividualHolidays
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((holiday) => `<div class="holiday-preview-row">
+          <input type="date" value="${escapeAttr(holiday.date)}" data-holiday-date="${holiday.id}" />
+          <input type="text" value="${escapeAttr(holiday.name)}" data-holiday-name="${holiday.id}" />
+          <button type="button" class="danger mini" data-remove-individual-holiday="${holiday.id}">Remove</button>
+        </div>`)
+        .join("")
+      : `<p class="hint">No holidays loaded yet. Add one manually below.</p>`;
+    el.individualHolidayList.querySelectorAll("[data-remove-individual-holiday]").forEach((button) => {
+      button.addEventListener("click", () => {
+        pendingIndividualHolidays = pendingIndividualHolidays.filter((holiday) => holiday.id !== button.dataset.removeIndividualHoliday);
+        renderPendingIndividualHolidays();
+      });
+    });
+    el.individualHolidayList.querySelectorAll("[data-holiday-date]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const holiday = pendingIndividualHolidays.find((item) => item.id === input.dataset.holidayDate);
+        if (holiday) holiday.date = input.value;
+      });
+    });
+    el.individualHolidayList.querySelectorAll("[data-holiday-name]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const holiday = pendingIndividualHolidays.find((item) => item.id === input.dataset.holidayName);
+        if (holiday) holiday.name = clean(input.value);
+      });
+    });
+  }
+
+  function addPendingIndividualHoliday(event) {
+    event.preventDefault();
+    const date = el.individualHolidayDate.value;
+    const name = clean(el.individualHolidayName.value);
+    if (!date || !name) {
+      window.alert("Add both holiday date and name.");
+      return;
+    }
+    pendingIndividualHolidays.push({
+      id: makeId("ihol"),
+      date,
+      name,
+      countryCode: el.individualHolidayCountry.value || "Manual"
+    });
+    el.individualHolidayAddForm.reset();
+    renderPendingIndividualHolidays();
+  }
+
+  async function applyIndividualHolidays() {
+    ensureIndividualTable();
+    const valid = pendingIndividualHolidays
+      .map((holiday) => ({ ...holiday, date: clean(holiday.date), name: clean(holiday.name) }))
+      .filter((holiday) => holiday.date && holiday.name);
+    const byDate = new Map((individualTable.holidays || []).map((holiday) => [holiday.date, holiday]));
+    valid.forEach((holiday) => byDate.set(holiday.date, {
+      date: holiday.date,
+      name: holiday.name,
+      countryCode: holiday.countryCode || el.individualHolidayCountry.value || ""
+    }));
+    individualTable.holidays = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+    individualTable.rows.forEach((row) => stampIndividualHolidaysForRow(row));
+    await saveIndividualTable();
+    closeIndividualHolidayModal();
+    renderIndividualTable();
+  }
+
+  function stampIndividualHolidaysForRow(row) {
+    individualTable.entries[row.id] = individualTable.entries[row.id] || {};
+    (individualTable.holidays || []).forEach((holiday) => {
+      individualTable.entries[row.id][holiday.date] = { type: "holiday", hours: 0, name: holiday.name };
+    });
   }
 
   function exportIndividualCsv() {
@@ -2584,7 +2759,7 @@
     const [, ...dataRows] = rows;
     dataRows.forEach((cells) => {
       if (!clean(cells[0])) return;
-      individualTable.rows.push({
+    individualTable.rows.push({
         id: makeId("row"),
         name: clean(cells[0]),
         company: clean(cells[1]),
@@ -2593,6 +2768,7 @@
         position: clean(cells[4])
       });
     });
+    individualTable.rows.forEach((row) => stampIndividualHolidaysForRow(row));
     el.individualImportFile.value = "";
     saveIndividualTable();
     renderIndividualTable();

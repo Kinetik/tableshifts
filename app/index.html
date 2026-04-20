@@ -68,17 +68,34 @@
       </header>
 
       <main class="individual-main">
-        <div class="toolbar individual-toolbar">
-          <label class="field">
-            Month
-            <select id="individualMonthPicker"></select>
-          </label>
-          <button id="individualExportBtn" type="button">Export CSV</button>
-          <button id="individualTemplateBtn" type="button" class="secondary">Generate Import Template</button>
-          <label class="field file-action">
-            Import Employee CSV
-            <input id="individualImportFile" type="file" accept=".csv,text/csv" />
-          </label>
+        <div class="individual-toolbar">
+          <section class="toolbar-cluster month-cluster">
+            <label class="field">
+              Month
+              <select id="individualMonthPicker"></select>
+            </label>
+          </section>
+          <section class="toolbar-cluster holiday-cluster">
+            <span>Public Holidays</span>
+            <label class="field">
+              Country
+              <select id="individualHolidayCountry"></select>
+            </label>
+            <label class="field compact-year">
+              Year
+              <input id="individualHolidayYear" type="number" min="2000" max="2100" />
+            </label>
+            <button id="individualHolidayBtn" type="button" class="secondary">Add Public Holidays</button>
+          </section>
+          <section class="toolbar-cluster io-cluster">
+            <span>Import / Export</span>
+            <button id="individualExportBtn" type="button">Export CSV</button>
+            <button id="individualTemplateBtn" type="button" class="secondary">Import Template</button>
+            <label class="field file-action">
+              Import CSV
+              <input id="individualImportFile" type="file" accept=".csv,text/csv" />
+            </label>
+          </section>
         </div>
 
         <section class="sheet-shell">
@@ -550,6 +567,7 @@
             <option value="medical">Medical CM</option>
             <option value="special_event">Special Events</option>
             <option value="absence">Absence AB</option>
+            <option value="holiday">Holiday H</option>
           </select>
         </label>
         <label class="field">
@@ -582,6 +600,36 @@
         <div class="form-actions">
           <button id="confirmLeavePreviewBtn" type="button">Confirm Request</button>
           <button id="cancelLeavePreviewBottomBtn" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="individualHolidayModal" class="modal" hidden>
+      <div class="modal-card document-modal">
+        <div class="modal-head">
+          <div>
+            <strong>Public holidays</strong>
+            <span id="individualHolidaySubtitle">Preview before applying</span>
+          </div>
+          <button id="closeIndividualHolidayBtn" type="button" class="icon-btn">Close</button>
+        </div>
+        <div id="individualHolidayList" class="holiday-preview-list"></div>
+        <form id="individualHolidayAddForm" class="setup-form compact-form">
+          <label class="field">
+            Date
+            <input id="individualHolidayDate" type="date" />
+          </label>
+          <label class="field">
+            Name
+            <input id="individualHolidayName" type="text" placeholder="Holiday name" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="secondary">Add another</button>
+          </div>
+        </form>
+        <div class="form-actions">
+          <button id="applyIndividualHolidaysBtn" type="button">Apply Holidays</button>
+          <button id="cancelIndividualHolidaysBtn" type="button" class="secondary">Cancel</button>
         </div>
       </div>
     </div>

@@ -634,7 +634,7 @@ main:focus-visible {
 }
 
 .individual-grid {
-  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(30px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
+  grid-template-columns: minmax(150px, 0.95fr) minmax(58px, 0.5fr) repeat(var(--days), minmax(30px, 1fr)) minmax(58px, 0.55fr) repeat(6, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
 }
 
 .individual-grid.meta-expanded {
@@ -643,7 +643,7 @@ main:focus-visible {
 }
 
 .individual-grid.totals-expanded {
-  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(4, 0) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
+  grid-template-columns: minmax(170px, 1fr) minmax(58px, 0.5fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) repeat(2, minmax(54px, 0.5fr));
   min-width: calc(180px + 58px + var(--days) * 34px + 650px);
 }
 
@@ -688,9 +688,7 @@ main:focus-visible {
   font-size: 0.68rem;
 }
 
-.sheet-grid:not(.totals-expanded) .detail-total,
-.individual-grid:not(.meta-expanded) .manual-meta {
-  width: 0;
+.sheet-grid:not(.totals-expanded) .detail-total {
   min-width: 0;
   overflow: hidden;
   border-right: 0;
@@ -839,7 +837,50 @@ main:focus-visible {
 }
 
 .individual-toolbar {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(420px, 1.35fr) minmax(420px, 1.35fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.toolbar-cluster {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(100px, 1fr);
   align-items: end;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 9px;
+  background: var(--surface);
+  box-shadow: var(--soft-shadow);
+}
+
+.toolbar-cluster > span {
+  align-self: center;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.month-cluster {
+  grid-auto-flow: row;
+}
+
+.compact-year {
+  max-width: 120px;
+}
+
+.toolbar-cluster button {
+  min-height: 32px;
+  white-space: nowrap;
+}
+
+.toolbar-cluster input,
+.toolbar-cluster select {
+  min-height: 32px;
+  padding: 5px 8px;
 }
 
 .file-action input {
@@ -1306,6 +1347,26 @@ main:focus-visible {
   overflow: auto;
 }
 
+.holiday-preview-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(420px, 48vh);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.holiday-preview-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.5fr) minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.compact-form {
+  margin-top: 14px;
+  grid-template-columns: minmax(140px, 0.45fr) minmax(180px, 1fr) auto;
+}
+
 .modal-head {
   display: flex;
   justify-content: space-between;
@@ -1467,10 +1528,15 @@ main:focus-visible {
   }
 
   .toolbar,
+  .individual-toolbar,
   .setup-form,
   .setup-form.wide,
   .chart-grid {
     grid-template-columns: 1fr;
+  }
+
+  .toolbar-cluster {
+    grid-auto-flow: row;
   }
 
   .wide-field {
