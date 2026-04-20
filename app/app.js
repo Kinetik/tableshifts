@@ -1,6 +1,7 @@
 (function () {
   const STORAGE_KEY = "tableshifts.full.v2";
   const SESSION_KEY = "tableshifts.session.v2";
+  const INDIVIDUAL_STORAGE_PREFIX = "tableshifts.individual.";
   const ROLES = {
     admin_account: "Admin Account",
     employee: "Employee",
@@ -37,6 +38,10 @@
   let db = loadDb();
   const supabaseState = window.TableShiftsSupabase || { configured: false, client: null, mode: "local" };
   const supabase = supabaseState.client;
+  let individualTable = null;
+  let individualMetaExpanded = false;
+  let individualTotalsExpanded = false;
+  let pendingIndividualHolidays = [];
   let session = {
     userId: "",
     activeCompanyId: db.companies[0]?.id || "",
@@ -51,6 +56,29 @@
 
   const el = {
     loginView: byId("loginView"),
+    individualView: byId("individualView"),
+    individualTableBtn: byId("individualTableBtn"),
+    individualBackBtn: byId("individualBackBtn"),
+    individualCopyLinkBtn: byId("individualCopyLinkBtn"),
+    individualLinkLabel: byId("individualLinkLabel"),
+    individualMonthPicker: byId("individualMonthPicker"),
+    individualExportBtn: byId("individualExportBtn"),
+    individualTemplateBtn: byId("individualTemplateBtn"),
+    individualImportFile: byId("individualImportFile"),
+    individualHolidayCountry: byId("individualHolidayCountry"),
+    individualHolidayYear: byId("individualHolidayYear"),
+    individualHolidayBtn: byId("individualHolidayBtn"),
+    individualHolidayModal: byId("individualHolidayModal"),
+    individualHolidaySubtitle: byId("individualHolidaySubtitle"),
+    individualHolidayList: byId("individualHolidayList"),
+    individualHolidayAddForm: byId("individualHolidayAddForm"),
+    individualHolidayDate: byId("individualHolidayDate"),
+    individualHolidayName: byId("individualHolidayName"),
+    applyIndividualHolidaysBtn: byId("applyIndividualHolidaysBtn"),
+    closeIndividualHolidayBtn: byId("closeIndividualHolidayBtn"),
+    cancelIndividualHolidaysBtn: byId("cancelIndividualHolidaysBtn"),
+    individualGrid: byId("individualGrid"),
+    individualNewRowBtn: byId("individualNewRowBtn"),
     appView: byId("appView"),
     loginEmail: byId("loginEmail"),
     loginPassword: byId("loginPassword"),
@@ -123,6 +151,21 @@
     manualHolidayName: byId("manualHolidayName"),
     holidaysList: byId("holidaysList"),
     usersTab: byId("usersTab"),
+    adminsTab: byId("adminsTab"),
+    adminUserForm: byId("adminUserForm"),
+    adminUserId: byId("adminUserId"),
+    adminUserName: byId("adminUserName"),
+    adminUserEmail: byId("adminUserEmail"),
+    adminUserIdentification: byId("adminUserIdentification"),
+    adminUserPosition: byId("adminUserPosition"),
+    adminUserPassword: byId("adminUserPassword"),
+    adminUserStartDate: byId("adminUserStartDate"),
+    adminUserEndDate: byId("adminUserEndDate"),
+    adminUserRole: byId("adminUserRole"),
+    adminUserCompany: byId("adminUserCompany"),
+    adminUserCompanyAccess: byId("adminUserCompanyAccess"),
+    resetAdminUserFormBtn: byId("resetAdminUserFormBtn"),
+    adminsList: byId("adminsList"),
     companiesTab: byId("companiesTab"),
     departmentsTab: byId("departmentsTab"),
     timesheetTab: byId("timesheetTab"),
@@ -178,8 +221,14 @@
   init();
 
   async function init() {
+    arrangeManagementPanels();
     bindLogin();
     bindApp();
+    bindIndividual();
+    if (individualIdFromUrl()) {
+      await openIndividualTable(individualIdFromUrl());
+      return;
+    }
     await restoreSession();
   }
 
@@ -188,6 +237,7 @@
     el.showCreateAdminBtn.addEventListener("click", () => {
       el.createAdminForm.hidden = !el.createAdminForm.hidden;
     });
+    el.individualTableBtn.addEventListener("click", () => openIndividualTable());
     el.createAdminForm.addEventListener("submit", createPayrollAdminFromLogin);
     el.loginEmail.addEventListener("keydown", (event) => {
       if (event.key === "Enter") login();
@@ -195,6 +245,69 @@
     el.loginPassword.addEventListener("keydown", (event) => {
       if (event.key === "Enter") login();
     });
+  }
+
+  function bindIndividual() {
+    el.individualBackBtn.addEventListener("click", () => {
+      individualTable = null;
+      history.replaceState(null, "", location.pathname);
+      el.individualView.hidden = true;
+      el.appView.hidden = true;
+      el.loginView.hidden = false;
+    });
+    el.individualCopyLinkBtn.addEventListener("click", async () => {
+      const link = individualShareLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        flash(el.individualCopyLinkBtn, "Copied");
+      } catch (error) {
+        window.prompt("Copy this link", link);
+      }
+    });
+    el.individualMonthPicker.addEventListener("change", () => {
+      if (!individualTable) return;
+      individualTable.month = el.individualMonthPicker.value || getCurrentMonth();
+      saveIndividualTable();
+      renderIndividualTable();
+    });
+    el.individualExportBtn.addEventListener("click", exportIndividualCsv);
+    el.individualTemplateBtn.addEventListener("click", downloadIndividualTemplate);
+    el.individualImportFile.addEventListener("change", importIndividualCsv);
+    el.individualHolidayBtn.addEventListener("click", fetchIndividualHolidays);
+    el.individualHolidayAddForm.addEventListener("submit", addPendingIndividualHoliday);
+    el.applyIndividualHolidaysBtn.addEventListener("click", applyIndividualHolidays);
+    el.closeIndividualHolidayBtn.addEventListener("click", closeIndividualHolidayModal);
+    el.cancelIndividualHolidaysBtn.addEventListener("click", closeIndividualHolidayModal);
+    el.individualNewRowBtn.addEventListener("click", () => {
+      ensureIndividualTable();
+      const row = defaultIndividualRow();
+      individualTable.rows.push(row);
+      stampIndividualHolidaysForRow(row);
+      saveIndividualTable();
+      renderIndividualTable();
+    });
+    el.individualHolidayCountry.innerHTML = HOLIDAY_COUNTRIES.map(([code, name]) => option(code, `${name} (${code})`, code === "RO")).join("");
+    el.individualHolidayYear.value = new Date().getFullYear();
+  }
+
+  function arrangeManagementPanels() {
+    const usersSection = byId("usersTab");
+    const companySection = byId("companiesTab");
+    const departmentSection = byId("departmentsTab");
+    if (!usersSection || !companySection || !departmentSection || companySection.dataset.arranged === "true") return;
+    companySection.dataset.arranged = "true";
+    companySection.querySelector(".section-head h2").textContent = "Companies";
+    companySection.querySelector(".section-head p").textContent = "Create companies, expand them, and manage their departments.";
+    usersSection.querySelector(".section-head h2").textContent = "Employees";
+    usersSection.querySelector(".section-head p").textContent = "Employees, team leaders, department managers, passwords, and reporting lines.";
+
+    const departmentBlock = document.createElement("section");
+    departmentBlock.className = "management-block";
+    departmentBlock.innerHTML = `<div class="section-head compact"><div><h2>Department inside company</h2><p>Create or edit a department for the selected company.</p></div></div>`;
+    departmentBlock.appendChild(byId("departmentForm"));
+    companySection.insertBefore(departmentBlock, byId("companiesList"));
+    byId("companyLog").closest(".log-card").remove();
+    byId("departmentLog").closest(".log-card").remove();
   }
 
   function bindApp() {
@@ -250,6 +363,9 @@
     el.employeeRole.addEventListener("change", syncCompanyAccessVisibility);
     el.employeeStartDate.addEventListener("change", updateCoEntitlementFromDates);
     el.employeeEndDate.addEventListener("change", updateCoEntitlementFromDates);
+    el.adminUserForm.addEventListener("submit", saveAdminUser);
+    el.resetAdminUserFormBtn.addEventListener("click", resetAdminUserForm);
+    el.adminUserRole.addEventListener("change", syncAdminCompanyAccessVisibility);
     el.leaveRequestForm.addEventListener("submit", submitLeaveRequest);
     el.confirmLeavePreviewBtn.addEventListener("click", confirmLeaveRequestDraft);
     el.cancelLeavePreviewBtn.addEventListener("click", cancelLeaveRequestDraft);
@@ -299,7 +415,7 @@
       : user.companyId;
     session.activeTab = "timesheet";
     session.month = getCurrentMonth();
-    el.monthPicker.value = session.month;
+    fillMonthSelect(el.monthPicker, session.month);
     el.loginView.hidden = true;
     el.appView.hidden = false;
     saveSession();
@@ -349,7 +465,7 @@
       if (companies.length && !companies.some((company) => company.id === session.activeCompanyId)) {
         session.activeCompanyId = companies[0].id;
       }
-      el.monthPicker.value = session.month;
+      fillMonthSelect(el.monthPicker, session.month);
       el.loginView.hidden = true;
       el.appView.hidden = false;
       renderAll();
@@ -446,6 +562,7 @@
       email,
       password,
       options: {
+        emailRedirectTo: window.location.origin,
         data: {
           full_name: name,
           account_type: "admin_account"
@@ -475,11 +592,13 @@
   async function syncSupabaseProfile(userId) {
     const profile = await waitForSupabaseProfile(userId);
     if (!profile) return null;
-    const user = profileToLocalUser(profile);
-    db.users = db.users || [];
-    const existingIndex = db.users.findIndex((item) => item.id === user.id);
-    if (existingIndex >= 0) db.users[existingIndex] = { ...db.users[existingIndex], ...user };
-    else db.users.push(user);
+    await loadSupabaseWorkspace(profile);
+    const user = userById(profile.id) || profileToLocalUser(profile);
+    if (!userById(user.id)) {
+      db.users = db.users || [];
+      db.users.push(user);
+      saveDb();
+    }
     saveDb();
     return user;
   }
@@ -500,7 +619,63 @@
     return null;
   }
 
-  function profileToLocalUser(profile) {
+  async function loadSupabaseWorkspace(profile) {
+    if (!useSupabaseAuth() || !profile?.environment_id) return;
+    const environmentId = profile.environment_id;
+    const [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult] = await Promise.all([
+      supabase.from("admin_environments").select("*").eq("id", environmentId).maybeSingle(),
+      supabase.from("profiles").select("*").eq("environment_id", environmentId),
+      supabase.from("companies").select("*").eq("environment_id", environmentId),
+      supabase.from("departments").select("*").eq("environment_id", environmentId),
+      supabase.from("payroll_company_access").select("*").eq("environment_id", environmentId),
+      supabase.from("national_holidays").select("*").eq("environment_id", environmentId)
+    ]);
+    [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult].forEach((result) => {
+      if (result.error) throw result.error;
+    });
+    const ownerId = environmentResult.data?.owner_user_id || profile.id;
+    const accessByUser = new Map();
+    (accessResult.data || []).forEach((item) => {
+      if (!accessByUser.has(item.payroll_user_id)) accessByUser.set(item.payroll_user_id, []);
+      accessByUser.get(item.payroll_user_id).push(item.company_id);
+    });
+    db.users = (profilesResult.data || []).map((item) => profileToLocalUser(item, ownerId, accessByUser.get(item.id) || []));
+    db.companies = (companiesResult.data || []).map((company) => ({
+      id: company.id,
+      name: company.name,
+      logo: company.logo_path ? { path: company.logo_path, name: "Company logo" } : null,
+      ownerAdminId: ownerId,
+      createdBy: company.created_by || ownerId,
+      createdAt: company.created_at || new Date().toISOString()
+    }));
+    db.departments = (departmentsResult.data || []).map((department) => ({
+      id: department.id,
+      name: department.name,
+      companyId: department.company_id,
+      adminOwnerId: ownerId,
+      managerId: department.manager_user_id || "",
+      teamLeaderId: department.team_leader_user_id || "",
+      shiftHours: Number(department.shift_hours || 8),
+      workDays: department.work_days || [1, 2, 3, 4, 5],
+      createdAt: department.created_at || new Date().toISOString(),
+      updatedAt: department.updated_at || new Date().toISOString()
+    }));
+    db.holidays = (holidaysResult.data || []).map((holiday) => ({
+      id: holiday.id,
+      adminOwnerId: ownerId,
+      companyId: holiday.company_id || "all",
+      departmentId: holiday.department_id || "all",
+      countryCode: holiday.country_code,
+      date: holiday.holiday_date,
+      name: holiday.name
+    }));
+    db.entries = db.entries || {};
+    db.leaveRequests = db.leaveRequests || [];
+    db.logs = db.logs || { company: [], department: [] };
+    saveDb();
+  }
+
+  function profileToLocalUser(profile, environmentOwnerId = "", permittedCompanyIds = []) {
     return {
       id: profile.id,
       name: profile.full_name,
@@ -516,9 +691,9 @@
       startDate: profile.start_date || todayIso(),
       endDate: profile.end_date || "",
       coAvailable: Number(profile.co_available || 0),
-      adminOwnerId: profile.role === "admin_account" ? profile.id : "",
+      adminOwnerId: profile.role === "admin_account" ? profile.id : environmentOwnerId,
       environmentId: profile.environment_id || "",
-      permittedCompanyIds: [],
+      permittedCompanyIds,
       createdAt: profile.created_at || new Date().toISOString()
     };
   }
@@ -530,7 +705,7 @@
       : user.companyId;
     session.activeTab = "timesheet";
     session.month = getCurrentMonth();
-    el.monthPicker.value = session.month;
+    fillMonthSelect(el.monthPicker, session.month);
     el.loginView.hidden = true;
     el.appView.hidden = false;
     saveSession();
@@ -544,6 +719,81 @@
     return message;
   }
 
+  async function currentAccessToken() {
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data?.session?.access_token) throw new Error("Your session expired. Please log in again.");
+    return data.session.access_token;
+  }
+
+  async function upsertSupabaseUser(user, password, permittedCompanyIds = []) {
+    const token = await currentAccessToken();
+    const response = await fetch("/api/upsert-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ user, password, permittedCompanyIds })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not save the Supabase account.");
+    return profileToLocalUser(payload.profile, payload.environmentOwnerId, payload.permittedCompanyIds || []);
+  }
+
+  async function deleteSupabaseUser(userId) {
+    if (!useSupabaseAuth()) return;
+    const token = await currentAccessToken();
+    const response = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ userId })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || "Could not delete the Supabase account.");
+  }
+
+  async function saveCompanyToSupabase(company) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("companies").upsert({
+      id: company.id,
+      environment_id: currentUser().environmentId,
+      name: company.name,
+      logo_path: company.logo?.path || null,
+      created_by: company.createdBy || currentUser().id
+    }, { onConflict: "id" });
+    if (error) throw error;
+  }
+
+  async function deleteCompanyFromSupabase(id) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("companies").delete().eq("id", id);
+    if (error) throw error;
+  }
+
+  async function saveDepartmentToSupabase(department) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("departments").upsert({
+      id: department.id,
+      environment_id: currentUser().environmentId,
+      company_id: department.companyId,
+      name: department.name,
+      manager_user_id: department.managerId || null,
+      team_leader_user_id: department.teamLeaderId || null,
+      shift_hours: department.shiftHours,
+      work_days: department.workDays
+    }, { onConflict: "id" });
+    if (error) throw error;
+  }
+
+  async function deleteDepartmentFromSupabase(id) {
+    if (!useSupabaseAuth()) return;
+    const { error } = await supabase.from("departments").delete().eq("id", id);
+    if (error) throw error;
+  }
+
   function renderAll() {
     renderShell();
     renderTimesheet();
@@ -554,6 +804,7 @@
       renderDepartmentSetup();
       renderHolidaySetup();
       renderUserManagement();
+      renderAdminsManagement();
     }
   }
 
@@ -564,13 +815,11 @@
     el.sessionLabel.textContent = company?.name || "";
     el.topIdentity.innerHTML = `<strong>${escapeHtml(user.name)}</strong><span>${ROLES[user.role]} - ${escapeHtml(user.email || "")}</span>`;
     const pendingCount = pendingApprovalsForCurrentUser().length;
-    el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager", "payroll_admin", "admin_account"].includes(user.role);
+    el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager"].includes(user.role);
     el.pendingApprovalsBtn.textContent = pendingCount ? `${pendingCount} pending leave` : "No pending leave";
     el.pendingApprovalsBtn.classList.toggle("has-pending", pendingCount > 0);
-    el.monthPicker.value = session.month;
-    el.tabs.innerHTML = tabsForUser()
-      .map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`)
-      .join("");
+    fillMonthSelect(el.monthPicker, session.month);
+    el.tabs.innerHTML = navHtml();
     el.tabs.querySelectorAll("button").forEach((button) => {
       button.addEventListener("click", () => {
         session.activeTab = button.dataset.tab;
@@ -583,9 +832,20 @@
     showActiveTab();
   }
 
+  function navHtml() {
+    const tabs = tabsForUser();
+    const plain = tabs.filter((tab) => !tab.group);
+    const management = tabs.filter((tab) => tab.group === "management");
+    return [
+      ...plain.map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`),
+      management.length ? `<details class="nav-group" open><summary>Management</summary>${management.map((tab) => `<button class="${tab.id === session.activeTab ? "active" : ""}" data-tab="${tab.id}" type="button">${tab.label}</button>`).join("")}</details>` : ""
+    ].join("");
+  }
+
   function showActiveTab() {
-    ["timesheet", "leave", "charts", "companies", "departments", "holidays", "users"].forEach((tab) => {
-      byId(`${tab}Tab`).hidden = session.activeTab !== tab;
+    ["timesheet", "leave", "charts", "companies", "departments", "holidays", "users", "admins"].forEach((tab) => {
+      const panel = byId(`${tab}Tab`);
+      if (panel) panel.hidden = session.activeTab !== tab;
     });
     if (session.activeTab === "charts") renderCharts();
     if (session.activeTab === "leave") renderLeaveRequests();
@@ -676,6 +936,7 @@
       cell.dataset.workday = isWorkDay ? "true" : "false";
       if (holiday) cell.dataset.holiday = "true";
       if (entry) {
+        cell.dataset.entryType = entry.type;
         const parts = entryParts(entry, department);
         cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${parts}</span>`;
       } else if (pendingLeaveForEmployee(employee.id, day.iso)) {
@@ -843,7 +1104,7 @@
 
   function canEditEmployee(employee) {
     const user = currentUser();
-    if (["admin_account", "payroll_admin"].includes(user.role)) return accessibleCompanies(user).some((company) => company.id === employee.companyId);
+    if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return employee.companyId === user.companyId;
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.id === user.id || employee.teamLeaderId === user.id;
@@ -858,9 +1119,25 @@
     el.editorTitle.textContent = employee.name;
     el.editorSubtitle.textContent = iso;
     el.entryType.value = entry.type;
+    syncEntryTypeOptions(false);
     el.entryHours.value = entry.hours || "";
     el.entryFile.value = "";
     renderEntryAttachmentMeta(entry);
+    updateEditorHelp();
+    el.cellEditor.hidden = false;
+  }
+
+  function openIndividualEditor(rowId, iso) {
+    const row = individualTable.rows.find((item) => item.id === rowId);
+    const entry = normalizeIndividualEntry(individualTable.entries[rowId]?.[iso]) || { type: "normal", hours: 8 };
+    session.editingEntry = { individual: true, rowId, iso };
+    el.editorTitle.textContent = row?.name || "Individual row";
+    el.editorSubtitle.textContent = iso;
+    el.entryType.value = entry.type;
+    syncEntryTypeOptions(true);
+    el.entryHours.value = entry.hours || "";
+    el.entryFile.value = "";
+    renderEntryAttachmentMeta(null);
     updateEditorHelp();
     el.cellEditor.hidden = false;
   }
@@ -870,22 +1147,44 @@
     el.cellEditor.hidden = true;
   }
 
+  function syncEntryTypeOptions(isIndividual) {
+    const holidayOption = el.entryType.querySelector("option[value='holiday']");
+    if (holidayOption) holidayOption.hidden = !isIndividual;
+  }
+
   function applyQuick(type) {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      el.entryType.value = type;
+      if (type === "normal" || type === "weekend") el.entryHours.value = 8;
+      if (type === "overtime") el.entryHours.value = 10;
+      if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence" || type === "holiday") el.entryHours.value = 0;
+      updateEditorHelp();
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
     el.entryType.value = type;
     if (type === "normal" || type === "weekend") el.entryHours.value = normalHours;
     if (type === "overtime") el.entryHours.value = normalHours + 2;
-    if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence") el.entryHours.value = 0;
+    if (type === "vacation" || type === "medical" || type === "special_event" || type === "absence" || type === "holiday") el.entryHours.value = 0;
     updateEditorHelp();
   }
 
   function updateEditorHelp() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      el.editorHelp.textContent = el.entryType.value === "overtime"
+        ? "Overtime is normal shift plus extra time. In individual tables, 10h records 8h normal and 2h overtime."
+        : "Normal shift for individual tables is 8h on weekdays.";
+      el.entryFileWrap.hidden = true;
+      el.entryFile.value = "";
+      renderEntryAttachmentMeta(null);
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
@@ -935,6 +1234,17 @@
   async function saveEntryFromEditor() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      let hours = Number(el.entryHours.value || 0);
+      if (!Number.isFinite(hours)) hours = 0;
+      if (el.entryType.value === "overtime" && hours < 8) hours = 8;
+      individualTable.entries[editing.rowId] = individualTable.entries[editing.rowId] || {};
+      individualTable.entries[editing.rowId][editing.iso] = { type: el.entryType.value, hours };
+      await saveIndividualTable();
+      closeEditor();
+      renderIndividualTable();
+      return;
+    }
     const employee = userById(editing.employeeId);
     const department = departmentById(employee.departmentId);
     const normalHours = department?.shiftHours || 8;
@@ -957,6 +1267,13 @@
   function deleteEntryFromEditor() {
     const editing = session.editingEntry;
     if (!editing) return;
+    if (editing.individual) {
+      if (individualTable.entries[editing.rowId]) delete individualTable.entries[editing.rowId][editing.iso];
+      saveIndividualTable();
+      closeEditor();
+      renderIndividualTable();
+      return;
+    }
     deleteEntry(editing.employeeId, editing.iso);
     saveDb();
     closeEditor();
@@ -1050,6 +1367,7 @@
     const companyIds = new Set(accessibleCompanies().map((company) => company.id));
     const list = users().filter((user) => {
       if (user.role === "admin_account") return false;
+      if (["payroll_admin", "company_manager"].includes(user.role)) return false;
       if (currentUser().role === "admin_account" && user.role === "payroll_admin") return user.adminOwnerId === currentUser().id;
       return companyIds.has(user.companyId);
     });
@@ -1064,6 +1382,10 @@
 
   async function submitLeaveRequest(event) {
     event.preventDefault();
+    if (["admin_account", "payroll_admin"].includes(currentUser().role)) {
+      window.alert("Admin Account and Payroll Admin users can view leave requests, but cannot create them.");
+      return;
+    }
     const startDate = el.leaveStartDate.value;
     const endDate = el.leaveEndDate.value || startDate;
     if (!startDate || !endDate || endDate < startDate) {
@@ -1123,6 +1445,7 @@
 
   function renderLeaveRequests() {
     if (!el.leaveRequestsList) return;
+    el.leaveRequestForm.hidden = ["admin_account", "payroll_admin"].includes(currentUser().role);
     const list = visibleLeaveRequests();
     el.leaveRequestsList.innerHTML = list.length
       ? list.map((request) => request.source === "timesheet" ? timesheetLeaveCard(request) : leaveRequestCard(request)).join("")
@@ -1149,6 +1472,14 @@
 
   function visibleLeaveRequests() {
     const user = currentUser();
+    if (["admin_account", "payroll_admin"].includes(user.role)) {
+      const companyIds = new Set(accessibleCompanies(user).map((company) => company.id));
+      const requests = (db.leaveRequests || [])
+        .filter((request) => companyIds.has(request.companyId))
+        .map((request) => ({ ...request, source: "request" }));
+      return [...requests, ...visibleTimesheetLeaveEntries()]
+        .sort((a, b) => String(b.createdAt || b.date).localeCompare(String(a.createdAt || a.date)));
+    }
     const requests = (db.leaveRequests || [])
       .filter((request) => ["admin_account", "payroll_admin"].includes(user.role) || request.companyId === session.activeCompanyId || request.employeeId === user.id)
       .filter((request) => request.employeeId === user.id || canApproveLeave(request))
@@ -1161,7 +1492,7 @@
     const user = currentUser();
     const employee = userById(request.employeeId);
     if (!employee || user.id === employee.id) return false;
-    if (["admin_account", "payroll_admin"].includes(user.role)) return accessibleCompanies(user).some((company) => company.id === employee.companyId);
+    if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return employee.companyId === user.companyId;
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.teamLeaderId === user.id;
@@ -1512,8 +1843,8 @@
 
   function fillEmployeeFormOptions() {
     const roleChoices = currentUser().role === "admin_account"
-      ? ["payroll_admin", "employee", "team_leader", "department_manager", "company_manager"]
-      : ["employee", "team_leader", "department_manager", "company_manager"];
+      ? ["employee", "team_leader", "department_manager"]
+      : ["employee", "team_leader", "department_manager"];
     el.employeeRole.innerHTML = roleChoices
       .map((role) => option(role, ROLES[role]))
       .join("");
@@ -1538,6 +1869,131 @@
         input.checked = input.value === el.employeeCompany.value;
       });
     }
+  }
+
+  function renderAdminsManagement() {
+    fillAdminFormOptions();
+    const companyIds = new Set(accessibleCompanies().map((company) => company.id));
+    const list = users().filter((user) => {
+      if (!["payroll_admin", "company_manager"].includes(user.role)) return false;
+      if (currentUser().role === "admin_account" && user.role === "payroll_admin") return user.adminOwnerId === currentUser().id;
+      return user.role === "payroll_admin" ? user.adminOwnerId === activeAdminId() : companyIds.has(user.companyId);
+    });
+    el.adminsList.innerHTML = list.length ? list.map((user) => userCard(user)).join("") : `<p class="hint">No admin users yet.</p>`;
+    el.adminsList.querySelectorAll("[data-edit-user]").forEach((button) => {
+      button.addEventListener("click", () => editAdminUser(button.dataset.editUser));
+    });
+    el.adminsList.querySelectorAll("[data-delete-user]").forEach((button) => {
+      button.addEventListener("click", () => deleteEmployee(button.dataset.deleteUser));
+    });
+  }
+
+  function fillAdminFormOptions() {
+    const roleChoices = currentUser().role === "admin_account" ? ["payroll_admin", "company_manager"] : ["company_manager"];
+    el.adminUserRole.innerHTML = roleChoices.map((role) => option(role, ROLES[role])).join("");
+    const companies = accessibleCompanies();
+    el.adminUserCompany.innerHTML = companies.map((company) => option(company.id, company.name, company.id === session.activeCompanyId)).join("");
+    el.adminUserCompanyAccess.innerHTML = companies.map((company) => `
+      <label>
+        <input type="checkbox" value="${escapeAttr(company.id)}" />
+        <span>${escapeHtml(company.name)}</span>
+      </label>
+    `).join("");
+    syncAdminCompanyAccessVisibility();
+  }
+
+  function syncAdminCompanyAccessVisibility() {
+    const isPayroll = el.adminUserRole.value === "payroll_admin";
+    el.adminUserCompany.closest(".field").hidden = isPayroll;
+    el.adminUserCompanyAccess.closest(".field").hidden = !isPayroll;
+    if (isPayroll && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
+      el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
+        input.checked = input.value === session.activeCompanyId;
+      });
+    }
+  }
+
+  function selectedAdminCompanyAccess() {
+    return Array.from(el.adminUserCompanyAccess.querySelectorAll("input:checked")).map((input) => input.value);
+  }
+
+  async function saveAdminUser(event) {
+    event.preventDefault();
+    const id = el.adminUserId.value || "";
+    const existing = userById(id);
+    const role = el.adminUserRole.value;
+    const user = {
+      id,
+      name: clean(el.adminUserName.value),
+      email: clean(el.adminUserEmail.value).toLowerCase(),
+      identificationNumber: clean(el.adminUserIdentification.value),
+      position: clean(el.adminUserPosition.value),
+      password: el.adminUserPassword.value,
+      startDate: el.adminUserStartDate.value,
+      endDate: el.adminUserEndDate.value,
+      role,
+      companyId: role === "company_manager" ? el.adminUserCompany.value : "",
+      departmentId: "",
+      reportsToId: "",
+      teamLeaderId: "",
+      coAvailable: 0,
+      adminOwnerId: activeAdminId(),
+      permittedCompanyIds: role === "payroll_admin" ? selectedAdminCompanyAccess() : [],
+      createdAt: existing?.createdAt || new Date().toISOString()
+    };
+    if (!user.name || !user.email || !user.identificationNumber || !user.position || !user.password || !user.startDate) {
+      window.alert("Name, email, identification number, position, password, and start date are required.");
+      return;
+    }
+    const emailTaken = users().some((item) => item.id !== id && clean(item.email).toLowerCase() === user.email);
+    if (emailTaken) {
+      window.alert("That email is already used by another user.");
+      return;
+    }
+    try {
+      const savedUser = useSupabaseAuth()
+        ? await upsertSupabaseUser(user, user.password, user.permittedCompanyIds)
+        : { ...user, id: user.id || makeId("u") };
+      if (existing) {
+        db.users = db.users.map((item) => (item.id === savedUser.id ? { ...item, ...savedUser } : item));
+      } else {
+        db.users.push(savedUser);
+      }
+    } catch (error) {
+      window.alert(error.message || "Could not save account.");
+      return;
+    }
+    saveDb();
+    resetAdminUserForm();
+    renderAll();
+  }
+
+  function editAdminUser(id) {
+    const user = userById(id);
+    el.adminUserId.value = user.id;
+    el.adminUserName.value = user.name;
+    el.adminUserEmail.value = user.email || "";
+    el.adminUserIdentification.value = user.identificationNumber || "";
+    el.adminUserPosition.value = user.position || "";
+    el.adminUserPassword.value = user.password || "";
+    el.adminUserStartDate.value = user.startDate || todayIso();
+    el.adminUserEndDate.value = user.endDate || "";
+    el.adminUserRole.value = user.role;
+    fillAdminFormOptions();
+    el.adminUserRole.value = user.role;
+    el.adminUserCompany.value = user.companyId || session.activeCompanyId;
+    el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
+      input.checked = (user.permittedCompanyIds || []).includes(input.value);
+    });
+    syncAdminCompanyAccessVisibility();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetAdminUserForm() {
+    el.adminUserForm.reset();
+    el.adminUserId.value = "";
+    fillAdminFormOptions();
+    el.adminUserStartDate.value = todayIso();
   }
 
   function selectedCompanyAccess() {
@@ -1572,9 +2028,9 @@
     }
   }
 
-  function saveEmployee(event) {
+  async function saveEmployee(event) {
     event.preventDefault();
-    const id = el.employeeId.value || makeId("u");
+    const id = el.employeeId.value || "";
     const existing = userById(id);
     const user = {
       id,
@@ -1604,10 +2060,18 @@
       window.alert("That email is already used by another user.");
       return;
     }
-    if (existing) {
-      db.users = db.users.map((item) => (item.id === id ? user : item));
-    } else {
-      db.users.push(user);
+    try {
+      const savedUser = useSupabaseAuth()
+        ? await upsertSupabaseUser(user, user.password, user.permittedCompanyIds)
+        : { ...user, id: user.id || makeId("u") };
+      if (existing) {
+        db.users = db.users.map((item) => (item.id === savedUser.id ? { ...item, ...savedUser } : item));
+      } else {
+        db.users.push(savedUser);
+      }
+    } catch (error) {
+      window.alert(error.message || "Could not save employee.");
+      return;
     }
     saveDb();
     resetEmployeeForm();
@@ -1639,9 +2103,15 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteEmployee(id) {
+  async function deleteEmployee(id) {
     const user = userById(id);
     if (!window.confirm(`Delete employee ${user.name}? This also removes timesheet entries.`)) return;
+    try {
+      await deleteSupabaseUser(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete account from Supabase.");
+      return;
+    }
     db.users = db.users.filter((item) => item.id !== id);
     Object.values(db.entries).forEach((companyData) => {
       Object.values(companyData).forEach((monthData) => delete monthData[id]);
@@ -1739,19 +2209,58 @@
 
   function renderCompanySetup() {
     el.companiesList.innerHTML = accessibleCompanies().map((company) => {
-      const count = departments().filter((department) => department.companyId === company.id).length;
-      return `<article class="directory-row">
-        <div class="company-row-title">
-          ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
-          <div><strong>${escapeHtml(company.name)}</strong><span>${count} departments</span></div>
+      const companyDepartments = departments().filter((department) => department.companyId === company.id);
+      const companyUsers = users().filter((user) => user.companyId === company.id);
+      return `<details class="hierarchy-company" open>
+        <summary>
+          <span class="company-row-title">
+            ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
+            <span><strong>${escapeHtml(company.name)}</strong><em>${companyDepartments.length} departments - ${companyUsers.length} users</em></span>
+          </span>
+          <span class="row-actions">
+            <button type="button" class="secondary mini" data-add-dept-company="${company.id}">Add department</button>
+            <button type="button" class="danger mini" data-delete-company="${company.id}">Delete</button>
+          </span>
+        </summary>
+        <div class="hierarchy-children">
+          ${companyDepartments.length ? companyDepartments.map((department) => hierarchyDepartmentRow(department)).join("") : `<p class="hint">No departments yet.</p>`}
         </div>
-        <button type="button" class="danger" data-delete-company="${company.id}">Delete</button>
-      </article>`;
+      </details>`;
     }).join("");
     el.companiesList.querySelectorAll("[data-delete-company]").forEach((button) => {
       button.addEventListener("click", () => deleteCompany(button.dataset.deleteCompany));
     });
+    el.companiesList.querySelectorAll("[data-add-dept-company]").forEach((button) => {
+      button.addEventListener("click", () => {
+        resetDepartmentForm();
+        el.departmentCompany.value = button.dataset.addDeptCompany;
+        fillDepartmentManagerOptions();
+        el.departmentName.focus();
+      });
+    });
+    el.companiesList.querySelectorAll("[data-edit-dept]").forEach((button) => {
+      button.addEventListener("click", () => editDepartment(button.dataset.editDept));
+    });
+    el.companiesList.querySelectorAll("[data-delete-dept]").forEach((button) => {
+      button.addEventListener("click", () => deleteDepartment(button.dataset.deleteDept));
+    });
     renderLogs();
+  }
+
+  function hierarchyDepartmentRow(department) {
+    const people = users().filter((user) => user.departmentId === department.id);
+    return `<details class="hierarchy-department">
+      <summary>
+        <span><strong>${escapeHtml(department.name)}</strong><em>${people.length} users - ${department.shiftHours}h shift</em></span>
+        <span class="row-actions">
+          <button type="button" class="secondary mini" data-edit-dept="${department.id}">Edit</button>
+          <button type="button" class="danger mini" data-delete-dept="${department.id}">Delete</button>
+        </span>
+      </summary>
+      <div class="hierarchy-people">
+        ${people.length ? people.map((user) => `<span>${escapeHtml(user.name)} <em>${ROLES[user.role]}</em></span>`).join("") : `<p class="hint">No users assigned.</p>`}
+      </div>
+    </details>`;
   }
 
   async function createCompany(event) {
@@ -1760,26 +2269,40 @@
     if (!name) return;
     const logo = el.companyLogo.files[0] ? await readFileMeta(el.companyLogo.files[0]) : null;
     const company = {
-      id: makeId("org"),
+      id: recordId("org"),
       name,
       logo,
       ownerAdminId: activeAdminId(),
       createdBy: currentUser().id,
       createdAt: new Date().toISOString()
     };
+    try {
+      await saveCompanyToSupabase(company);
+    } catch (error) {
+      window.alert(error.message || "Could not save company to Supabase.");
+      return;
+    }
     db.companies.push(company);
     if (currentUser().role === "payroll_admin") {
       currentUser().permittedCompanyIds = Array.from(new Set([...(currentUser().permittedCompanyIds || []), company.id]));
     }
+    const newDepartments = [];
     addLog("company", `Created company ${name}`);
     clean(el.companyDepartments.value)
       .split(",")
       .map(clean)
       .filter(Boolean)
       .forEach((departmentName) => {
-        db.departments.push(defaultDepartment(departmentName, company.id));
+        const department = defaultDepartment(departmentName, company.id);
+        db.departments.push(department);
+        newDepartments.push(department);
         addLog("company", `Added department ${departmentName} to ${name}`);
       });
+    try {
+      await Promise.all(newDepartments.map((department) => saveDepartmentToSupabase(department)));
+    } catch (error) {
+      window.alert(error.message || "Company was saved, but one or more departments could not be saved to Supabase.");
+    }
     el.companyForm.reset();
     el.companyLogoPreview.innerHTML = "";
     session.activeCompanyId = company.id;
@@ -1798,12 +2321,26 @@
     el.companyLogoPreview.innerHTML = `<img src="${escapeAttr(logo.dataUrl)}" alt="Company logo preview" /><span>${escapeHtml(logo.name)}</span>`;
   }
 
-  function deleteCompany(id) {
+  async function deleteCompany(id) {
     const company = companyById(id);
-    if (!window.confirm(`Delete company ${company.name}? Departments, users, and entries for it will be removed.`)) return;
+    const childDepartments = allDepartments().filter((department) => department.companyId === id);
+    if (childDepartments.length) {
+      window.alert(`Delete the departments inside ${company.name} before deleting the company.`);
+      return;
+    }
+    const companyUsers = users().filter((user) => user.companyId === id);
+    if (companyUsers.length) {
+      window.alert(`Move or delete the employees inside ${company.name} before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
+    try {
+      await deleteCompanyFromSupabase(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete company from Supabase.");
+      return;
+    }
     db.companies = db.companies.filter((item) => item.id !== id);
-    db.departments = db.departments.filter((item) => item.companyId !== id);
-    db.users = db.users.filter((item) => item.role === "admin_account" || item.role === "payroll_admin" || item.companyId !== id);
     delete db.entries[id];
     addLog("company", `Deleted company ${company.name}`);
     session.activeCompanyId = accessibleCompanies()[0]?.id || "";
@@ -1837,10 +2374,10 @@
     el.departmentTeamLeader.innerHTML = option("", "None") + leaders.map((user) => option(user.id, user.name)).join("");
   }
 
-  function saveDepartment(event) {
+  async function saveDepartment(event) {
     event.preventDefault();
     const existing = departmentById(el.departmentId.value);
-    const id = existing?.id || makeId("dep");
+    const id = existing?.id || recordId("dep");
     const companyManager = users().find((user) => user.companyId === el.departmentCompany.value && user.role === "company_manager");
       const department = {
       id,
@@ -1862,6 +2399,12 @@
       db.departments.push(department);
       addLog("department", `Created department ${department.name} for ${companyById(department.companyId)?.name || "company"}`);
     }
+    try {
+      await saveDepartmentToSupabase(department);
+    } catch (error) {
+      window.alert(error.message || "Could not save department to Supabase.");
+      return;
+    }
     saveDb();
     resetDepartmentForm();
     renderAll();
@@ -1882,11 +2425,21 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function deleteDepartment(id) {
+  async function deleteDepartment(id) {
     const department = departmentById(id);
-    if (!window.confirm(`Delete department ${department.name}? Employees will keep no department until reassigned.`)) return;
+    const assigned = users().filter((user) => user.departmentId === id);
+    if (assigned.length) {
+      window.alert(`Move or delete the employees in ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
+    try {
+      await deleteDepartmentFromSupabase(id);
+    } catch (error) {
+      window.alert(error.message || "Could not delete department from Supabase.");
+      return;
+    }
     db.departments = db.departments.filter((item) => item.id !== id);
-    db.users = db.users.map((user) => user.departmentId === id ? { ...user, departmentId: "", reportsToId: "", teamLeaderId: "" } : user);
     addLog("department", `Deleted department ${department.name}`);
     saveDb();
     renderAll();
@@ -1946,6 +2499,529 @@
       ]);
     });
     download(`tableshifts-${session.month}.csv`, rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  async function openIndividualTable(id = "") {
+    const tableId = id || makeId("table");
+    individualTable = await loadIndividualTable(tableId);
+    el.loginView.hidden = true;
+    el.appView.hidden = true;
+    el.individualView.hidden = false;
+    history.replaceState(null, "", `${location.pathname}?table=${encodeURIComponent(individualTable.id)}`);
+    fillMonthSelect(el.individualMonthPicker, individualTable.month);
+    el.individualHolidayYear.value = individualTable.month.slice(0, 4);
+    renderIndividualTable();
+    saveIndividualTable();
+  }
+
+  async function loadIndividualTable(id) {
+    if (supabaseState.configured && supabase) {
+      const { data, error } = await supabase.rpc("get_individual_table", { token_value: id });
+      if (!error && data) {
+        return migrateIndividualTable({ ...data, id });
+      }
+    }
+    try {
+      const stored = JSON.parse(localStorage.getItem(`${INDIVIDUAL_STORAGE_PREFIX}${id}`));
+      if (stored) return migrateIndividualTable(stored);
+    } catch (error) {
+      // Local fallback starts with a clean table.
+    }
+    return migrateIndividualTable({ id, month: getCurrentMonth(), rows: [defaultIndividualRow()], entries: {} });
+  }
+
+  function migrateIndividualTable(table) {
+    return {
+      id: table.id || makeId("table"),
+      month: table.month || getCurrentMonth(),
+      rows: Array.isArray(table.rows) && table.rows.length ? table.rows.map((row) => ({
+        id: row.id || makeId("row"),
+        name: row.name || "",
+        company: row.company || "",
+        department: row.department || "",
+        identificationNumber: row.identificationNumber || "",
+        position: row.position || ""
+      })) : [defaultIndividualRow()],
+      entries: table.entries || {},
+      holidays: Array.isArray(table.holidays) ? table.holidays : []
+    };
+  }
+
+  function defaultIndividualRow() {
+    return {
+      id: makeId("row"),
+      name: "",
+      company: "",
+      department: "",
+      identificationNumber: "",
+      position: ""
+    };
+  }
+
+  async function saveIndividualTable() {
+    if (!individualTable) return;
+    localStorage.setItem(`${INDIVIDUAL_STORAGE_PREFIX}${individualTable.id}`, JSON.stringify(individualTable));
+    if (supabaseState.configured && supabase) {
+      await supabase.rpc("save_individual_table", {
+        token_value: individualTable.id,
+        data_value: individualTable
+      });
+    }
+  }
+
+  function ensureIndividualTable() {
+    if (!individualTable) individualTable = migrateIndividualTable({ id: makeId("table") });
+  }
+
+  function renderIndividualTable() {
+    ensureIndividualTable();
+    const days = daysInMonth(individualTable.month);
+    fillMonthSelect(el.individualMonthPicker, individualTable.month);
+    if (!el.individualHolidayYear.value) el.individualHolidayYear.value = individualTable.month.slice(0, 4);
+    el.individualLinkLabel.textContent = individualShareLink();
+    el.individualGrid.style.setProperty("--days", days.length);
+    el.individualGrid.classList.toggle("meta-expanded", individualMetaExpanded);
+    el.individualGrid.classList.toggle("totals-expanded", individualTotalsExpanded);
+    const individualShell = el.individualGrid.closest(".individual-sheet-shell");
+    individualShell?.classList.toggle("individual-expanded", individualMetaExpanded || individualTotalsExpanded);
+    individualShell?.style.setProperty("--individual-rows", String((individualTable.rows?.length || 0) + 1));
+    el.individualGrid.replaceChildren();
+    const metaHeaders = ["Company", "Department", "ID", "Position"];
+    const detailHeaders = ["Norm", "Diff", "OT", "CO", "CM", "SE"];
+    const headers = [
+      "Employee",
+      "More",
+      ...(individualMetaExpanded ? metaHeaders : []),
+      ...days.map((day) => dayHeader(day)),
+      "Worked",
+      ...detailHeaders,
+      "More",
+      ...(individualTotalsExpanded ? ["Fill", "Clear"] : [])
+    ];
+    headers.forEach((header, index) => {
+      const cell = div("sheet-header");
+      if (index === 0) cell.classList.add("sticky-name");
+      if (metaHeaders.includes(header)) cell.classList.add("manual-meta");
+      if (detailHeaders.includes(header)) cell.classList.add("detail-total");
+      if (header === "More") {
+        const isStartMore = index === 1;
+        cell.classList.add(isStartMore ? "manual-more" : "toggle-total-cell");
+        cell.innerHTML = `<button type="button" class="mini toggle-totals" data-individual-more="${isStartMore ? "meta" : "totals"}" aria-expanded="${isStartMore ? individualMetaExpanded : individualTotalsExpanded}">${isStartMore ? (individualMetaExpanded ? "Less" : "More") : (individualTotalsExpanded ? "Less" : "More")}</button>`;
+      } else {
+        cell.innerHTML = header;
+      }
+      el.individualGrid.appendChild(cell);
+    });
+    el.individualGrid.querySelectorAll("[data-individual-more]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.individualMore === "meta") {
+          individualMetaExpanded = !individualMetaExpanded;
+        } else {
+          individualTotalsExpanded = !individualTotalsExpanded;
+        }
+        renderIndividualTable();
+      });
+    });
+    individualTable.rows.forEach((row) => renderIndividualRow(row, days));
+  }
+
+  function renderIndividualRow(row, days) {
+    const nameCell = div("name-cell sticky-name");
+    nameCell.innerHTML = `<input class="inline-cell-input strong-input" data-row-field="${row.id}:name" value="${escapeAttr(row.name)}" placeholder="Employee name" />`;
+    el.individualGrid.appendChild(nameCell);
+
+    const moreCell = div("total-cell manual-more");
+    moreCell.textContent = individualMetaExpanded ? "<" : "...";
+    el.individualGrid.appendChild(moreCell);
+
+    if (individualMetaExpanded) {
+      ["company", "department", "identificationNumber", "position"].forEach((field) => {
+        const cell = div("total-cell manual-meta");
+        cell.innerHTML = `<input class="inline-cell-input" data-row-field="${row.id}:${field}" value="${escapeAttr(row[field])}" placeholder="${escapeAttr(individualFieldLabel(field))}" />`;
+        el.individualGrid.appendChild(cell);
+      });
+    }
+
+    days.forEach((day) => {
+      const holiday = individualHolidayOn(day.iso);
+      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]) || (holiday ? { type: "holiday", hours: 0, name: holiday.name } : null);
+      const cell = div("day-cell editable manual-day");
+      cell.dataset.workday = isWeekday(day.date) && !holiday ? "true" : "false";
+      if (holiday) cell.dataset.holiday = "true";
+      if (entry) {
+        cell.dataset.entryType = entry.type;
+        cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${individualEntryParts(entry)}</span>`;
+      } else {
+        cell.innerHTML = `<span class="empty-cell"></span>`;
+      }
+      cell.tabIndex = 0;
+      cell.setAttribute("role", "button");
+      cell.addEventListener("click", () => openIndividualEditor(row.id, day.iso));
+      cell.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openIndividualEditor(row.id, day.iso);
+        }
+      });
+      el.individualGrid.appendChild(cell);
+    });
+
+    const totals = individualTotals(row, days);
+    addIndividualTotalCell(`${formatHours(totals.worked)}h`);
+    addIndividualTotalCell(`${formatHours(totals.expected)}h`, "detail-total");
+    addIndividualTotalCell(`${formatSigned(totals.difference)}h`, `detail-total ${totals.difference < 0 ? "negative" : totals.difference > 0 ? "positive" : ""}`);
+    addIndividualTotalCell(`${formatHours(totals.overtime)}h`, "detail-total");
+    addIndividualTotalCell(`${totals.co}d`, "detail-total");
+    addIndividualTotalCell(`${totals.cm}d`, "detail-total");
+    addIndividualTotalCell(`${totals.se}d`, "detail-total");
+    const endMoreCell = div("total-cell toggle-total-cell");
+    endMoreCell.textContent = individualTotalsExpanded ? "<" : "...";
+    el.individualGrid.appendChild(endMoreCell);
+    if (individualTotalsExpanded) {
+      const fillCell = div("total-cell");
+      fillCell.innerHTML = `<button type="button" class="mini" data-individual-fill="${row.id}">Fill</button>`;
+      el.individualGrid.appendChild(fillCell);
+      const clearCell = div("total-cell");
+      clearCell.innerHTML = `<button type="button" class="mini danger" data-individual-clear="${row.id}">Clear</button>`;
+      el.individualGrid.appendChild(clearCell);
+    }
+
+    el.individualGrid.querySelectorAll(`[data-row-field^="${row.id}:"]`).forEach((input) => {
+      input.addEventListener("change", handleIndividualRowChange);
+      input.addEventListener("blur", handleIndividualRowChange);
+    });
+    el.individualGrid.querySelector(`[data-individual-fill="${row.id}"]`)?.addEventListener("click", () => fillIndividualRow(row, days));
+    el.individualGrid.querySelector(`[data-individual-clear="${row.id}"]`)?.addEventListener("click", () => clearIndividualRow(row));
+  }
+
+  function addIndividualTotalCell(text, extraClass) {
+    const cell = div(`total-cell ${extraClass || ""}`);
+    cell.textContent = text;
+    el.individualGrid.appendChild(cell);
+  }
+
+  function handleIndividualRowChange(event) {
+    const [rowId, field] = event.target.dataset.rowField.split(":");
+    const row = individualTable.rows.find((item) => item.id === rowId);
+    if (!row) return;
+    row[field] = clean(event.target.value);
+    if (field === "name" && !row.name) {
+      if (window.confirm("Delete this row?")) {
+        individualTable.rows = individualTable.rows.filter((item) => item.id !== rowId);
+        delete individualTable.entries[rowId];
+        saveIndividualTable();
+        renderIndividualTable();
+        return;
+      }
+    }
+    saveIndividualTable();
+  }
+
+  function individualTotals(row, days) {
+    return days.reduce((acc, day) => {
+      const holiday = individualHolidayOn(day.iso);
+      if (isWeekday(day.date) && !holiday) acc.expected += 8;
+      const entry = normalizeIndividualEntry(individualTable.entries[row.id]?.[day.iso]);
+      if (!entry) return acc;
+      if (entry.type === "vacation") {
+        acc.co += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "medical") {
+        acc.cm += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "special_event") {
+        acc.se += 1;
+        if (isWeekday(day.date)) acc.worked += 8;
+      } else if (entry.type === "absence") {
+        return acc;
+      } else if (entry.type === "holiday") {
+        return acc;
+      } else {
+        const hours = Number(entry.hours || 0);
+        acc.worked += hours;
+        if (entry.type === "overtime") acc.overtime += Math.max(0, hours - 8);
+      }
+      acc.difference = acc.worked - acc.expected;
+      return acc;
+    }, { expected: 0, worked: 0, difference: 0, overtime: 0, co: 0, cm: 0, se: 0 });
+  }
+
+  function normalizeIndividualEntry(value) {
+    if (!value) return null;
+    if (typeof value === "object") return { type: value.type || "normal", hours: Number(value.hours || 0) };
+    const raw = clean(value).toUpperCase();
+    if (!raw) return null;
+    if (raw === "CO") return { type: "vacation", hours: 0 };
+    if (raw === "CM") return { type: "medical", hours: 0 };
+    if (raw === "SE") return { type: "special_event", hours: 0 };
+    if (raw === "AB") return { type: "absence", hours: 0 };
+    if (raw === "H") return { type: "holiday", hours: 0 };
+    if (raw === "OT") return { type: "overtime", hours: 10 };
+    if (raw.includes("+")) {
+      const [base, extra] = raw.split("+").map(Number);
+      return { type: "overtime", hours: Number(base || 0) + Number(extra || 0) };
+    }
+    if (raw === "N") return { type: "normal", hours: 8 };
+    if (/^\d+(\.\d+)?$/.test(raw)) return { type: "normal", hours: Number(raw) };
+    return null;
+  }
+
+  function individualEntryParts(entry) {
+    if (entry.type === "overtime") return `8+${formatHours(Math.max(0, Number(entry.hours || 0) - 8))}`;
+    if (entry.type === "vacation" || entry.type === "medical" || entry.type === "special_event") return "day";
+    if (entry.type === "holiday") return "";
+    return formatHours(Number(entry.hours || 0));
+  }
+
+  async function fillIndividualRow(row, days) {
+    individualTable.entries[row.id] = individualTable.entries[row.id] || {};
+    days.forEach((day) => {
+      if (isWeekday(day.date) && !individualHolidayOn(day.iso) && !individualTable.entries[row.id][day.iso]) {
+        individualTable.entries[row.id][day.iso] = { type: "normal", hours: 8 };
+      }
+    });
+    await saveIndividualTable();
+    renderIndividualTable();
+  }
+
+  async function clearIndividualRow(row) {
+    if (!window.confirm(`Clear all entries for ${row.name || "this row"} in ${individualTable.month}?`)) return;
+    delete individualTable.entries[row.id];
+    await saveIndividualTable();
+    renderIndividualTable();
+  }
+
+  function individualHolidayOn(iso) {
+    return (individualTable?.holidays || []).find((holiday) => holiday.date === iso);
+  }
+
+  async function fetchIndividualHolidays() {
+    ensureIndividualTable();
+    const year = Number(el.individualHolidayYear.value || individualTable.month.slice(0, 4));
+    const countryCode = el.individualHolidayCountry.value || "RO";
+    if (!year || year < 2000 || year > 2100) {
+      window.alert("Choose a valid holiday year.");
+      return;
+    }
+    el.individualHolidayBtn.disabled = true;
+    el.individualHolidayBtn.textContent = "Fetching...";
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${countryCode}`);
+      if (!response.ok) throw new Error("Holiday request failed");
+      const holidays = await response.json();
+      pendingIndividualHolidays = holidays.map((holiday) => ({
+        id: makeId("ihol"),
+        date: holiday.date,
+        name: holiday.localName || holiday.name || "Public holiday",
+        countryCode
+      }));
+      openIndividualHolidayModal(countryCode, year);
+    } catch (error) {
+      pendingIndividualHolidays = [];
+      openIndividualHolidayModal(countryCode, year);
+      window.alert("Could not fetch public holidays. You can add them manually in the preview.");
+    } finally {
+      el.individualHolidayBtn.disabled = false;
+      el.individualHolidayBtn.textContent = "Add Public Holidays";
+    }
+  }
+
+  function openIndividualHolidayModal(countryCode, year) {
+    el.individualHolidaySubtitle.textContent = `${countryCode} ${year} - remove rows or add another before applying`;
+    renderPendingIndividualHolidays();
+    el.individualHolidayModal.hidden = false;
+  }
+
+  function closeIndividualHolidayModal() {
+    pendingIndividualHolidays = [];
+    el.individualHolidayModal.hidden = true;
+    el.individualHolidayAddForm.reset();
+  }
+
+  function renderPendingIndividualHolidays() {
+    el.individualHolidayList.innerHTML = pendingIndividualHolidays.length
+      ? pendingIndividualHolidays
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((holiday) => `<div class="holiday-preview-row">
+          <input type="date" value="${escapeAttr(holiday.date)}" data-holiday-date="${holiday.id}" />
+          <input type="text" value="${escapeAttr(holiday.name)}" data-holiday-name="${holiday.id}" />
+          <button type="button" class="danger mini" data-remove-individual-holiday="${holiday.id}">Remove</button>
+        </div>`)
+        .join("")
+      : `<p class="hint">No holidays loaded yet. Add one manually below.</p>`;
+    el.individualHolidayList.querySelectorAll("[data-remove-individual-holiday]").forEach((button) => {
+      button.addEventListener("click", () => {
+        pendingIndividualHolidays = pendingIndividualHolidays.filter((holiday) => holiday.id !== button.dataset.removeIndividualHoliday);
+        renderPendingIndividualHolidays();
+      });
+    });
+    el.individualHolidayList.querySelectorAll("[data-holiday-date]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const holiday = pendingIndividualHolidays.find((item) => item.id === input.dataset.holidayDate);
+        if (holiday) holiday.date = input.value;
+      });
+    });
+    el.individualHolidayList.querySelectorAll("[data-holiday-name]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const holiday = pendingIndividualHolidays.find((item) => item.id === input.dataset.holidayName);
+        if (holiday) holiday.name = clean(input.value);
+      });
+    });
+  }
+
+  function addPendingIndividualHoliday(event) {
+    event.preventDefault();
+    const date = el.individualHolidayDate.value;
+    const name = clean(el.individualHolidayName.value);
+    if (!date || !name) {
+      window.alert("Add both holiday date and name.");
+      return;
+    }
+    pendingIndividualHolidays.push({
+      id: makeId("ihol"),
+      date,
+      name,
+      countryCode: el.individualHolidayCountry.value || "Manual"
+    });
+    el.individualHolidayAddForm.reset();
+    renderPendingIndividualHolidays();
+  }
+
+  async function applyIndividualHolidays() {
+    ensureIndividualTable();
+    const valid = pendingIndividualHolidays
+      .map((holiday) => ({ ...holiday, date: clean(holiday.date), name: clean(holiday.name) }))
+      .filter((holiday) => holiday.date && holiday.name);
+    const byDate = new Map((individualTable.holidays || []).map((holiday) => [holiday.date, holiday]));
+    valid.forEach((holiday) => byDate.set(holiday.date, {
+      date: holiday.date,
+      name: holiday.name,
+      countryCode: holiday.countryCode || el.individualHolidayCountry.value || ""
+    }));
+    individualTable.holidays = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+    individualTable.rows.forEach((row) => stampIndividualHolidaysForRow(row));
+    await saveIndividualTable();
+    closeIndividualHolidayModal();
+    renderIndividualTable();
+  }
+
+  function stampIndividualHolidaysForRow(row) {
+    individualTable.entries[row.id] = individualTable.entries[row.id] || {};
+    (individualTable.holidays || []).forEach((holiday) => {
+      individualTable.entries[row.id][holiday.date] = { type: "holiday", hours: 0, name: holiday.name };
+    });
+  }
+
+  function exportIndividualCsv() {
+    ensureIndividualTable();
+    const days = daysInMonth(individualTable.month);
+    const rows = [["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Difference", "OT", "CO", "CM", "SE"]];
+    individualTable.rows.forEach((row) => {
+      const totals = individualTotals(row, days);
+      rows.push([
+        row.name,
+        row.company,
+        row.department,
+        row.identificationNumber,
+        row.position,
+        ...days.map((day) => individualExportCell(individualTable.entries[row.id]?.[day.iso])),
+        formatHours(totals.worked),
+        formatHours(totals.expected),
+        formatSigned(totals.difference),
+        formatHours(totals.overtime),
+        totals.co,
+        totals.cm,
+        totals.se
+      ]);
+    });
+    download(`individual-tableshifts-${individualTable.month}.csv`, rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  function individualExportCell(value) {
+    const entry = normalizeIndividualEntry(value);
+    if (!entry) return "";
+    if (entry.type === "normal") return formatHours(entry.hours);
+    if (entry.type === "overtime") return formatHours(entry.hours);
+    return ENTRY_LABELS[entry.type] || "";
+  }
+
+  function downloadIndividualTemplate() {
+    const rows = [
+      ["Employee", "Company", "Department", "Identification Number", "Position"],
+      ["Jane Example", "Example Company", "Operations", "EMP-001", "Operator"]
+    ];
+    download("individual-tableshifts-import-template.csv", rows.map((row) => row.map(csv).join(",")).join("\n"), "text/csv");
+  }
+
+  async function importIndividualCsv() {
+    const file = el.individualImportFile.files[0];
+    if (!file) return;
+    const text = await file.text();
+    const rows = parseCsv(text);
+    const [, ...dataRows] = rows;
+    dataRows.forEach((cells) => {
+      if (!clean(cells[0])) return;
+    individualTable.rows.push({
+        id: makeId("row"),
+        name: clean(cells[0]),
+        company: clean(cells[1]),
+        department: clean(cells[2]),
+        identificationNumber: clean(cells[3]),
+        position: clean(cells[4])
+      });
+    });
+    individualTable.rows.forEach((row) => stampIndividualHolidaysForRow(row));
+    el.individualImportFile.value = "";
+    saveIndividualTable();
+    renderIndividualTable();
+  }
+
+  function parseCsv(text) {
+    const rows = [];
+    let row = [];
+    let cell = "";
+    let quoted = false;
+    for (let index = 0; index < text.length; index += 1) {
+      const char = text[index];
+      const next = text[index + 1];
+      if (char === '"' && quoted && next === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        quoted = !quoted;
+      } else if (char === "," && !quoted) {
+        row.push(cell);
+        cell = "";
+      } else if ((char === "\n" || char === "\r") && !quoted) {
+        if (char === "\r" && next === "\n") index += 1;
+        row.push(cell);
+        rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += char;
+      }
+    }
+    row.push(cell);
+    if (row.some((value) => value !== "")) rows.push(row);
+    return rows;
+  }
+
+  function individualFieldLabel(field) {
+    return {
+      company: "Company",
+      department: "Department",
+      identificationNumber: "ID",
+      position: "Position"
+    }[field] || field;
+  }
+
+  function individualShareLink() {
+    return `${location.origin}${location.pathname}?table=${encodeURIComponent(individualTable?.id || "")}`;
+  }
+
+  function individualIdFromUrl() {
+    return new URLSearchParams(location.search).get("table") || "";
   }
 
   function getEntry(employeeId, iso) {
@@ -2045,10 +3121,10 @@
       { id: "charts", label: "Charts" }
     ];
     if (canManageSetup()) {
-      tabs.push({ id: "companies", label: "Company Setup" });
-      tabs.push({ id: "departments", label: "Department Setup" });
+      tabs.push({ id: "companies", label: "Companies", group: "management" });
+      tabs.push({ id: "admins", label: "Admins", group: "management" });
+      tabs.push({ id: "users", label: "Employees", group: "management" });
       tabs.push({ id: "holidays", label: "National Holidays" });
-      tabs.push({ id: "users", label: "User Management" });
     }
     return tabs;
   }
@@ -2061,7 +3137,7 @@
     const now = new Date().toISOString();
     const companyManager = users().find((user) => user.companyId === companyId && user.role === "company_manager");
     return {
-      id: makeId("dep"),
+      id: recordId("dep"),
       name,
       companyId,
       adminOwnerId: companyById(companyId)?.ownerAdminId || activeAdminId(),
@@ -2108,6 +3184,24 @@
 
   function dayHeader(day) {
     return `<strong>${day.day}</strong><span>${day.weekday}</span>`;
+  }
+
+  function fillMonthSelect(select, selectedMonth) {
+    if (!select) return;
+    const selected = selectedMonth || getCurrentMonth();
+    const [selectedYear, selectedNumber] = selected.split("-").map(Number);
+    const center = selectedYear && selectedNumber ? new Date(selectedYear, selectedNumber - 1, 1) : new Date();
+    const months = [];
+    for (let offset = -18; offset <= 18; offset += 1) {
+      const date = new Date(center.getFullYear(), center.getMonth() + offset, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+      months.push({ value, label: date.toLocaleDateString(undefined, { month: "long", year: "numeric" }) });
+    }
+    if (!months.some((month) => month.value === selected)) {
+      months.push({ value: selected, label: selected });
+      months.sort((a, b) => a.value.localeCompare(b.value));
+    }
+    select.innerHTML = months.map((month) => option(month.value, month.label, month.value === selected)).join("");
   }
 
   function users() {
@@ -2192,6 +3286,10 @@
 
   function makeId(prefix) {
     return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function recordId(prefix) {
+    return useSupabaseAuth() && window.crypto?.randomUUID ? window.crypto.randomUUID() : makeId(prefix);
   }
 
   function clean(value) {

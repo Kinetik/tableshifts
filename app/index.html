@@ -27,6 +27,10 @@
         <button id="loginBtn" type="button">Enter</button>
         <button id="showCreateAdminBtn" class="secondary full-btn" type="button">Create Admin Account</button>
 
+        <div class="individual-login">
+          <button id="individualTableBtn" class="secondary full-btn" type="button">Individual TableShifts</button>
+        </div>
+
         <form id="createAdminForm" class="login-create" hidden>
           <label class="field">
             Name
@@ -50,31 +54,99 @@
       </div>
     </section>
 
-    <section id="appView" class="app-view" hidden>
-      <header class="topbar">
+    <section id="individualView" class="individual-view" hidden>
+      <header class="individual-topbar">
         <div>
           <p class="eyebrow">TABLESHIFTS</p>
-          <h1 id="pageTitle">Timesheet</h1>
-          <p id="sessionLabel" class="session-label"></p>
+          <h1>Individual TableShifts</h1>
+          <p id="individualLinkLabel" class="session-label"></p>
         </div>
-        <div class="top-user">
-          <div id="topIdentity" class="top-identity"></div>
-          <div class="top-actions">
-            <button id="pendingApprovalsBtn" type="button" class="notice-btn" hidden></button>
-            <button id="saveBtn" type="button">Save</button>
-            <button id="logoutBtn" type="button">Logout</button>
-          </div>
+        <div class="top-actions">
+          <button id="individualCopyLinkBtn" type="button" class="secondary">Copy Link</button>
+          <button id="individualBackBtn" type="button">Back to Login</button>
         </div>
       </header>
 
-      <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
+      <main class="individual-main">
+        <div class="individual-toolbar">
+          <section class="toolbar-cluster month-cluster">
+            <label class="field">
+              Month
+              <select id="individualMonthPicker"></select>
+            </label>
+          </section>
+          <section class="toolbar-cluster holiday-cluster">
+            <span>Public Holidays</span>
+            <label class="field">
+              Country
+              <select id="individualHolidayCountry"></select>
+            </label>
+            <label class="field compact-year">
+              Year
+              <input id="individualHolidayYear" type="number" min="2000" max="2100" />
+            </label>
+            <button id="individualHolidayBtn" type="button" class="secondary">Add Public Holidays</button>
+          </section>
+          <section class="toolbar-cluster io-cluster">
+            <span>Import Employees</span>
+            <button id="individualTemplateBtn" type="button" class="secondary">Import Template</button>
+            <label class="field file-action">
+              Import CSV
+              <input id="individualImportFile" type="file" accept=".csv,text/csv" />
+            </label>
+          </section>
+          <button id="individualExportBtn" class="individual-export-btn" type="button">Export CSV</button>
+        </div>
 
-      <main id="mainContent" tabindex="-1">
+        <section class="sheet-shell individual-sheet-shell">
+          <div id="individualGrid" class="sheet-grid individual-grid"></div>
+        </section>
+        <button id="individualNewRowBtn" type="button" class="new-row-btn">New row</button>
+        <p class="hint">Anyone with this link can edit this individual table. It is separate from the company app.</p>
+      </main>
+    </section>
+
+    <section id="appView" class="app-view" hidden>
+      <aside class="app-sidebar">
+        <div class="sidebar-brand">
+          <span class="brand-mark">TS</span>
+          <div>
+            <strong>TableShifts</strong>
+            <span>Workforce time</span>
+          </div>
+        </div>
+
+        <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
+
+        <div class="sidebar-footer">
+          <span>Preview workflow</span>
+          <strong>Test before production</strong>
+        </div>
+      </aside>
+
+      <div class="app-workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">TABLESHIFTS</p>
+            <h1 id="pageTitle">Timesheet</h1>
+            <p id="sessionLabel" class="session-label"></p>
+          </div>
+          <div class="top-user">
+            <div id="topIdentity" class="top-identity"></div>
+            <div class="top-actions">
+              <button id="pendingApprovalsBtn" type="button" class="notice-btn" hidden></button>
+              <button id="saveBtn" type="button">Save</button>
+              <button id="logoutBtn" type="button">Logout</button>
+            </div>
+          </div>
+        </header>
+
+        <main id="mainContent" tabindex="-1">
         <section id="timesheetTab" class="tab-panel">
           <div class="toolbar">
             <label class="field">
               Month
-              <input id="monthPicker" type="month" />
+              <select id="monthPicker"></select>
             </label>
             <label id="companyScopeWrap" class="field">
               Company
@@ -319,6 +391,65 @@
           </section>
         </section>
 
+        <section id="adminsTab" class="tab-panel" hidden>
+          <div class="section-head">
+            <div>
+              <h2>Admins</h2>
+              <p>Create Payroll Admins and Company Managers separately from employee records.</p>
+            </div>
+          </div>
+
+          <form id="adminUserForm" class="setup-form">
+            <input type="hidden" id="adminUserId" />
+            <label class="field">
+              Name
+              <input id="adminUserName" type="text" required />
+            </label>
+            <label class="field">
+              Email
+              <input id="adminUserEmail" type="email" autocomplete="off" spellcheck="false" required />
+            </label>
+            <label class="field">
+              Identification Number
+              <input id="adminUserIdentification" type="text" required />
+            </label>
+            <label class="field">
+              Position
+              <input id="adminUserPosition" type="text" required />
+            </label>
+            <label class="field">
+              Password
+              <input id="adminUserPassword" type="text" required />
+            </label>
+            <label class="field">
+              Start date
+              <input id="adminUserStartDate" type="date" required />
+            </label>
+            <label class="field">
+              End date
+              <input id="adminUserEndDate" type="date" />
+            </label>
+            <label class="field">
+              Role
+              <select id="adminUserRole"></select>
+            </label>
+            <label class="field">
+              Company
+              <select id="adminUserCompany"></select>
+            </label>
+            <label class="field">
+              Payroll company access
+              <div id="adminUserCompanyAccess" class="check-list"></div>
+            </label>
+            <div class="form-actions">
+              <button type="submit">Save Admin</button>
+              <button id="resetAdminUserFormBtn" type="button" class="secondary">Clear</button>
+            </div>
+          </form>
+
+          <div id="adminsList" class="directory"></div>
+        </section>
+
         <section id="companiesTab" class="tab-panel" hidden>
           <div class="section-head">
             <div>
@@ -405,7 +536,8 @@
             <div id="departmentLog" class="log-list"></div>
           </div>
         </section>
-      </main>
+        </main>
+      </div>
     </section>
 
     <div id="cellEditor" class="modal" hidden>
@@ -435,6 +567,7 @@
             <option value="medical">Medical CM</option>
             <option value="special_event">Special Events</option>
             <option value="absence">Absence AB</option>
+            <option value="holiday">Holiday H</option>
           </select>
         </label>
         <label class="field">
@@ -467,6 +600,36 @@
         <div class="form-actions">
           <button id="confirmLeavePreviewBtn" type="button">Confirm Request</button>
           <button id="cancelLeavePreviewBottomBtn" type="button" class="secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="individualHolidayModal" class="modal" hidden>
+      <div class="modal-card document-modal">
+        <div class="modal-head">
+          <div>
+            <strong>Public holidays</strong>
+            <span id="individualHolidaySubtitle">Preview before applying</span>
+          </div>
+          <button id="closeIndividualHolidayBtn" type="button" class="icon-btn">Close</button>
+        </div>
+        <div id="individualHolidayList" class="holiday-preview-list"></div>
+        <form id="individualHolidayAddForm" class="setup-form compact-form">
+          <label class="field">
+            Date
+            <input id="individualHolidayDate" type="date" />
+          </label>
+          <label class="field">
+            Name
+            <input id="individualHolidayName" type="text" placeholder="Holiday name" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="secondary">Add another</button>
+          </div>
+        </form>
+        <div class="form-actions">
+          <button id="applyIndividualHolidaysBtn" type="button">Apply Holidays</button>
+          <button id="cancelIndividualHolidaysBtn" type="button" class="secondary">Cancel</button>
         </div>
       </div>
     </div>
