@@ -627,6 +627,10 @@ main:focus-visible {
   overflow-x: auto;
 }
 
+.sheet-shell:has(.individual-grid) {
+  overflow-y: hidden;
+}
+
 .sheet-grid {
   display: grid;
   grid-template-columns: minmax(150px, 0.95fr) repeat(var(--days), minmax(30px, 1fr)) minmax(58px, 0.55fr) repeat(7, 0) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
@@ -652,6 +656,11 @@ main:focus-visible {
   min-width: calc(180px + 58px + 440px + var(--days) * 34px + 650px);
 }
 
+.individual-grid {
+  grid-auto-rows: 48px;
+  align-items: stretch;
+}
+
 .sheet-grid.totals-expanded {
   grid-template-columns: minmax(170px, 1fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
   min-width: calc(180px + var(--days) * 34px + 650px);
@@ -666,6 +675,16 @@ main:focus-visible {
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
   background: #ffffff;
+}
+
+.individual-grid .sheet-header,
+.individual-grid .name-cell,
+.individual-grid .day-cell,
+.individual-grid .total-cell {
+  min-height: 48px;
+  height: 48px;
+  max-height: 48px;
+  overflow: hidden;
 }
 
 .sheet-header {
@@ -700,8 +719,19 @@ main:focus-visible {
 .toggle-totals {
   width: 100%;
   min-height: 34px;
+  height: 34px;
   padding: 3px 6px;
   font-size: 0.72rem;
+}
+
+.individual-grid .toggle-totals {
+  min-height: 30px;
+  height: 30px;
+}
+
+.individual-grid .mini {
+  min-height: 30px;
+  height: 30px;
 }
 
 .toggle-total-cell {
