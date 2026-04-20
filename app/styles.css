@@ -889,7 +889,7 @@ main:focus-visible {
 
 .individual-toolbar {
   display: grid;
-  grid-template-columns: minmax(160px, 0.7fr) minmax(420px, 1.35fr) minmax(420px, 1.35fr);
+  grid-template-columns: minmax(160px, 0.65fr) minmax(420px, 1.3fr) minmax(330px, 1fr) 250px;
   gap: 10px;
   align-items: stretch;
 }
@@ -932,6 +932,15 @@ main:focus-visible {
 .toolbar-cluster select {
   min-height: 32px;
   padding: 5px 8px;
+}
+
+.individual-export-btn {
+  align-self: stretch;
+  min-height: 66px;
+  width: 250px;
+  justify-self: end;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .file-action input {
@@ -1588,6 +1597,11 @@ main:focus-visible {
 
   .toolbar-cluster {
     grid-auto-flow: row;
+  }
+
+  .individual-export-btn {
+    width: 100%;
+    min-height: 42px;
   }
 
   .wide-field {
