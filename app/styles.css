@@ -648,22 +648,22 @@ main:focus-visible {
 }
 
 .individual-grid {
-  grid-template-columns: 230px 64px repeat(var(--days), minmax(30px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) 64px;
+  grid-template-columns: 260px 68px repeat(var(--days), minmax(30px, 1fr)) minmax(62px, 0.55fr) repeat(6, 0) 68px;
 }
 
 .individual-grid.meta-expanded {
-  grid-template-columns: 230px 64px repeat(4, 116px) repeat(var(--days), 42px) 68px repeat(6, 0) 64px;
-  min-width: calc(230px + 64px + 464px + var(--days) * 42px + 132px);
+  grid-template-columns: 260px 68px repeat(4, 116px) repeat(var(--days), 42px) 68px repeat(6, 0) 68px;
+  min-width: calc(260px + 68px + 464px + var(--days) * 42px + 136px);
 }
 
 .individual-grid.totals-expanded {
-  grid-template-columns: 230px 64px repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
-  min-width: calc(230px + 64px + var(--days) * 42px + 688px);
+  grid-template-columns: 260px 68px repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
+  min-width: calc(260px + 68px + var(--days) * 42px + 688px);
 }
 
 .individual-grid.meta-expanded.totals-expanded {
-  grid-template-columns: 230px 64px repeat(4, 116px) repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
-  min-width: calc(230px + 64px + 464px + var(--days) * 42px + 688px);
+  grid-template-columns: 260px 68px repeat(4, 116px) repeat(var(--days), 42px) repeat(8, 68px) repeat(2, 72px);
+  min-width: calc(260px + 68px + 464px + var(--days) * 42px + 688px);
 }
 
 .individual-grid {
@@ -709,14 +709,11 @@ main:focus-visible {
 }
 
 .individual-grid .manual-more {
-  position: sticky;
-  left: 230px;
-  z-index: 4;
   background: #f7fbf8;
 }
 
 .individual-grid .sheet-header.manual-more {
-  z-index: 7;
+  z-index: 4;
 }
 
 .sheet-header {
