@@ -627,8 +627,16 @@ main:focus-visible {
   overflow-x: auto;
 }
 
-.sheet-shell:has(.individual-grid) {
-  overflow-y: hidden;
+.individual-sheet-shell {
+  overflow-x: hidden;
+  overflow-y: clip;
+  scrollbar-gutter: stable;
+  contain: layout paint;
+}
+
+.individual-sheet-shell.individual-expanded {
+  overflow-x: auto;
+  overflow-y: clip;
 }
 
 .sheet-grid {
@@ -659,6 +667,7 @@ main:focus-visible {
 .individual-grid {
   grid-auto-rows: 48px;
   align-items: stretch;
+  overflow: hidden;
 }
 
 .sheet-grid.totals-expanded {
