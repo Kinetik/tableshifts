@@ -958,7 +958,7 @@
   function renderEmployeeRow(employee, days) {
     const editable = canEditEmployee(employee);
     const nameCell = div("name-cell sticky-name");
-    nameCell.innerHTML = `<strong>${escapeHtml(employee.name)}</strong><span>${deptName(employee.departmentId)} - ${escapeHtml(employee.position || "No position")}</span>`;
+    nameCell.innerHTML = `<strong>${escapeHtml(employee.name)}</strong><span>${escapeHtml(employee.position || "No position")}</span>`;
     el.timesheetGrid.appendChild(nameCell);
 
     days.forEach((day) => {
