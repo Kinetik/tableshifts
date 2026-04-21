@@ -292,6 +292,149 @@ as $$
   )
 $$;
 
+create or replace function public.can_manage_employee_timesheet(target_employee_id uuid, target_company_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles current_profile
+    join public.profiles employee_profile on employee_profile.id = target_employee_id
+    left join public.departments employee_department on employee_department.id = employee_profile.department_id
+    where current_profile.id = auth.uid()
+      and current_profile.environment_id = employee_profile.environment_id
+      and employee_profile.environment_id = public.current_environment_id()
+      and coalesce(employee_profile.company_id, target_company_id) = target_company_id
+      and (
+        (current_profile.role = 'employee' and employee_profile.id = current_profile.id)
+        or (
+          current_profile.role = 'team_leader'
+          and (
+            employee_profile.id = current_profile.id
+            or employee_profile.team_leader_user_id = current_profile.id
+            or employee_department.team_leader_user_id = current_profile.id
+            or employee_profile.department_id = current_profile.department_id
+          )
+        )
+        or (
+          current_profile.role = 'department_manager'
+          and (
+            employee_profile.department_id = current_profile.department_id
+            or employee_profile.reports_to_user_id = current_profile.id
+          )
+        )
+        or (
+          current_profile.role = 'company_manager'
+          and public.can_access_company(target_company_id)
+        )
+      )
+  )
+$$;
+
+create or replace function public.can_read_employee_timesheet(target_employee_id uuid, target_company_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles current_profile
+    where current_profile.id = auth.uid()
+      and current_profile.environment_id = public.current_environment_id()
+      and (
+        (
+          current_profile.role in ('admin_account', 'payroll_admin')
+          and public.can_access_company(target_company_id)
+        )
+        or public.can_manage_employee_timesheet(target_employee_id, target_company_id)
+      )
+  )
+$$;
+
+create or replace function public.can_read_profile(target_user_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles current_profile
+    join public.profiles target_profile on target_profile.id = target_user_id
+    where current_profile.id = auth.uid()
+      and current_profile.environment_id = target_profile.environment_id
+      and target_profile.environment_id = public.current_environment_id()
+      and (
+        target_profile.id = current_profile.id
+        or current_profile.role = 'admin_account'
+        or (
+          current_profile.role in ('payroll_admin', 'company_manager')
+          and (
+            (target_profile.company_id is not null and public.can_access_company(target_profile.company_id))
+            or exists (
+              select 1
+              from public.payroll_company_access target_access
+              where target_access.payroll_user_id = target_profile.id
+                and public.can_access_company(target_access.company_id)
+            )
+          )
+        )
+        or (
+          target_profile.role not in ('admin_account', 'payroll_admin', 'company_manager')
+          and target_profile.company_id is not null
+          and public.can_read_employee_timesheet(target_profile.id, target_profile.company_id)
+        )
+      )
+  )
+$$;
+
+create or replace function public.can_manage_leave_request(target_employee_id uuid, target_company_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select exists (
+    select 1
+    from public.profiles current_profile
+    join public.profiles employee_profile on employee_profile.id = target_employee_id
+    left join public.departments employee_department on employee_department.id = employee_profile.department_id
+    where current_profile.id = auth.uid()
+      and current_profile.environment_id = employee_profile.environment_id
+      and employee_profile.environment_id = public.current_environment_id()
+      and coalesce(employee_profile.company_id, target_company_id) = target_company_id
+      and current_profile.id <> employee_profile.id
+      and (
+        (
+          current_profile.role = 'team_leader'
+          and (
+            employee_profile.team_leader_user_id = current_profile.id
+            or employee_department.team_leader_user_id = current_profile.id
+            or employee_profile.department_id = current_profile.department_id
+          )
+        )
+        or (
+          current_profile.role = 'department_manager'
+          and (
+            employee_profile.department_id = current_profile.department_id
+            or employee_profile.reports_to_user_id = current_profile.id
+          )
+        )
+        or (
+          current_profile.role = 'company_manager'
+          and public.can_access_company(target_company_id)
+        )
+      )
+  )
+$$;
+
 create or replace function public.handle_admin_signup()
 returns trigger
 language plpgsql
@@ -366,7 +509,7 @@ for all using (owner_user_id = auth.uid()) with check (owner_user_id = auth.uid(
 
 drop policy if exists "profiles read same environment" on public.profiles;
 create policy "profiles read same environment" on public.profiles
-for select using (id = auth.uid() or environment_id = public.current_environment_id());
+for select using (id = auth.uid() or public.can_read_profile(id));
 
 drop policy if exists "profiles manage same environment" on public.profiles;
 create policy "profiles manage same environment" on public.profiles
@@ -428,34 +571,65 @@ drop policy if exists "entries read accessible company" on public.timesheet_entr
 create policy "entries read accessible company" on public.timesheet_entries
 for select using (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and public.can_read_employee_timesheet(employee_user_id, company_id)
 );
 
 drop policy if exists "entries manage accessible company" on public.timesheet_entries;
-create policy "entries manage accessible company" on public.timesheet_entries
-for all using (
+drop policy if exists "entries insert managed employee" on public.timesheet_entries;
+drop policy if exists "entries update managed employee" on public.timesheet_entries;
+drop policy if exists "entries delete managed employee" on public.timesheet_entries;
+create policy "entries insert managed employee" on public.timesheet_entries
+for insert with check (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and public.can_manage_employee_timesheet(employee_user_id, company_id)
+);
+create policy "entries update managed employee" on public.timesheet_entries
+for update using (
+  environment_id = public.current_environment_id()
+  and public.can_manage_employee_timesheet(employee_user_id, company_id)
 ) with check (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and public.can_manage_employee_timesheet(employee_user_id, company_id)
+);
+create policy "entries delete managed employee" on public.timesheet_entries
+for delete using (
+  environment_id = public.current_environment_id()
+  and public.can_manage_employee_timesheet(employee_user_id, company_id)
 );
 
 drop policy if exists "leave read accessible" on public.leave_requests;
 create policy "leave read accessible" on public.leave_requests
 for select using (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and (
+    employee_user_id = auth.uid()
+    or (public.current_role() in ('admin_account', 'payroll_admin') and public.can_access_company(company_id))
+    or public.can_manage_leave_request(employee_user_id, company_id)
+  )
 );
 
 drop policy if exists "leave manage accessible" on public.leave_requests;
-create policy "leave manage accessible" on public.leave_requests
-for all using (
+drop policy if exists "leave insert own request" on public.leave_requests;
+drop policy if exists "leave update own or approvable request" on public.leave_requests;
+drop policy if exists "leave delete own request" on public.leave_requests;
+create policy "leave insert own request" on public.leave_requests
+for insert with check (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and employee_user_id = auth.uid()
+  and public.current_role() not in ('admin_account', 'payroll_admin', 'company_manager')
+);
+create policy "leave update own or approvable request" on public.leave_requests
+for update using (
+  environment_id = public.current_environment_id()
+  and public.can_manage_leave_request(employee_user_id, company_id)
 ) with check (
   environment_id = public.current_environment_id()
-  and (employee_user_id = auth.uid() or public.can_access_company(company_id))
+  and public.can_manage_leave_request(employee_user_id, company_id)
+);
+create policy "leave delete own request" on public.leave_requests
+for delete using (
+  environment_id = public.current_environment_id()
+  and employee_user_id = auth.uid()
 );
 
 drop policy if exists "holidays read accessible" on public.national_holidays;

@@ -1707,10 +1707,18 @@ function AccountManagement({
     profile.company_id === companyId &&
     (!departmentId || profile.department_id === departmentId)
   ));
+  const accessibleCompanyIds = new Set(accessibleCompanies(workspace).map((company) => company.id));
   const accounts = workspace.profiles
-    .filter((profile) => mode === "employees"
-      ? !["admin_account", "payroll_admin", "company_manager"].includes(profile.role)
-      : ["payroll_admin", "company_manager"].includes(profile.role))
+    .filter((profile) => {
+      if (mode === "employees") {
+        return !["admin_account", "payroll_admin", "company_manager"].includes(profile.role) &&
+          (workspace.profile.role === "admin_account" || Boolean(profile.company_id && accessibleCompanyIds.has(profile.company_id)));
+      }
+      if (workspace.profile.role === "admin_account") return ["payroll_admin", "company_manager"].includes(profile.role);
+      if (profile.role !== "company_manager") return false;
+      const profileCompanies = companyIdsForProfile(profile, workspace);
+      return Array.from(profileCompanies).some((id) => accessibleCompanyIds.has(id));
+    })
     .toSorted((a, b) => a.full_name.localeCompare(b.full_name));
 
   React.useEffect(() => {
