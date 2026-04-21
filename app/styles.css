@@ -689,8 +689,8 @@ main:focus-visible {
 }
 
 .sheet-grid.totals-expanded {
-  grid-template-columns: minmax(170px, 1fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) minmax(58px, 0.5fr) repeat(2, minmax(54px, 0.5fr));
-  min-width: calc(180px + var(--days) * 34px + 650px);
+  grid-template-columns: minmax(170px, 1fr) repeat(var(--days), minmax(34px, 1fr)) repeat(8, minmax(58px, 0.55fr)) minmax(58px, 0.5fr) repeat(2, minmax(72px, 0.55fr));
+  min-width: calc(180px + var(--days) * 34px + 686px);
 }
 
 .sheet-header,
@@ -1020,6 +1020,8 @@ main:focus-visible {
 .mini {
   min-height: 28px;
   padding: 0 8px;
+  max-width: 100%;
+  white-space: nowrap;
 }
 
 .section-head {
