@@ -10,6 +10,7 @@ import {
   Download,
   Eraser,
   Eye,
+  FileText,
   LayoutDashboard,
   LogOut,
   Paintbrush,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Trash2,
+  X,
   UsersRound
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -251,9 +253,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
       acc.co += totals.vacationDays;
       acc.cm += totals.medicalDays;
       acc.se += totals.specialEventDays;
+      acc.ab += totals.absenceDays;
       return acc;
     },
-    { worked: 0, expected: 0, overtime: 0, co: 0, cm: 0, se: 0 }
+    { worked: 0, expected: 0, overtime: 0, co: 0, cm: 0, se: 0, ab: 0 }
   );
   const scopeDifference = scopeTotals.worked - scopeTotals.expected;
 
@@ -386,6 +389,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
               {activeTab === "charts" ? (
                 <Charts
+                  workspace={workspace}
+                  activeCompany={activeCompany}
+                  employees={employees}
+                  month={month}
                   people={employees.length}
                   worked={scopeTotals.worked}
                   expected={scopeTotals.expected}
@@ -393,6 +400,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                   co={scopeTotals.co}
                   cm={scopeTotals.cm}
                   se={scopeTotals.se}
+                  ab={scopeTotals.ab}
                   difference={scopeDifference}
                 />
               ) : null}
@@ -515,7 +523,7 @@ function TimesheetTable({
 }) {
   const days = daysInMonth(month);
   const compactColumns = ["Worked", "More"];
-  const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "More", "Fill", "Clear"];
+  const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left", "More", "Fill", "Clear"];
   const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
   const fixedCompactWidth = 176 + totalsColumns.length * 68;
   const expandedMinWidth = 188 + days.length * 38 + totalsColumns.length * 74;
@@ -575,6 +583,8 @@ function TimesheetTable({
                       <td className="border-l border-stone-200 px-1 text-center font-black">{totals.vacationDays}d</td>
                       <td className="border-l border-stone-200 px-1 text-center font-black">{totals.medicalDays}d</td>
                       <td className="border-l border-stone-200 px-1 text-center font-black">{totals.specialEventDays}d</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.absenceDays}d</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))}d</td>
                     </>
                   ) : null}
                   <td className="border-l border-stone-200 px-1 text-center">
@@ -623,8 +633,14 @@ function EntryCell({
   const detail = entry ? entryDetail(entry, normal) : "";
   const tooltip = entry ? entryTooltip(entry, normal) : holiday?.name || (expected ? "Expected working day" : "Non-working day");
   const editable = canEditEmployee(workspace.profile, employee, workspace);
+  const company = workspace.companies.find((item) => item.id === employee.company_id);
+  const customColor = entry?.type ? entryColor(company, entry.type) : null;
   return (
-    <td title={tooltip} className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected))}>
+    <td
+      title={tooltip}
+      className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected, Boolean(customColor)))}
+      style={customColor ? { backgroundColor: customColor } : undefined}
+    >
       <button
         type="button"
         className={cn("min-h-10 w-full px-0.5 py-1.5 text-center leading-tight", editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-500" : "cursor-default")}
@@ -660,7 +676,15 @@ function EntryEditor({
   const normal = normalHours(editor.employee, workspace);
   const [type, setType] = React.useState(existing?.type || "normal");
   const [hours, setHours] = React.useState(String(existing?.hours ?? normal));
+  const [file, setFile] = React.useState<File | null>(null);
+  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const extra = Math.max(0, Number(hours || 0) - normal);
+  const leaveLike = ["vacation", "medical", "special_event"].includes(type);
+  const linkedRequest = existing?.leave_request_id
+    ? workspace.leaveRequests.find((request) => request.id === existing.leave_request_id)
+    : null;
+  const linkedDocument = linkedRequest?.generated_document_html || "";
+  const attachmentPath = existing?.attachment_path || linkedRequest?.attachment_path || "";
 
   function quick(nextType: string) {
     setType(nextType);
@@ -674,7 +698,18 @@ function EntryEditor({
     let nextHours = Number(hours || 0);
     if (!Number.isFinite(nextHours)) nextHours = 0;
     if (type === "overtime" && nextHours < normal) nextHours = normal;
+    const entryId = existing?.id || crypto.randomUUID();
+    let uploadedPath = existing?.attachment_path || null;
+    try {
+      uploadedPath = leaveLike && file
+        ? await uploadLeaveDocument(supabase, workspace, entryId, file)
+        : uploadedPath;
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
+      return;
+    }
     const { error } = await supabase.from("timesheet_entries").upsert({
+      id: entryId,
       environment_id: workspace.profile.environment_id,
       company_id: editor.employee.company_id,
       employee_user_id: editor.employee.id,
@@ -682,9 +717,21 @@ function EntryEditor({
       work_date: editor.iso,
       type,
       hours: nextHours,
+      attachment_path: leaveLike ? uploadedPath : null,
       updated_by: workspace.profile.id,
       created_by: workspace.profile.id
     }, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onSaved();
+  }
+
+  async function removeAttachment() {
+    if (!supabase || !existing?.id || !existing.attachment_path) return;
+    await supabase.storage.from("leave-documents").remove([existing.attachment_path]);
+    const { error } = await supabase.from("timesheet_entries").update({ attachment_path: null }).eq("id", existing.id);
     if (error) {
       onMessage(error.message);
       return;
@@ -755,12 +802,25 @@ function EntryEditor({
               ? `This records ${formatNumber(normal)}h normal time and ${formatNumber(extra)}h overtime.`
               : "Holiday entries stay controlled from setup; this popup records employee day activity."}
           </p>
+          {leaveLike ? (
+            <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <p className="text-xs font-black uppercase tracking-wide text-stone-500">Leave document</p>
+              <input className="rounded-md border border-stone-200 bg-white p-2 text-sm font-semibold" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              <div className="flex flex-wrap gap-2">
+                {attachmentPath ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", attachmentPath)}>Download attached file</Button> : null}
+                {existing?.attachment_path ? <Button size="sm" variant="outline" onClick={() => void removeAttachment()}><X className="h-4 w-4" />Remove file</Button> : null}
+                {linkedDocument ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button> : null}
+                {linkedDocument ? <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button> : null}
+              </div>
+            </div>
+          ) : null}
           <div className="flex flex-wrap justify-between gap-2">
             <Button variant="outline" onClick={clear}><Eraser className="h-4 w-4" />Clear entry</Button>
             <Button onClick={save}><Paintbrush className="h-4 w-4" />Save entry</Button>
           </div>
         </CardContent>
       </Card>
+      {previewHtml ? <DocumentPreview html={previewHtml} onClose={() => setPreviewHtml(null)} /> : null}
     </div>
   );
 }
@@ -783,7 +843,8 @@ function entryTooltip(entry: EntryRow, normal: number) {
   return `${entry.type} ${formatNumber(hours)}h`;
 }
 
-function cellClass(type: string | undefined, holiday: boolean, expected: boolean) {
+function cellClass(type: string | undefined, holiday: boolean, expected: boolean, hasCustomColor = false) {
+  if (hasCustomColor) return "text-stone-950";
   if (type === "vacation") return "bg-emerald-100 text-emerald-900";
   if (type === "medical") return "bg-rose-100 text-rose-900";
   if (type === "absence") return "bg-stone-900 text-white";
@@ -792,6 +853,13 @@ function cellClass(type: string | undefined, holiday: boolean, expected: boolean
   if (holiday) return "bg-yellow-50 text-yellow-900";
   if (!expected) return "bg-sky-50";
   return "bg-white";
+}
+
+function entryColor(company: CompanyRow | undefined, type: string) {
+  const colors = company?.entry_colors;
+  if (!colors || typeof colors !== "object") return null;
+  const value = colors[type];
+  return typeof value === "string" && value.trim() ? value : null;
 }
 
 function LeaveRequests({
@@ -811,18 +879,32 @@ function LeaveRequests({
   const [startDate, setStartDate] = React.useState(currentMonth() + "-01");
   const [endDate, setEndDate] = React.useState(currentMonth() + "-01");
   const [notes, setNotes] = React.useState("");
+  const [file, setFile] = React.useState<File | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const requests = visibleLeaveRequests(workspace, activeCompany?.id || "");
   const canCreate = canCreateLeaveRequest(workspace.profile);
+  const visibleEmployeeIds = new Set(filteredEmployees(workspace, activeCompany?.id || "", "all", "all").map((employee) => employee.id));
+  const recordedEntries = workspace.entries
+    .filter((entry) => entry.company_id === activeCompany?.id && ["vacation", "medical", "special_event"].includes(entry.type) && !entry.leave_request_id && visibleEmployeeIds.has(entry.employee_user_id))
+    .toSorted((a, b) => b.work_date.localeCompare(a.work_date));
 
   async function submitRequest() {
     if (!supabase || !workspace.profile.environment_id || !activeCompany || !canCreate) return;
+    const requestId = crypto.randomUUID();
     const documentHtml = generatedLeaveDocumentHtml(
       { type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null },
       workspace.profile,
       activeCompany
     );
+    let attachmentPath: string | null = null;
+    try {
+      attachmentPath = file ? await uploadLeaveDocument(supabase, workspace, requestId, file) : null;
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
+      return;
+    }
     const { error } = await supabase.from("leave_requests").insert({
+      id: requestId,
       environment_id: workspace.profile.environment_id,
       company_id: activeCompany.id,
       employee_user_id: workspace.profile.id,
@@ -831,6 +913,7 @@ function LeaveRequests({
       end_date: endDate,
       notes: notes || null,
       status: "requested",
+      attachment_path: attachmentPath,
       generated_document_html: documentHtml
     });
     if (error) {
@@ -838,6 +921,7 @@ function LeaveRequests({
       return;
     }
     setNotes("");
+    setFile(null);
     setPreviewHtml(null);
     onReload();
   }
@@ -862,6 +946,30 @@ function LeaveRequests({
       onMessage(error.message);
       return;
     }
+    if (status === "approved" && employee && activeCompany && workspace.profile.environment_id) {
+      const rows = datesBetween(request.start_date, request.end_date)
+        .filter((day) => isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace))
+        .map((day) => ({
+          environment_id: workspace.profile.environment_id,
+          company_id: activeCompany.id,
+          employee_user_id: employee.id,
+          department_id: employee.department_id,
+          work_date: day.iso,
+          type: request.type,
+          hours: 0,
+          leave_request_id: request.id,
+          attachment_path: request.attachment_path,
+          created_by: workspace.profile.id,
+          updated_by: workspace.profile.id
+        }));
+      if (rows.length) {
+        const { error: entryError } = await supabase.from("timesheet_entries").upsert(rows, { onConflict: "employee_user_id,work_date" });
+        if (entryError) {
+          onMessage(entryError.message);
+          return;
+        }
+      }
+    }
     onReload();
   }
 
@@ -873,7 +981,7 @@ function LeaveRequests({
             <CardTitle>New Leave Request</CardTitle>
             <CardDescription>Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 lg:grid-cols-[180px_1fr_1fr_1.5fr_auto_auto]">
+          <CardContent className="grid gap-3 lg:grid-cols-[170px_1fr_1fr_1.3fr_1.2fr_auto_auto]">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
               <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
@@ -893,6 +1001,10 @@ function LeaveRequests({
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Notes
               <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Document
+              <input className="h-10 rounded-md border border-stone-200 bg-white px-2 py-1 text-sm font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
             </label>
             <div className="flex items-end">
               <Button variant="outline" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
@@ -924,6 +1036,7 @@ function LeaveRequests({
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
+                  {request.attachment_path ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", request.attachment_path || "")}><Download className="h-4 w-4" />File</Button> : null}
                   {documentHtml ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(documentHtml)}>Preview document</Button> : null}
                   {documentHtml ? <Button size="sm" variant="outline" onClick={() => downloadHtml(documentHtml, `${employee?.full_name || "leave"}-${request.start_date}.html`)}>Download</Button> : null}
                 </div>
@@ -935,7 +1048,23 @@ function LeaveRequests({
                 ) : null}
               </div>
             );
-          }) : <p className="text-sm font-semibold text-stone-500">No leave requests found.</p>}
+          }) : null}
+          {recordedEntries.map((entry) => {
+            const employee = workspace.profiles.find((profile) => profile.id === entry.employee_user_id);
+            return (
+              <div key={entry.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <strong>{employee?.full_name || "Employee"}</strong>
+                  <p className="text-sm text-stone-500">{entry.work_date} - {ENTRY_LABELS[entry.type] || entry.type} recorded in Timesheet</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <Badge variant="secondary">Recorded</Badge>
+                  {entry.attachment_path ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", entry.attachment_path || "")}><Download className="h-4 w-4" />File</Button> : null}
+                </div>
+              </div>
+            );
+          })}
+          {!requests.length && !recordedEntries.length ? <p className="text-sm font-semibold text-stone-500">No leave requests found.</p> : null}
         </CardContent>
       </Card>
 
@@ -944,43 +1073,115 @@ function LeaveRequests({
   );
 }
 
-function Charts({ people, worked, expected, overtime, co, cm, se, difference }: { people: number; worked: number; expected: number; overtime: number; co: number; cm: number; se: number; difference: number }) {
+function Charts({
+  workspace,
+  activeCompany,
+  employees,
+  month,
+  people,
+  worked,
+  expected,
+  overtime,
+  co,
+  cm,
+  se,
+  ab,
+  difference
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  employees: ProfileRow[];
+  month: string;
+  people: number;
+  worked: number;
+  expected: number;
+  overtime: number;
+  co: number;
+  cm: number;
+  se: number;
+  ab: number;
+  difference: number;
+}) {
   const width = expected ? Math.min(100, Math.round((worked / expected) * 100)) : 0;
+  const departmentRows = workspace.departments
+    .filter((department) => department.company_id === activeCompany?.id)
+    .map((department) => {
+      const departmentEmployees = employees.filter((employee) => employee.department_id === department.id);
+      const totals = departmentEmployees.reduce((acc, employee) => {
+        const row = totalsFor(employee, month, workspace);
+        acc.worked += row.worked;
+        acc.expected += row.expected;
+        acc.overtime += row.overtime;
+        acc.leave += row.vacationDays + row.medicalDays + row.specialEventDays;
+        acc.absence += row.absenceDays;
+        return acc;
+      }, { worked: 0, expected: 0, overtime: 0, leave: 0, absence: 0 });
+      return { department, employees: departmentEmployees.length, ...totals };
+    })
+    .filter((row) => row.employees > 0);
+  const maxDepartmentHours = Math.max(1, ...departmentRows.map((row) => Math.max(row.worked, row.expected)));
   return (
     <div className="grid gap-4">
       <div className="grid gap-3 md:grid-cols-5">
         <SummaryCard label="People" value={String(people)} hint="visible scope" />
         <SummaryCard label="Worked" value={`${formatNumber(worked)}h`} hint="month total" />
         <SummaryCard label="Overtime" value={`${formatNumber(overtime)}h`} hint="recorded" />
-        <SummaryCard label="Leave" value={`${co} CO / ${cm} CM`} hint={`${se} special events`} />
+        <SummaryCard label="Leave" value={`${co} CO / ${cm} CM`} hint={`${se} SE / ${ab} AB`} />
         <SummaryCard label="Diff" value={`${difference > 0 ? "+" : ""}${formatNumber(difference)}h`} hint="worked vs norm" accent={difference < 0 ? "bad" : "good"} />
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-      <Card>
-        <CardHeader>
-          <CardTitle>Scope fulfilment</CardTitle>
-          <CardDescription>Worked hours against monthly norm.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${width}%` }} /></div>
-          <p className="mt-3 text-sm font-semibold">{formatNumber(worked)}h worked from {formatNumber(expected)}h expected</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave mix</CardTitle>
-          <CardDescription>CO, CM and special events in the selected month.</CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          {[["CO", co, "bg-emerald-500"], ["CM", cm, "bg-rose-400"], ["SE", se, "bg-stone-400"]].map(([label, value, color]) => (
-            <div key={label as string} className="grid grid-cols-[40px_1fr_44px] items-center gap-3 text-sm font-semibold">
-              <span>{label}</span>
-              <div className="h-2 rounded-full bg-stone-100"><div className={cn("h-2 rounded-full", color as string)} style={{ width: `${Math.min(100, Number(value) * 12)}%` }} /></div>
-              <span>{value}d</span>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+        <div className="grid gap-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Scope fulfilment</CardTitle>
+              <CardDescription>Worked hours against monthly norm.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${width}%` }} /></div>
+              <p className="mt-3 text-sm font-semibold">{formatNumber(worked)}h worked from {formatNumber(expected)}h expected</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Leave mix</CardTitle>
+              <CardDescription>CO, CM and special events in the selected month.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {[["CO", co, "bg-emerald-500"], ["CM", cm, "bg-rose-400"], ["SE", se, "bg-stone-400"], ["AB", ab, "bg-stone-900"]].map(([label, value, color]) => (
+                <div key={label as string} className="grid grid-cols-[40px_1fr_44px] items-center gap-3 text-sm font-semibold">
+                  <span>{label}</span>
+                  <div className="h-2 rounded-full bg-stone-100"><div className={cn("h-2 rounded-full", color as string)} style={{ width: `${Math.min(100, Number(value) * 12)}%` }} /></div>
+                  <span>{value}d</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Departments</CardTitle>
+            <CardDescription>Worked versus norm by department.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {departmentRows.length ? departmentRows.map((row) => (
+              <div key={row.department.id} className="grid gap-1">
+                <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+                  <span>{row.department.name}</span>
+                  <span className={cn(row.worked - row.expected < 0 ? "text-rose-700" : "text-emerald-700")}>{row.worked - row.expected > 0 ? "+" : ""}{formatNumber(row.worked - row.expected)}h</span>
+                </div>
+                <div className="grid gap-1">
+                  <div className="h-2 rounded-full bg-stone-100">
+                    <div className="h-2 rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (row.worked / maxDepartmentHours) * 100)}%` }} />
+                  </div>
+                  <div className="h-2 rounded-full bg-stone-100">
+                    <div className="h-2 rounded-full bg-stone-400" style={{ width: `${Math.min(100, (row.expected / maxDepartmentHours) * 100)}%` }} />
+                  </div>
+                </div>
+                <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.worked)}h worked / {formatNumber(row.expected)}h norm - {formatNumber(row.overtime)}h OT - {row.leave} leave days - {row.absence} absences</p>
+              </div>
+            )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
@@ -1524,6 +1725,38 @@ function DocumentPreview({ html, onClose }: { html: string; onClose: () => void 
   );
 }
 
+async function uploadLeaveDocument(supabase: SupabaseClient, workspace: Workspace, entityId: string, file: File) {
+  if (!workspace.profile.environment_id) return null;
+  const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+  const path = `${workspace.profile.environment_id}/${entityId}/${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from("leave-documents").upload(path, file, { upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+async function downloadStorageFile(supabase: SupabaseClient | null, bucket: string, path: string) {
+  if (!supabase || !path) return;
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
+  if (error || !data?.signedUrl) return;
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+function datesBetween(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  const days: ReturnType<typeof daysInMonth> = [];
+  for (const date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    days.push({
+      day: date.getDate(),
+      iso,
+      weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
+      weekdayIndex: date.getDay()
+    });
+  }
+  return days;
+}
+
 function downloadHtml(html: string, filename: string) {
   const blob = new Blob([html], { type: "text/html;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -1537,7 +1770,7 @@ function downloadHtml(html: string, filename: string) {
 function exportCsv(companyName: string, month: string, employees: ProfileRow[], workspace: Workspace) {
   const days = daysInMonth(month);
   const rows = [
-    ["Employee", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE"]
+    ["Employee", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left"]
   ];
   employees.forEach((employee) => {
     const totals = totalsFor(employee, month, workspace);
@@ -1554,7 +1787,9 @@ function exportCsv(companyName: string, month: string, employees: ProfileRow[], 
       String(totals.overtime),
       String(totals.vacationDays),
       String(totals.medicalDays),
-      String(totals.specialEventDays)
+      String(totals.specialEventDays),
+      String(totals.absenceDays),
+      String(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))
     ]);
   });
   const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");

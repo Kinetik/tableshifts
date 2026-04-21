@@ -348,6 +348,7 @@ export function totalsFor(employee: ProfileRow, month: string, workspace: Worksp
   let vacationDays = 0;
   let medicalDays = 0;
   let specialEventDays = 0;
+  let absenceDays = 0;
   days.forEach((day) => {
     const expectedDay = isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace);
     if (expectedDay) expected += normal;
@@ -368,11 +369,15 @@ export function totalsFor(employee: ProfileRow, month: string, workspace: Worksp
       worked += expectedDay ? normal : 0;
       return;
     }
+    if (entry.type === "absence") {
+      absenceDays += 1;
+      return;
+    }
     const hours = Number(entry.hours || 0);
     worked += hours;
     if (entry.type === "overtime") overtime += Math.max(0, hours - normal);
   });
-  return { expected, worked, overtime, vacationDays, medicalDays, specialEventDays, difference: worked - expected };
+  return { expected, worked, overtime, vacationDays, medicalDays, specialEventDays, absenceDays, difference: worked - expected };
 }
 
 export function formatNumber(value: number) {
