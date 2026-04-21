@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Download,
   Eraser,
+  Eye,
   LayoutDashboard,
   LogOut,
   Paintbrush,
@@ -20,7 +21,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   ENTRY_LABELS,
@@ -34,6 +34,8 @@ import {
   type ProfileRow,
   type Workspace,
   accessibleCompanies,
+  canApproveLeave,
+  canCreateLeaveRequest,
   canEditEmployee,
   currentMonth,
   daysInMonth,
@@ -41,13 +43,14 @@ import {
   entryFor,
   formatNumber,
   filteredEmployees,
+  generatedLeaveDocumentHtml,
   holidayForEmployee,
   isExpectedWorkDay,
   monthOptions,
   monthRange,
   normalHours,
   totalsFor,
-  visibleEmployees
+  visibleLeaveRequests
 } from "@/lib/tableshifts";
 
 type Props = {
@@ -89,6 +92,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
   const [editor, setEditor] = React.useState<{ employee: ProfileRow; iso: string } | null>(null);
+  const [totalsExpanded, setTotalsExpanded] = React.useState(false);
 
   const loadWorkspace = React.useCallback(async (user: User) => {
     if (!supabase) return;
@@ -235,7 +239,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     (departmentFilter === "all" || profile.department_id === departmentFilter || companyDepartments.find((department) => department.id === departmentFilter)?.team_leader_user_id === profile.id)
   ));
   const employees = activeCompany ? filteredEmployees(workspace, activeCompany.id, departmentFilter, teamFilter) : [];
-  const monthDays = daysInMonth(month);
   const scopeTotals = employees.reduce(
     (acc, employee) => {
       const totals = totalsFor(employee, month, workspace);
@@ -309,14 +312,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </header>
 
           <div className="p-5">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <TabsList>
-                  <TabsTrigger value="timesheet">Timesheet</TabsTrigger>
-                  <TabsTrigger value="leave">Leave</TabsTrigger>
-                  <TabsTrigger value="charts">Charts</TabsTrigger>
-                  {setupAllowed ? <TabsTrigger value="companies">Management</TabsTrigger> : null}
-                </TabsList>
+              <div className="mb-5 flex flex-wrap items-center justify-end gap-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <select className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold" value={month} onChange={(event) => setMonth(event.target.value)}>
                     {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -329,7 +325,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
-              <TabsContent value="timesheet">
+              {activeTab === "timesheet" ? (
+                <>
                 <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 lg:grid-cols-[1fr_1fr_auto]">
                   <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                     Department
@@ -361,35 +358,43 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                     </Button>
                   </div>
                 </div>
-                <div className="mb-4 grid gap-3 md:grid-cols-5">
-                  <SummaryCard label="People" value={String(employees.length)} hint="visible scope" />
-                  <SummaryCard label="Worked" value={`${formatNumber(scopeTotals.worked)}h`} hint="month total" />
-                  <SummaryCard label="Overtime" value={`${formatNumber(scopeTotals.overtime)}h`} hint="recorded" />
-                  <SummaryCard label="Leave" value={`${scopeTotals.co} CO / ${scopeTotals.cm} CM`} hint={`${scopeTotals.se} special events`} />
-                  <SummaryCard label="Diff" value={`${scopeDifference > 0 ? "+" : ""}${formatNumber(scopeDifference)}h`} hint="worked vs norm" accent={scopeDifference < 0 ? "bad" : "good"} />
-                </div>
                 <TimesheetTable
                   month={month}
                   workspace={workspace}
                   employees={employees}
+                  totalsExpanded={totalsExpanded}
+                  onToggleTotals={() => setTotalsExpanded((value) => !value)}
                   onEdit={(employee, iso) => setEditor({ employee, iso })}
                   onFill={(employee) => void fillNormalTime(employee)}
                   onClear={(employee) => void clearEmployeeMonth(employee)}
                 />
-              </TabsContent>
+                </>
+              ) : null}
 
-              <TabsContent value="leave">
-                <LeaveRequests workspace={workspace} />
-              </TabsContent>
+              {activeTab === "leave" ? (
+                <LeaveRequests
+                  workspace={workspace}
+                  activeCompany={activeCompany}
+                  supabase={supabase}
+                  onReload={() => authUser && loadWorkspace(authUser)}
+                  onMessage={setMessage}
+                />
+              ) : null}
 
-              <TabsContent value="charts">
-                <Charts worked={scopeTotals.worked} expected={scopeTotals.expected} co={scopeTotals.co} cm={scopeTotals.cm} se={scopeTotals.se} />
-              </TabsContent>
+              {activeTab === "charts" ? (
+                <Charts
+                  people={employees.length}
+                  worked={scopeTotals.worked}
+                  expected={scopeTotals.expected}
+                  overtime={scopeTotals.overtime}
+                  co={scopeTotals.co}
+                  cm={scopeTotals.cm}
+                  se={scopeTotals.se}
+                  difference={scopeDifference}
+                />
+              ) : null}
 
-              <TabsContent value="companies">
-                <Management workspace={workspace} />
-              </TabsContent>
-            </Tabs>
+              {["companies", "employees", "admins", "settings"].includes(activeTab) ? <Management workspace={workspace} /> : null}
           </div>
         </section>
       </div>
@@ -482,6 +487,8 @@ function TimesheetTable({
   month,
   workspace,
   employees,
+  totalsExpanded,
+  onToggleTotals,
   onEdit,
   onFill,
   onClear
@@ -489,26 +496,30 @@ function TimesheetTable({
   month: string;
   workspace: Workspace;
   employees: ProfileRow[];
+  totalsExpanded: boolean;
+  onToggleTotals: () => void;
   onEdit: (employee: ProfileRow, iso: string) => void;
   onFill: (employee: ProfileRow) => void;
   onClear: (employee: ProfileRow) => void;
 }) {
   const days = daysInMonth(month);
+  const compactColumns = ["Worked", "More"];
+  const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "More", "Fill", "Clear"];
   return (
     <Card className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1220px] border-collapse text-sm">
+        <table className="w-full min-w-[1120px] table-fixed border-collapse text-sm">
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50">
-              <th className="sticky left-0 z-10 w-56 bg-stone-50 px-4 py-3 text-left font-black">Employee</th>
+              <th className="sticky left-0 z-10 w-52 bg-stone-50 px-4 py-3 text-left font-black">Employee</th>
               {days.map((day) => (
-                <th key={day.iso} className="w-11 border-l border-stone-200 px-1 py-2 text-center">
+                <th key={day.iso} className="w-10 border-l border-stone-200 px-1 py-2 text-center">
                   <span className="block text-base font-black">{day.day}</span>
                   <span className="text-[11px] font-bold text-stone-500">{day.weekday}</span>
                 </th>
               ))}
-              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "Actions"].map((label) => (
-                <th key={label} className="border-l border-stone-200 px-3 py-3 text-center font-black">{label}</th>
+              {(totalsExpanded ? expandedColumns : compactColumns).map((label) => (
+                <th key={label} className="w-20 border-l border-stone-200 px-2 py-3 text-center font-black">{label}</th>
               ))}
             </tr>
           </thead>
@@ -522,21 +533,32 @@ function TimesheetTable({
                     <span className="text-xs font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
                   </td>
                   {days.map((day) => <EntryCell key={day.iso} employee={employee} day={day} workspace={workspace} onEdit={onEdit} />)}
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{formatNumber(totals.worked)}h</td>
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{formatNumber(totals.expected)}h</td>
-                  <td className={cn("border-l border-stone-200 px-3 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
-                    {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
-                  </td>
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{formatNumber(totals.overtime)}h</td>
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{totals.vacationDays}d</td>
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{totals.medicalDays}d</td>
-                  <td className="border-l border-stone-200 px-3 text-center font-black">{totals.specialEventDays}d</td>
+                  <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.worked)}h</td>
+                  {totalsExpanded ? (
+                    <>
+                      <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.expected)}h</td>
+                      <td className={cn("border-l border-stone-200 px-2 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
+                        {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
+                      </td>
+                      <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.overtime)}h</td>
+                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.vacationDays}d</td>
+                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.medicalDays}d</td>
+                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.specialEventDays}d</td>
+                    </>
+                  ) : null}
                   <td className="border-l border-stone-200 px-2 text-center">
-                    <div className="flex justify-center gap-1">
-                      <Button size="sm" onClick={() => onFill(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Fill</Button>
-                      <Button size="sm" variant="outline" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
-                    </div>
+                    <Button size="sm" variant="secondary" onClick={onToggleTotals}>More</Button>
                   </td>
+                  {totalsExpanded ? (
+                    <>
+                      <td className="border-l border-stone-200 px-2 text-center">
+                        <Button size="sm" onClick={() => onFill(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Fill</Button>
+                      </td>
+                      <td className="border-l border-stone-200 px-2 text-center">
+                        <Button size="sm" variant="outline" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
+                      </td>
+                    </>
+                  ) : null}
                 </tr>
               );
             }) : (
@@ -741,35 +763,168 @@ function cellClass(type: string | undefined, holiday: boolean, expected: boolean
   return "bg-white";
 }
 
-function LeaveRequests({ workspace }: { workspace: Workspace }) {
+function LeaveRequests({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const [type, setType] = React.useState("vacation");
+  const [startDate, setStartDate] = React.useState(currentMonth() + "-01");
+  const [endDate, setEndDate] = React.useState(currentMonth() + "-01");
+  const [notes, setNotes] = React.useState("");
+  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
+  const requests = visibleLeaveRequests(workspace, activeCompany?.id || "");
+  const canCreate = canCreateLeaveRequest(workspace.profile);
+
+  async function submitRequest() {
+    if (!supabase || !workspace.profile.environment_id || !activeCompany || !canCreate) return;
+    const documentHtml = generatedLeaveDocumentHtml(
+      { type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null },
+      workspace.profile,
+      activeCompany
+    );
+    const { error } = await supabase.from("leave_requests").insert({
+      environment_id: workspace.profile.environment_id,
+      company_id: activeCompany.id,
+      employee_user_id: workspace.profile.id,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      notes: notes || null,
+      status: "requested",
+      generated_document_html: documentHtml
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setNotes("");
+    setPreviewHtml(null);
+    onReload();
+  }
+
+  async function decide(request: LeaveRequestRow, status: "approved" | "rejected") {
+    if (!supabase) return;
+    const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+    if (!canApproveLeave(workspace.profile, employee, workspace)) return;
+    const documentHtml = employee
+      ? generatedLeaveDocumentHtml({ ...request, status, decided_at: new Date().toISOString() }, employee, activeCompany, workspace.profile)
+      : request.generated_document_html;
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({
+        status,
+        decided_by: workspace.profile.id,
+        decided_at: new Date().toISOString(),
+        generated_document_html: documentHtml
+      })
+      .eq("id", request.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Leave Requests</CardTitle>
-        <CardDescription>Loaded from Supabase. Approval actions are the next porting slice.</CardDescription>
-      </CardHeader>
-      <CardContent className="grid gap-3">
-        {workspace.leaveRequests.length ? workspace.leaveRequests.map((request) => {
-          const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
-          return (
-            <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-stone-200 p-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <strong>{employee?.full_name || "Employee"}</strong>
-                <p className="text-sm text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}</p>
-              </div>
-              <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
+    <div className="grid gap-4">
+      {canCreate ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>New Leave Request</CardTitle>
+            <CardDescription>Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 lg:grid-cols-[180px_1fr_1fr_1.5fr_auto_auto]">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Type
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
+                <option value="vacation">Vacation CO</option>
+                <option value="medical">Medical CM</option>
+                <option value="special_event">Special Events</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Start
+              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              End
+              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Notes
+              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
+            </label>
+            <div className="flex items-end">
+              <Button variant="outline" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
+                <Eye className="h-4 w-4" /> Preview
+              </Button>
             </div>
-          );
-        }) : <p className="text-sm font-semibold text-stone-500">No leave requests found.</p>}
-      </CardContent>
-    </Card>
+            <div className="flex items-end">
+              <Button onClick={submitRequest}>Submit</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Leave Requests</CardTitle>
+          <CardDescription>One row per request, with approval and document actions.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {requests.length ? requests.map((request) => {
+            const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+            const canDecide = request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
+            const documentHtml = request.generated_document_html || (employee ? generatedLeaveDocumentHtml(request, employee, activeCompany) : "");
+            return (
+              <div key={request.id} className="grid gap-3 rounded-lg border border-stone-200 p-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+                <div>
+                  <strong>{employee?.full_name || "Employee"}</strong>
+                  <p className="text-sm text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}{request.notes ? ` - ${request.notes}` : ""}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
+                  {documentHtml ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(documentHtml)}>Preview document</Button> : null}
+                  {documentHtml ? <Button size="sm" variant="outline" onClick={() => downloadHtml(documentHtml, `${employee?.full_name || "leave"}-${request.start_date}.html`)}>Download</Button> : null}
+                </div>
+                {canDecide ? (
+                  <div className="flex gap-2 lg:justify-end">
+                    <Button size="sm" onClick={() => void decide(request, "approved")}>Approve</Button>
+                    <Button size="sm" variant="outline" onClick={() => void decide(request, "rejected")}>Deny</Button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          }) : <p className="text-sm font-semibold text-stone-500">No leave requests found.</p>}
+        </CardContent>
+      </Card>
+
+      {previewHtml ? <DocumentPreview html={previewHtml} onClose={() => setPreviewHtml(null)} /> : null}
+    </div>
   );
 }
 
-function Charts({ worked, expected, co, cm, se }: { worked: number; expected: number; co: number; cm: number; se: number }) {
+function Charts({ people, worked, expected, overtime, co, cm, se, difference }: { people: number; worked: number; expected: number; overtime: number; co: number; cm: number; se: number; difference: number }) {
   const width = expected ? Math.min(100, Math.round((worked / expected) * 100)) : 0;
   return (
-    <div className="grid gap-4 md:grid-cols-2">
+    <div className="grid gap-4">
+      <div className="grid gap-3 md:grid-cols-5">
+        <SummaryCard label="People" value={String(people)} hint="visible scope" />
+        <SummaryCard label="Worked" value={`${formatNumber(worked)}h`} hint="month total" />
+        <SummaryCard label="Overtime" value={`${formatNumber(overtime)}h`} hint="recorded" />
+        <SummaryCard label="Leave" value={`${co} CO / ${cm} CM`} hint={`${se} special events`} />
+        <SummaryCard label="Diff" value={`${difference > 0 ? "+" : ""}${formatNumber(difference)}h`} hint="worked vs norm" accent={difference < 0 ? "bad" : "good"} />
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Scope fulfilment</CardTitle>
@@ -795,6 +950,7 @@ function Charts({ worked, expected, co, cm, se }: { worked: number; expected: nu
           ))}
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 }
@@ -821,6 +977,35 @@ function EntityCard({ title, items }: { title: string; items: string[] }) {
       </CardContent>
     </Card>
   );
+}
+
+function DocumentPreview({ html, onClose }: { html: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
+      <Card className="h-[86vh] w-full max-w-4xl overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between border-b border-stone-200">
+          <div>
+            <CardTitle>Leave Request Document</CardTitle>
+            <CardDescription>Preview of the generated request form.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={onClose}>Close</Button>
+        </CardHeader>
+        <CardContent className="h-[calc(86vh-104px)] p-0">
+          <iframe className="h-full w-full bg-white" srcDoc={html} title="Leave request document preview" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function downloadHtml(html: string, filename: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.replace(/[^a-z0-9.-]+/gi, "-");
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function exportCsv(companyName: string, month: string, employees: ProfileRow[], workspace: Workspace) {
