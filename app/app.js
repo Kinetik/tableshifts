@@ -1965,9 +1965,17 @@
     el.adminUserCompany.closest(".field").hidden = usesCompanyAccess;
     el.adminUserCompanyAccess.closest(".field").hidden = !usesCompanyAccess;
     el.adminUserPosition.closest(".field").hidden = usesCompanyAccess;
+    el.adminUserIdentification.closest(".field").hidden = usesCompanyAccess;
+    el.adminUserStartDate.closest(".field").hidden = usesCompanyAccess;
+    el.adminUserEndDate.closest(".field").hidden = usesCompanyAccess;
     el.adminUserPosition.required = !usesCompanyAccess;
+    el.adminUserIdentification.required = !usesCompanyAccess;
+    el.adminUserStartDate.required = !usesCompanyAccess;
     if (usesCompanyAccess) {
       el.adminUserPosition.value = ROLES[el.adminUserRole.value];
+      el.adminUserIdentification.value = "";
+      el.adminUserStartDate.value = todayIso();
+      el.adminUserEndDate.value = "";
     }
     if (usesCompanyAccess && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
       el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
@@ -1989,11 +1997,11 @@
       id,
       name: clean(el.adminUserName.value),
       email: clean(el.adminUserEmail.value).toLowerCase(),
-      identificationNumber: clean(el.adminUserIdentification.value),
+      identificationNumber: ["payroll_admin", "company_manager"].includes(role) ? "" : clean(el.adminUserIdentification.value),
       position: ["payroll_admin", "company_manager"].includes(role) ? ROLES[role] : clean(el.adminUserPosition.value),
       password: el.adminUserPassword.value,
-      startDate: el.adminUserStartDate.value,
-      endDate: el.adminUserEndDate.value,
+      startDate: ["payroll_admin", "company_manager"].includes(role) ? todayIso() : el.adminUserStartDate.value,
+      endDate: ["payroll_admin", "company_manager"].includes(role) ? "" : el.adminUserEndDate.value,
       role,
       companyId: role === "company_manager" ? selectedAdminCompanyAccess()[0] || el.adminUserCompany.value : "",
       departmentId: "",
@@ -2004,8 +2012,12 @@
       permittedCompanyIds: ["payroll_admin", "company_manager"].includes(role) ? selectedAdminCompanyAccess() : [],
       createdAt: existing?.createdAt || new Date().toISOString()
     };
-    if (!user.name || !user.email || !user.identificationNumber || !user.password || !user.startDate) {
-      window.alert("Name, email, identification number, password, and start date are required.");
+    if (!user.name || !user.email || !user.password) {
+      window.alert("Name, email, and password are required.");
+      return;
+    }
+    if (!["payroll_admin", "company_manager"].includes(role) && (!user.identificationNumber || !user.startDate)) {
+      window.alert("Identification number and start date are required.");
       return;
     }
     if (["payroll_admin", "company_manager"].includes(role) && !user.permittedCompanyIds.length) {
@@ -2095,6 +2107,7 @@
     const role = el.employeeRole.value;
     const department = departmentById(el.employeeDepartment.value);
     const companyManager = users().find((user) => user.role === "company_manager" && companyIdsForUser(user).has(el.employeeCompany.value));
+    const departmentManager = departmentManagerFor(department);
     if (role === "department_manager") {
       el.employeeReportsTo.value = companyManager?.id || "";
       el.employeeTeamLeader.value = "";
@@ -2106,11 +2119,11 @@
       return;
     }
     if (role === "team_leader") {
-      el.employeeReportsTo.value = department.managerId || "";
+      el.employeeReportsTo.value = departmentManager?.id || "";
       el.employeeTeamLeader.value = "";
       return;
     }
-    el.employeeReportsTo.value = department.managerId || "";
+    el.employeeReportsTo.value = departmentManager?.id || "";
     const leaders = users().filter((user) => user.role === "team_leader" && user.companyId === el.employeeCompany.value && user.departmentId === department.id);
     el.employeeTeamLeader.value = leaders.length === 1 ? leaders[0].id : "";
   }
@@ -3393,6 +3406,15 @@
 
   function companyIdsForUser(user) {
     return new Set([user.companyId, ...(user.permittedCompanyIds || [])].filter(Boolean));
+  }
+
+  function departmentManagerFor(department) {
+    if (!department) return null;
+    return userById(department.managerId) || users().find((user) => (
+      user.role === "department_manager" &&
+      user.companyId === department.companyId &&
+      user.departmentId === department.id
+    )) || null;
   }
 
   function activeAdminId(user = currentUser()) {
