@@ -14,6 +14,7 @@ import {
   LogOut,
   Paintbrush,
   Plus,
+  Save,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
@@ -1002,12 +1003,10 @@ function Management({
     return <CompanyDepartmentManagement workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
   }
   if (activeTab === "employees") {
-    const employees = workspace.profiles.filter((profile) => !["admin_account", "payroll_admin", "company_manager"].includes(profile.role));
-    return <EntityCard title="Employees" items={employees.map((profile) => `${profile.full_name} - ${profile.position || ROLES[profile.role]}`)} />;
+    return <AccountManagement mode="employees" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
   }
   if (activeTab === "admins") {
-    const admins = workspace.profiles.filter((profile) => ["admin_account", "payroll_admin", "company_manager"].includes(profile.role));
-    return <EntityCard title="Admins and Managers" items={admins.map((profile) => `${profile.full_name} - ${ROLES[profile.role]}`)} />;
+    return <AccountManagement mode="admins" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
   }
   return (
     <Card>
@@ -1190,6 +1189,306 @@ function CompanyDepartmentManagement({
       </Card>
     </div>
   );
+}
+
+function AccountManagement({
+  mode,
+  workspace,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  mode: "employees" | "admins";
+  workspace: Workspace;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const roleOptions = mode === "employees"
+    ? ["employee", "team_leader", "department_manager"]
+    : workspace.profile.role === "admin_account"
+      ? ["payroll_admin", "company_manager"]
+      : ["company_manager"];
+  const [editingId, setEditingId] = React.useState("");
+  const [role, setRole] = React.useState(roleOptions[0]);
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [companyId, setCompanyId] = React.useState(workspace.companies[0]?.id || "");
+  const [departmentId, setDepartmentId] = React.useState("");
+  const [position, setPosition] = React.useState("");
+  const [identificationNumber, setIdentificationNumber] = React.useState("");
+  const [startDate, setStartDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [endDate, setEndDate] = React.useState("");
+  const [coAvailable, setCoAvailable] = React.useState("0");
+  const [reportsToId, setReportsToId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [permittedCompanyIds, setPermittedCompanyIds] = React.useState<string[]>(companyId ? [companyId] : []);
+
+  const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId);
+  const selectedDepartment = workspace.departments.find((department) => department.id === departmentId);
+  const managers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId))
+  ));
+  const teamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === companyId &&
+    (!departmentId || profile.department_id === departmentId)
+  ));
+  const accounts = workspace.profiles
+    .filter((profile) => mode === "employees"
+      ? !["admin_account", "payroll_admin", "company_manager"].includes(profile.role)
+      : ["payroll_admin", "company_manager"].includes(profile.role))
+    .toSorted((a, b) => a.full_name.localeCompare(b.full_name));
+
+  React.useEffect(() => {
+    if (!departmentId) return;
+    if (selectedDepartment?.manager_user_id && !reportsToId) setReportsToId(selectedDepartment.manager_user_id);
+    if (role === "employee" && !teamLeaderId) {
+      const leadersInDepartment = workspace.profiles.filter((profile) => (
+        profile.role === "team_leader" &&
+        profile.company_id === companyId &&
+        profile.department_id === departmentId
+      ));
+      if (selectedDepartment?.team_leader_user_id) setTeamLeaderId(selectedDepartment.team_leader_user_id);
+      else if (leadersInDepartment.length === 1) setTeamLeaderId(leadersInDepartment[0].id);
+    }
+    if (role !== "employee") setTeamLeaderId("");
+  }, [companyId, departmentId, reportsToId, role, selectedDepartment, teamLeaderId, workspace.profiles]);
+
+  function resetForm() {
+    setEditingId("");
+    setRole(roleOptions[0]);
+    setName("");
+    setEmail("");
+    setPassword("");
+    setCompanyId(workspace.companies[0]?.id || "");
+    setDepartmentId("");
+    setPosition("");
+    setIdentificationNumber("");
+    setStartDate(new Date().toISOString().slice(0, 10));
+    setEndDate("");
+    setCoAvailable("0");
+    setReportsToId("");
+    setTeamLeaderId("");
+    setPermittedCompanyIds(workspace.companies[0]?.id ? [workspace.companies[0].id] : []);
+  }
+
+  function editAccount(profile: ProfileRow) {
+    const access = workspace.access.filter((item) => item.payroll_user_id === profile.id).map((item) => item.company_id);
+    setEditingId(profile.id);
+    setRole(profile.role);
+    setName(profile.full_name);
+    setEmail(profile.email);
+    setPassword("");
+    setCompanyId(profile.company_id || access[0] || workspace.companies[0]?.id || "");
+    setDepartmentId(profile.department_id || "");
+    setPosition(profile.position || "");
+    setIdentificationNumber(profile.identification_number || "");
+    setStartDate(profile.start_date || new Date().toISOString().slice(0, 10));
+    setEndDate(profile.end_date || "");
+    setCoAvailable(String(profile.co_available || 0));
+    setReportsToId(profile.reports_to_user_id || "");
+    setTeamLeaderId(profile.team_leader_user_id || "");
+    setPermittedCompanyIds(access.length ? access : profile.company_id ? [profile.company_id] : []);
+  }
+
+  async function saveAccount() {
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const adminRole = ["payroll_admin", "company_manager"].includes(role);
+    const payload = {
+      user: {
+        id: editingId || undefined,
+        name,
+        email,
+        role,
+        identificationNumber: adminRole ? "" : identificationNumber,
+        position: adminRole ? ROLES[role] : position,
+        companyId: adminRole ? permittedCompanyIds[0] || companyId : companyId,
+        departmentId: adminRole ? "" : departmentId,
+        reportsToId: adminRole ? "" : reportsToId,
+        teamLeaderId: role === "employee" ? teamLeaderId : "",
+        startDate: adminRole ? "" : startDate,
+        endDate: adminRole ? "" : endDate,
+        coAvailable: adminRole ? 0 : Number(coAvailable || 0)
+      },
+      password,
+      permittedCompanyIds: adminRole ? permittedCompanyIds : []
+    };
+    const response = await fetch("/api/upsert-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not save account.");
+      return;
+    }
+    resetForm();
+    onReload();
+  }
+
+  async function deleteAccount(profile: ProfileRow) {
+    if (!supabase) return;
+    if (!window.confirm(`Delete account ${profile.full_name}?`)) return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const response = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ userId: profile.id })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not delete account.");
+      return;
+    }
+    onReload();
+  }
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
+          <CardDescription>
+            {mode === "employees"
+              ? "Employees, Team Leaders, and Department Managers."
+              : "Payroll Admins and Company Managers. Company access uses checkboxes."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-3">
+            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={role} onChange={(event) => setRole(event.target.value)}>
+              {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
+            </select>
+            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" />
+            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+            {mode === "employees" ? (
+              <>
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Identification number" />
+              </>
+            ) : null}
+          </div>
+
+          {mode === "employees" ? (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={companyId} onChange={(event) => {
+                  setCompanyId(event.target.value);
+                  setDepartmentId("");
+                  setReportsToId("");
+                  setTeamLeaderId("");
+                }}>
+                  {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                </select>
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
+                  <option value="">No department</option>
+                  {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                </select>
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder="CO days" type="number" step="0.25" />
+              </div>
+              <div className="grid gap-3 md:grid-cols-4">
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={startDate} onChange={(event) => setStartDate(event.target.value)} type="date" />
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={endDate} onChange={(event) => setEndDate(event.target.value)} type="date" />
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                  <option value="">Reports to none</option>
+                  {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                </select>
+                {role === "employee" ? (
+                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                    <option value="">No team leader</option>
+                    {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  </select>
+                ) : <div />}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-stone-200 p-3">
+              <p className="mb-2 text-xs font-black uppercase tracking-wide text-stone-500">Company Access</p>
+              <div className="grid max-h-40 gap-2 overflow-auto md:grid-cols-2">
+                {workspace.companies.map((company) => (
+                  <label key={company.id} className="flex items-center gap-2 rounded-md bg-stone-50 p-2 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={permittedCompanyIds.includes(company.id)}
+                      onChange={(event) => {
+                        setPermittedCompanyIds((current) => event.target.checked
+                          ? Array.from(new Set([...current, company.id]))
+                          : current.filter((id) => id !== company.id));
+                      }}
+                    />
+                    {company.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-between gap-2">
+            <Button variant="outline" onClick={resetForm}>Reset</Button>
+            <Button onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{mode === "employees" ? "Employees" : "Admins and Managers"}</CardTitle>
+          <CardDescription>{accounts.length} accounts in this environment.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          {accounts.map((profile) => {
+            const access = workspace.access.filter((item) => item.payroll_user_id === profile.id).map((item) => workspace.companies.find((company) => company.id === item.company_id)?.name).filter(Boolean);
+            return (
+              <div key={profile.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
+                <div>
+                  <strong>{profile.full_name}</strong>
+                  <p className="text-sm text-stone-500">
+                    {ROLES[profile.role]} - {mode === "admins" ? access.join(", ") || "No companies assigned" : profile.position || "No position"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => editAccount(profile)}>Edit</Button>
+                  <Button size="sm" variant="outline" onClick={() => void deleteAccount(profile)}><Trash2 className="h-4 w-4" />Delete</Button>
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function companyIdsForProfile(profile: ProfileRow, workspace: Workspace) {
+  const ids = new Set<string>();
+  if (profile.company_id) ids.add(profile.company_id);
+  workspace.access.filter((item) => item.payroll_user_id === profile.id).forEach((item) => ids.add(item.company_id));
+  return ids;
 }
 
 function EntityCard({ title, items }: { title: string; items: string[] }) {
