@@ -23,7 +23,6 @@ import {
   Save,
   Settings2,
   ShieldCheck,
-  SlidersHorizontal,
   Trash2,
   X,
   UsersRound
@@ -93,6 +92,18 @@ const DEFAULT_ENTRY_COLORS: Record<string, string> = {
   absence: "#1c1917",
   special_event: "#e7e5e4"
 };
+
+const COUNTRY_OPTIONS = [
+  ["RO", "Romania"],
+  ["AT", "Austria"],
+  ["DE", "Germany"],
+  ["FR", "France"],
+  ["GB", "United Kingdom"],
+  ["HU", "Hungary"],
+  ["IT", "Italy"],
+  ["PL", "Poland"],
+  ["US", "United States"]
+] as const;
 
 export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const supabase = React.useMemo<SupabaseClient | null>(() => {
@@ -265,9 +276,12 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     (departmentFilter === "all" || profile.department_id === departmentFilter || companyDepartments.find((department) => department.id === departmentFilter)?.team_leader_user_id === profile.id)
   ));
   const employees = activeCompany ? filteredEmployees(workspace, activeCompany.id, departmentFilter, teamFilter) : [];
-  const pendingApprovals = visibleLeaveRequests(workspace, activeCompany?.id || "").filter((request) => {
+  const accessibleCompanyIds = new Set(companies.map((company) => company.id));
+  const pendingApprovals = workspace.leaveRequests.filter((request) => {
     const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
-    return request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
+    return request.status === "requested" &&
+      accessibleCompanyIds.has(request.company_id) &&
+      canApproveLeave(workspace.profile, employee, workspace);
   });
   const scopeTotals = employees.reduce(
     (acc, employee) => {
@@ -302,7 +316,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 key={item.value}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-emerald-50/80 transition-colors hover:bg-white/10 hover:text-white",
-                  activeTab === item.value && "bg-white text-emerald-950 hover:bg-white"
+                  activeTab === item.value && "bg-white text-emerald-950 hover:bg-white hover:text-emerald-950"
                 )}
                 onClick={() => setActiveTab(item.value)}
               >
@@ -351,22 +365,17 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </header>
 
           <div className="p-5">
-              <div className="mb-5 flex flex-wrap items-center justify-end gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold" value={month} onChange={(event) => setMonth(event.target.value)}>
-                    {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                  <Button variant="outline" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
-                    <Download className="h-4 w-4" /> Export CSV
-                  </Button>
-                </div>
-              </div>
-
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
               {activeTab === "timesheet" ? (
                 <>
-                <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 lg:grid-cols-[1fr_1fr_auto]">
+                <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                    Month
+                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
+                      {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                    </select>
+                  </label>
                   <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                     Department
                     <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentFilter} onChange={(event) => {
@@ -389,11 +398,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                     </select>
                   </label>
                   <div className="flex items-end">
-                    <Button variant="outline" className="w-full lg:w-auto" onClick={() => {
-                      setDepartmentFilter("all");
-                      setTeamFilter("all");
-                    }}>
-                      <SlidersHorizontal className="h-4 w-4" /> Reset filters
+                    <Button variant="outline" className="w-full lg:w-auto" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                      <Download className="h-4 w-4" /> Export CSV
                     </Button>
                   </div>
                 </div>
@@ -442,8 +448,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 <Management
                   workspace={workspace}
                   activeTab={activeTab}
+                  activeCompany={activeCompany}
                   supabase={supabase}
                   onReload={() => authUser && loadWorkspace(authUser)}
+                  onSignOut={signOut}
                   onMessage={setMessage}
                 />
               ) : null}
@@ -621,7 +629,7 @@ function TimesheetTable({
                     </>
                   ) : null}
                   <td className="border-l border-stone-200 px-1 text-center">
-                    <Button size="sm" variant="secondary" onClick={onToggleTotals}>{totalsExpanded ? "Less" : "More"}</Button>
+                    <Button size="sm" className="bg-amber-600 text-white hover:bg-amber-700" onClick={onToggleTotals}>{totalsExpanded ? "Less" : "More"}</Button>
                   </td>
                   {totalsExpanded ? (
                     <>
@@ -629,7 +637,7 @@ function TimesheetTable({
                         <Button size="sm" onClick={() => onFill(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Fill</Button>
                       </td>
                       <td className="border-l border-stone-200 px-2 text-center">
-                        <Button size="sm" variant="outline" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
+                        <Button size="sm" className="bg-rose-700 text-white hover:bg-rose-800" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
                       </td>
                     </>
                   ) : null}
@@ -676,7 +684,7 @@ function EntryCell({
     >
       <button
         type="button"
-        className={cn("min-h-10 w-full px-0.5 py-1.5 text-center leading-tight", editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-500" : "cursor-default")}
+        className={cn("h-full min-h-10 w-full px-0.5 py-1.5 text-center leading-tight", editable ? "cursor-pointer hover:bg-white/25" : "cursor-default")}
         onClick={() => editable && onEdit(employee, day.iso)}
         disabled={!editable}
       >
@@ -712,7 +720,7 @@ function EntryEditor({
   const [file, setFile] = React.useState<File | null>(null);
   const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
   const extra = Math.max(0, Number(hours || 0) - normal);
-  const leaveLike = ["vacation", "medical", "special_event"].includes(type);
+  const canAttachDocument = type === "vacation";
   const linkedRequest = existing?.leave_request_id
     ? workspace.leaveRequests.find((request) => request.id === existing.leave_request_id)
     : null;
@@ -734,7 +742,7 @@ function EntryEditor({
     const entryId = existing?.id || crypto.randomUUID();
     let uploadedPath = existing?.attachment_path || null;
     try {
-      uploadedPath = leaveLike && file
+      uploadedPath = canAttachDocument && file
         ? await uploadLeaveDocument(supabase, workspace, entryId, file)
         : uploadedPath;
     } catch (error) {
@@ -750,7 +758,7 @@ function EntryEditor({
       work_date: editor.iso,
       type,
       hours: nextHours,
-      attachment_path: leaveLike ? uploadedPath : null,
+      attachment_path: canAttachDocument ? uploadedPath : null,
       updated_by: workspace.profile.id,
       created_by: workspace.profile.id
     }, { onConflict: "employee_user_id,work_date" });
@@ -788,17 +796,17 @@ function EntryEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="border-b border-stone-200">
+      <Card className="w-full max-w-xl overflow-hidden">
+        <CardHeader className="border-b border-stone-200 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <CardTitle>{editor.employee.full_name}</CardTitle>
+              <CardTitle className="text-xl">{editor.employee.full_name}</CardTitle>
               <CardDescription>{editor.iso} - {department?.name || "No department"} - normal shift {formatNumber(normal)}h</CardDescription>
             </div>
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-4 pt-5">
+        <CardContent className="grid gap-3 p-4">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               ["normal", "Normal"],
@@ -809,13 +817,13 @@ function EntryEditor({
               ["absence", "Absence"],
               ["weekend", "Weekend"]
             ].map(([value, label]) => (
-              <Button key={value} variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
+              <Button key={value} size="sm" variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="grid gap-1 text-sm font-semibold">
               Type
-              <select className="h-11 rounded-md border border-stone-200 bg-white px-3" value={type} onChange={(event) => quick(event.target.value)}>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-3" value={type} onChange={(event) => quick(event.target.value)}>
                 <option value="normal">Normal</option>
                 <option value="overtime">Overtime</option>
                 <option value="vacation">Vacation CO</option>
@@ -827,24 +835,34 @@ function EntryEditor({
             </label>
             <label className="grid gap-1 text-sm font-semibold">
               Total hours
-              <input className="h-11 rounded-md border border-stone-200 px-3" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
+              <input className="h-9 rounded-md border border-stone-200 px-3" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
             </label>
           </div>
-          <p className="rounded-md bg-stone-50 p-3 text-sm font-semibold text-stone-600">
-            {type === "overtime"
-              ? `This records ${formatNumber(normal)}h normal time and ${formatNumber(extra)}h overtime.`
-              : "Holiday entries stay controlled from setup; this popup records employee day activity."}
-          </p>
-          {leaveLike ? (
+          {type === "overtime" ? (
+            <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+              This records {formatNumber(normal)}h normal time and {formatNumber(extra)}h overtime.
+            </p>
+          ) : null}
+          {canAttachDocument ? (
             <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
               <p className="text-xs font-black uppercase tracking-wide text-stone-500">Leave document</p>
-              <input className="rounded-md border border-stone-200 bg-white p-2 text-sm font-semibold" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              <label className="flex h-9 cursor-pointer items-center justify-between gap-3 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold">
+                <span className="rounded bg-stone-100 px-2 py-1 text-stone-700">Choose file</span>
+                <span className="min-w-0 flex-1 truncate text-right text-stone-500">{file?.name || "No file selected"}</span>
+                <input className="hidden" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              </label>
               <div className="flex flex-wrap gap-2">
                 {attachmentPath ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", attachmentPath)}>Download attached file</Button> : null}
                 {existing?.attachment_path ? <Button size="sm" variant="outline" onClick={() => void removeAttachment()}><X className="h-4 w-4" />Remove file</Button> : null}
                 {linkedDocument ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button> : null}
                 {linkedDocument ? <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button> : null}
               </div>
+            </div>
+          ) : null}
+          {!canAttachDocument && linkedDocument ? (
+            <div className="flex flex-wrap gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+              <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button>
+              <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button>
             </div>
           ) : null}
           <div className="flex flex-wrap justify-between gap-2">
@@ -1136,6 +1154,11 @@ function Charts({
   difference: number;
 }) {
   const width = expected ? Math.min(100, Math.round((worked / expected) * 100)) : 0;
+  const attentionRows = employees
+    .map((employee) => ({ employee, totals: totalsFor(employee, month, workspace) }))
+    .filter((row) => row.totals.difference < 0 || row.totals.overtime > 0 || row.totals.absenceDays > 0)
+    .toSorted((a, b) => (a.totals.difference - b.totals.difference) || (b.totals.overtime - a.totals.overtime))
+    .slice(0, 8);
   const departmentRows = workspace.departments
     .filter((department) => department.company_id === activeCompany?.id)
     .map((department) => {
@@ -1153,47 +1176,54 @@ function Charts({
     })
     .filter((row) => row.employees > 0);
   const maxDepartmentHours = Math.max(1, ...departmentRows.map((row) => Math.max(row.worked, row.expected)));
+  const exceptionMax = Math.max(1, ...departmentRows.map((row) => row.overtime + row.leave * 8 + row.absence * 8));
   return (
     <div className="grid gap-4">
-      <div className="grid gap-3 md:grid-cols-5">
-        <SummaryCard label="People" value={String(people)} hint="visible scope" />
-        <SummaryCard label="Worked" value={`${formatNumber(worked)}h`} hint="month total" />
-        <SummaryCard label="Overtime" value={`${formatNumber(overtime)}h`} hint="recorded" />
-        <SummaryCard label="Leave" value={`${co} CO / ${cm} CM`} hint={`${se} SE / ${ab} AB`} />
-        <SummaryCard label="Diff" value={`${difference > 0 ? "+" : ""}${formatNumber(difference)}h`} hint="worked vs norm" accent={difference < 0 ? "bad" : "good"} />
-      </div>
       <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
         <div className="grid gap-4">
           <Card>
             <CardHeader>
-              <CardTitle>Scope fulfilment</CardTitle>
-              <CardDescription>Worked hours against monthly norm.</CardDescription>
+              <CardTitle>Month Health</CardTitle>
+              <CardDescription>{people} people in scope, {formatNumber(worked)}h worked from {formatNumber(expected)}h norm.</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${width}%` }} /></div>
-              <p className="mt-3 text-sm font-semibold">{formatNumber(worked)}h worked from {formatNumber(expected)}h expected</p>
+            <CardContent className="grid gap-4">
+              <div>
+                <div className="mb-2 flex items-end justify-between gap-3">
+                  <span className="text-4xl font-black">{width}%</span>
+                  <span className={cn("text-xl font-black", difference < 0 ? "text-rose-700" : "text-emerald-700")}>{difference > 0 ? "+" : ""}{formatNumber(difference)}h</span>
+                </div>
+                <div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${width}%` }} /></div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-sm font-semibold">
+                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">OT</span>{formatNumber(overtime)}h</div>
+                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">Leave</span>{co + cm + se}d</div>
+                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">Absence</span>{ab}d</div>
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Leave mix</CardTitle>
-              <CardDescription>CO, CM and special events in the selected month.</CardDescription>
+              <CardTitle>Attention List</CardTitle>
+              <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-2">
-              {[["CO", co, "bg-emerald-500"], ["CM", cm, "bg-rose-400"], ["SE", se, "bg-stone-400"], ["AB", ab, "bg-stone-900"]].map(([label, value, color]) => (
-                <div key={label as string} className="grid grid-cols-[40px_1fr_44px] items-center gap-3 text-sm font-semibold">
-                  <span>{label}</span>
-                  <div className="h-2 rounded-full bg-stone-100"><div className={cn("h-2 rounded-full", color as string)} style={{ width: `${Math.min(100, Number(value) * 12)}%` }} /></div>
-                  <span>{value}d</span>
+              {attentionRows.length ? attentionRows.map(({ employee, totals }) => (
+                <div key={employee.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-stone-50 p-2 text-sm font-semibold">
+                  <span className="truncate">{employee.full_name}</span>
+                  <span className="text-right">
+                    <span className={totals.difference < 0 ? "text-rose-700" : "text-emerald-700"}>{totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h</span>
+                    {totals.overtime ? <span className="ml-2 text-amber-700">{formatNumber(totals.overtime)}h OT</span> : null}
+                    {totals.absenceDays ? <span className="ml-2 text-stone-900">{totals.absenceDays} AB</span> : null}
+                  </span>
                 </div>
-              ))}
+              )) : <p className="text-sm font-semibold text-stone-500">No exceptions in this scope.</p>}
             </CardContent>
           </Card>
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Departments</CardTitle>
-            <CardDescription>Worked versus norm by department.</CardDescription>
+            <CardTitle>Department Balance</CardTitle>
+            <CardDescription>Worked and norm bars, with exceptions shown under each department.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
             {departmentRows.length ? departmentRows.map((row) => (
@@ -1209,8 +1239,11 @@ function Charts({
                   <div className="h-2 rounded-full bg-stone-100">
                     <div className="h-2 rounded-full bg-stone-400" style={{ width: `${Math.min(100, (row.expected / maxDepartmentHours) * 100)}%` }} />
                   </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                    <div className="h-2 bg-amber-400" style={{ width: `${Math.min(100, ((row.overtime + row.leave * 8 + row.absence * 8) / exceptionMax) * 100)}%` }} />
+                  </div>
                 </div>
-                <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.worked)}h worked / {formatNumber(row.expected)}h norm - {formatNumber(row.overtime)}h OT - {row.leave} leave days - {row.absence} absences</p>
+                <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.overtime)}h OT - {row.leave} leave days - {row.absence} absences</p>
               </div>
             )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
           </CardContent>
@@ -1223,14 +1256,18 @@ function Charts({
 function Management({
   workspace,
   activeTab,
+  activeCompany,
   supabase,
   onReload,
+  onSignOut,
   onMessage
 }: {
   workspace: Workspace;
   activeTab: string;
+  activeCompany?: CompanyRow;
   supabase: SupabaseClient | null;
   onReload: () => void;
+  onSignOut: () => Promise<void>;
   onMessage: (message: string) => void;
 }) {
   if (activeTab === "companies") {
@@ -1242,13 +1279,179 @@ function Management({
   if (activeTab === "admins") {
     return <AccountManagement mode="admins" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
   }
+  return <SettingsPage workspace={workspace} activeCompany={activeCompany} supabase={supabase} onReload={onReload} onSignOut={onSignOut} onMessage={onMessage} />;
+}
+
+type HolidayDraft = {
+  date: string;
+  name: string;
+  countryCode: string;
+};
+
+function SettingsPage({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onSignOut,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onSignOut: () => Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  const [countryCode, setCountryCode] = React.useState("RO");
+  const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
+  const [holidayCompanyId, setHolidayCompanyId] = React.useState(activeCompany?.id || "all");
+  const [holidayDepartmentId, setHolidayDepartmentId] = React.useState("all");
+  const [preview, setPreview] = React.useState<HolidayDraft[]>([]);
+  const [manualDate, setManualDate] = React.useState("");
+  const [manualName, setManualName] = React.useState("");
+  const setupAllowed = ["admin_account", "payroll_admin"].includes(workspace.profile.role);
+  const scopedDepartments = workspace.departments.filter((department) => holidayCompanyId !== "all" && department.company_id === holidayCompanyId);
+
+  async function loadPublicHolidays() {
+    const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${holidayYear}/${countryCode}`);
+    if (!response.ok) {
+      onMessage("Could not load public holidays for that country/year.");
+      return;
+    }
+    const data = await response.json() as Array<{ date: string; localName?: string; name?: string; countryCode?: string }>;
+    setPreview(data.map((holiday) => ({
+      date: holiday.date,
+      name: holiday.localName || holiday.name || "Holiday",
+      countryCode: holiday.countryCode || countryCode
+    })));
+  }
+
+  function addManualHoliday() {
+    if (!manualDate || !manualName.trim()) return;
+    setPreview((current) => [...current, { date: manualDate, name: manualName.trim(), countryCode }].toSorted((a, b) => a.date.localeCompare(b.date)));
+    setManualDate("");
+    setManualName("");
+  }
+
+  async function applyHolidays() {
+    if (!supabase || !workspace.profile.environment_id || !setupAllowed || !preview.length) return;
+    const rows = preview.map((holiday) => ({
+      environment_id: workspace.profile.environment_id,
+      company_id: holidayCompanyId === "all" ? null : holidayCompanyId,
+      department_id: holidayDepartmentId === "all" ? null : holidayDepartmentId,
+      country_code: holiday.countryCode,
+      holiday_date: holiday.date,
+      name: holiday.name,
+      created_by: workspace.profile.id
+    }));
+    const { error } = await supabase.from("national_holidays").upsert(rows, { onConflict: "environment_id,company_id,department_id,country_code,holiday_date,name" });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onMessage(`${rows.length} holidays saved.`);
+    setPreview([]);
+    onReload();
+  }
+
+  async function deleteAdminAccount() {
+    if (!supabase || workspace.profile.role !== "admin_account") return;
+    const typed = window.prompt("This deletes your Admin Account, all companies, users, timesheets, leave requests, documents, and logs. Type DELETE TABLESHIFTS to continue.");
+    if (typed !== "DELETE TABLESHIFTS") return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const response = await fetch("/api/delete-admin-environment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ confirm: "DELETE TABLESHIFTS" })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not delete Admin Account.");
+      return;
+    }
+    await onSignOut();
+  }
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Settings</CardTitle>
-        <CardDescription>National holidays, company colors, logos, and account danger areas will move here next.</CardDescription>
-      </CardHeader>
-    </Card>
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>National Holidays</CardTitle>
+          <CardDescription>Load public holidays, adjust the list, and apply them to all companies or one scope.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Country
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={countryCode} onChange={(event) => setCountryCode(event.target.value)}>
+                {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Year
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayYear} onChange={(event) => setHolidayYear(event.target.value)} type="number" min="2020" max="2100" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Company
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayCompanyId} onChange={(event) => {
+                setHolidayCompanyId(event.target.value);
+                setHolidayDepartmentId("all");
+              }}>
+                <option value="all">All companies</option>
+                {accessibleCompanies(workspace).map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Department
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayDepartmentId} onChange={(event) => setHolidayDepartmentId(event.target.value)} disabled={holidayCompanyId === "all"}>
+                <option value="all">All departments</option>
+                {scopedDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <Button className="w-full" onClick={() => void loadPublicHolidays()} disabled={!setupAllowed}><CalendarDays className="h-4 w-4" />Load</Button>
+            </div>
+          </div>
+          <div className="grid gap-3 md:grid-cols-[1fr_1.5fr_auto]">
+            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} />
+            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="Manual holiday name" />
+            <Button variant="outline" onClick={addManualHoliday}>Add manual</Button>
+          </div>
+          <div className="grid max-h-72 gap-2 overflow-auto">
+            {preview.length ? preview.map((holiday) => (
+              <div key={`${holiday.date}-${holiday.name}`} className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-2 text-sm font-semibold">
+                <span>{holiday.date} - {holiday.name}</span>
+                <Button size="sm" variant="ghost" onClick={() => setPreview((current) => current.filter((item) => item !== holiday))}><X className="h-4 w-4" />Remove</Button>
+              </div>
+            )) : <p className="text-sm font-semibold text-stone-500">Load holidays or add them manually before applying.</p>}
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={() => void applyHolidays()} disabled={!setupAllowed || !preview.length}>Apply holidays</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {workspace.profile.role === "admin_account" ? (
+        <Card className="border-rose-200">
+          <CardHeader>
+            <CardTitle>Admin Account Danger Area</CardTitle>
+            <CardDescription>Delete this Admin Account and all associated company data.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button className="bg-rose-700 text-white hover:bg-rose-800" onClick={() => void deleteAdminAccount()}><Trash2 className="h-4 w-4" />Delete Admin Account</Button>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
   );
 }
 
@@ -1279,13 +1482,14 @@ function CompanyDepartmentManagement({
     ["department_manager", "company_manager"].includes(profile.role) &&
     (profile.company_id === targetCompanyId || profile.role === "company_manager")
   ));
+  const assignedTeamLeaderIds = new Set(workspace.departments.map((department) => department.team_leader_user_id).filter(Boolean));
   const teamLeaders = workspace.profiles.filter((profile) => (
     profile.role === "team_leader" &&
-    profile.company_id === targetCompanyId
+    profile.company_id === targetCompanyId &&
+    !assignedTeamLeaderIds.has(profile.id)
   ));
 
   React.useEffect(() => {
-    setExpandedCompanyId((current) => current || workspace.companies[0]?.id || "");
     setEditingCompanyName((current) => {
       const next = { ...current };
       workspace.companies.forEach((company) => {
@@ -1481,7 +1685,12 @@ function CompanyDepartmentManagement({
               <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
             </div>
             <div className="grid gap-2 md:grid-cols-3">
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)} type="number" min="1" max="24" step="0.25" />
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                Shift length
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                  {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                </select>
+              </label>
               <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
                 <option value="">No manager</option>
                 {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
@@ -1510,7 +1719,6 @@ function CompanyDepartmentManagement({
               ["department_manager", "company_manager"].includes(profile.role) &&
               (profile.company_id === company.id || companyIdsForProfile(profile, workspace).has(company.id))
             ));
-            const teamLeaderOptions = workspace.profiles.filter((profile) => profile.role === "team_leader" && profile.company_id === company.id);
             const colors = colorDrafts[company.id] || DEFAULT_ENTRY_COLORS;
             return (
               <div key={company.id} className="rounded-lg border border-stone-200 p-3">
@@ -1593,6 +1801,14 @@ function CompanyDepartmentManagement({
                         };
                         return (
                           <div key={department.id} className="grid gap-2 rounded-md bg-stone-50 p-3 text-sm">
+                            {(() => {
+                              const teamLeaderOptions = workspace.profiles.filter((profile) => {
+                                const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
+                                return profile.role === "team_leader" &&
+                                  profile.company_id === company.id &&
+                                  (!assignedDepartment || assignedDepartment.id === department.id);
+                              });
+                              return (
                             <div className="grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_90px_auto]">
                               <input
                                 className="h-9 rounded-md border border-stone-200 px-2 font-semibold"
@@ -1615,20 +1831,20 @@ function CompanyDepartmentManagement({
                                 <option value="">No team leader</option>
                                 {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                               </select>
-                              <input
-                                className="h-9 rounded-md border border-stone-200 px-2 font-semibold"
+                              <select
+                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
                                 value={draft.hours}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
-                                type="number"
-                                min="1"
-                                max="24"
-                                step="0.25"
-                              />
+                              >
+                                {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                              </select>
                               <div className="flex gap-2 lg:justify-end">
                                 <Button size="sm" variant="outline" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
                                 <Button size="sm" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
                               </div>
                             </div>
+                              );
+                            })()}
                             <div className="flex flex-wrap gap-2">
                               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => (
                                 <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold">
@@ -1695,6 +1911,7 @@ function AccountManagement({
   const [reportsToId, setReportsToId] = React.useState("");
   const [teamLeaderId, setTeamLeaderId] = React.useState("");
   const [permittedCompanyIds, setPermittedCompanyIds] = React.useState<string[]>(companyId ? [companyId] : []);
+  const suggestedCoDays = startDate ? calculateCoEntitlement(startDate, endDate) : 0;
 
   const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId);
   const selectedDepartment = workspace.departments.find((department) => department.id === departmentId);
@@ -1777,6 +1994,11 @@ function AccountManagement({
     setReportsToId("");
     setTeamLeaderId("");
     setPermittedCompanyIds(workspace.companies[0]?.id ? [workspace.companies[0].id] : []);
+  }
+
+  function updateStartDate(value: string) {
+    setStartDate(value);
+    if (mode === "employees" && !editingId) setCoAvailable(String(calculateCoEntitlement(value, endDate)));
   }
 
   function editAccount(profile: ProfileRow) {
@@ -1881,7 +2103,9 @@ function AccountManagement({
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="grid gap-3 md:grid-cols-3">
-            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={role} onChange={(event) => {
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Role
+            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={role} onChange={(event) => {
               const nextRole = event.target.value;
               setRole(nextRole);
               if (nextRole !== "employee") setTeamLeaderId("");
@@ -1896,16 +2120,32 @@ function AccountManagement({
             }}>
               {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
             </select>
-            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" />
-            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Name
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Email
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+            </label>
           </div>
 
           <div className="grid gap-3 md:grid-cols-3">
-            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Password
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+            </label>
             {mode === "employees" ? (
               <>
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Identification number" />
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Position
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Payroll specialist" />
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Identification Number
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Employee ID" />
+                </label>
               </>
             ) : null}
           </div>
@@ -1925,11 +2165,23 @@ function AccountManagement({
                   <option value="">No department</option>
                   {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                 </select>
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder="CO days" type="number" step="0.25" />
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Available CO Days
+                  <div className="flex gap-2">
+                    <input className="h-10 min-w-0 flex-1 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
+                    <Button type="button" size="sm" variant="outline" onClick={() => setCoAvailable(String(suggestedCoDays))}>Suggest</Button>
+                  </div>
+                </label>
               </div>
               <div className="grid gap-3 md:grid-cols-4">
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={startDate} onChange={(event) => setStartDate(event.target.value)} type="date" />
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={endDate} onChange={(event) => setEndDate(event.target.value)} type="date" />
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Start Date
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={startDate} onChange={(event) => updateStartDate(event.target.value)} type="date" />
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  End Date
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={endDate} onChange={(event) => setEndDate(event.target.value)} type="date" />
+                </label>
                 <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
                   <option value="">Reports to none</option>
                   {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
@@ -2007,6 +2259,28 @@ function companyIdsForProfile(profile: ProfileRow, workspace: Workspace) {
   return ids;
 }
 
+function calculateCoEntitlement(startDate: string, endDate?: string) {
+  if (!startDate) return 0;
+  const start = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return 0;
+  const yearEnd = new Date(start.getFullYear(), 11, 31);
+  const contractEnd = endDate ? new Date(`${endDate}T00:00:00`) : yearEnd;
+  const finalDay = contractEnd < yearEnd ? contractEnd : yearEnd;
+  if (finalDay < start) return 0;
+  let total = 0;
+  for (let cursor = new Date(start.getFullYear(), start.getMonth(), 1); cursor <= finalDay; cursor.setMonth(cursor.getMonth() + 1)) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const activeStart = start > monthStart ? start : monthStart;
+    const activeEnd = finalDay < monthEnd ? finalDay : monthEnd;
+    if (activeEnd >= activeStart) {
+      const activeDays = Math.floor((activeEnd.getTime() - activeStart.getTime()) / 86400000) + 1;
+      total += 1.75 * (activeDays / monthEnd.getDate());
+    }
+  }
+  return Math.round(total * 4) / 4;
+}
+
 function EntityCard({ title, items }: { title: string; items: string[] }) {
   return (
     <Card>
@@ -2024,16 +2298,16 @@ function EntityCard({ title, items }: { title: string; items: string[] }) {
 function DocumentPreview({ html, onClose }: { html: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="h-[86vh] w-full max-w-4xl overflow-hidden">
-        <CardHeader className="flex-row items-center justify-between border-b border-stone-200">
+      <Card className="w-full max-w-2xl overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between border-b border-stone-200 p-4">
           <div>
             <CardTitle>Leave Request Document</CardTitle>
             <CardDescription>Preview of the generated request form.</CardDescription>
           </div>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
         </CardHeader>
-        <CardContent className="h-[calc(86vh-104px)] p-0">
-          <iframe className="h-full w-full bg-white" srcDoc={html} title="Leave request document preview" />
+        <CardContent className="p-0">
+          <iframe className="h-[520px] w-full bg-white" srcDoc={html} title="Leave request document preview" />
         </CardContent>
       </Card>
     </div>
@@ -2085,12 +2359,14 @@ function downloadHtml(html: string, filename: string) {
 function exportCsv(companyName: string, month: string, employees: ProfileRow[], workspace: Workspace) {
   const days = daysInMonth(month);
   const rows = [
-    ["Employee", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left"]
+    ["Employee", "Department", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left"]
   ];
   employees.forEach((employee) => {
     const totals = totalsFor(employee, month, workspace);
+    const department = departmentFor(employee, workspace);
     rows.push([
       employee.full_name,
+      department?.name || "",
       employee.position || ROLES[employee.role],
       ...days.map((day) => {
         const entry = entryFor(workspace.entries, employee.id, day.iso);
