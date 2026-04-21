@@ -167,7 +167,7 @@ module.exports = async function handler(req, res) {
       role,
       identification_number: user.identificationNumber || null,
       position: user.position || null,
-      company_id: role === "payroll_admin" ? null : user.companyId || null,
+      company_id: role === "payroll_admin" ? null : user.companyId || permittedCompanyIds?.[0] || null,
       department_id: ["company_manager", "payroll_admin"].includes(role) ? null : user.departmentId || null,
       reports_to_user_id: user.reportsToId || null,
       team_leader_user_id: user.teamLeaderId || null,
@@ -184,10 +184,10 @@ module.exports = async function handler(req, res) {
     await replacePayrollAccess(
       callerProfile.environment_id,
       userId,
-      role === "payroll_admin" ? Array.from(new Set(permittedCompanyIds || [])) : [],
+      ["payroll_admin", "company_manager"].includes(role) ? Array.from(new Set(permittedCompanyIds || [])) : [],
       caller.id
     );
-    const access = role === "payroll_admin"
+    const access = ["payroll_admin", "company_manager"].includes(role)
       ? await supabaseFetch(`/rest/v1/payroll_company_access?payroll_user_id=eq.${encodeURIComponent(userId)}&select=company_id`)
       : [];
     return send(res, 200, {

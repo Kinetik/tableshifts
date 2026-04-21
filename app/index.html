@@ -117,11 +117,6 @@
         </div>
 
         <nav id="tabs" class="tabs" aria-label="Main tabs"></nav>
-
-        <div class="sidebar-footer">
-          <span>Preview workflow</span>
-          <strong>Test before production</strong>
-        </div>
       </aside>
 
       <div class="app-workspace">
@@ -129,7 +124,7 @@
           <div>
             <p class="eyebrow">TABLESHIFTS</p>
             <h1 id="pageTitle">Timesheet</h1>
-            <p id="sessionLabel" class="session-label"></p>
+            <select id="headerCompanySelect" class="session-label company-title-select" aria-label="Selected company"></select>
           </div>
           <div class="top-user">
             <div id="topIdentity" class="top-identity"></div>
@@ -169,7 +164,7 @@
         </section>
 
         <section id="leaveTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>Leave Requests</h2>
               <p>Request, review, and approve CO or CM days.</p>
@@ -214,7 +209,7 @@
         </section>
 
         <section id="chartsTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>Charts</h2>
               <p>Visual overview for the current visible scope and selected month.</p>
@@ -261,7 +256,7 @@
         </section>
 
         <section id="holidaysTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>National Holidays</h2>
               <p>Set public days off by country, company, and department.</p>
@@ -310,7 +305,7 @@
         </section>
 
         <section id="usersTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>User Management</h2>
               <p>Employees, roles, passwords, and reporting lines.</p>
@@ -356,7 +351,7 @@
               <select id="employeeCompany"></select>
             </label>
             <label class="field">
-              Payroll company access
+              Company access
               <div id="employeeCompanyAccess" class="check-list"></div>
             </label>
             <label class="field">
@@ -382,17 +377,10 @@
           </form>
 
           <div id="usersList" class="directory"></div>
-          <section id="adminDangerZone" class="danger-zone" hidden>
-            <div>
-              <h3>Admin account danger area</h3>
-              <p>Deleting this Admin Account removes its companies, departments, users, timesheets, holidays, leave requests, and logs.</p>
-            </div>
-            <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
-          </section>
         </section>
 
         <section id="adminsTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>Admins</h2>
               <p>Create Payroll Admins and Company Managers separately from employee records.</p>
@@ -409,23 +397,23 @@
               Email
               <input id="adminUserEmail" type="email" autocomplete="off" spellcheck="false" required />
             </label>
-            <label class="field">
+            <label class="field admin-identification-field">
               Identification Number
-              <input id="adminUserIdentification" type="text" required />
+              <input id="adminUserIdentification" type="text" />
             </label>
-            <label class="field">
+            <label class="field admin-position-field">
               Position
-              <input id="adminUserPosition" type="text" required />
+              <input id="adminUserPosition" type="text" />
             </label>
             <label class="field">
               Password
               <input id="adminUserPassword" type="text" required />
             </label>
-            <label class="field">
+            <label class="field admin-date-field">
               Start date
-              <input id="adminUserStartDate" type="date" required />
+              <input id="adminUserStartDate" type="date" />
             </label>
-            <label class="field">
+            <label class="field admin-date-field">
               End date
               <input id="adminUserEndDate" type="date" />
             </label>
@@ -438,7 +426,7 @@
               <select id="adminUserCompany"></select>
             </label>
             <label class="field">
-              Payroll company access
+              Company access
               <div id="adminUserCompanyAccess" class="check-list"></div>
             </label>
             <div class="form-actions">
@@ -448,10 +436,17 @@
           </form>
 
           <div id="adminsList" class="directory"></div>
+          <section id="adminDangerZone" class="danger-zone" hidden>
+            <div>
+              <h3>Admin account danger area</h3>
+              <p>Deleting this Admin Account removes its companies, departments, users, timesheets, holidays, leave requests, and logs.</p>
+            </div>
+            <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
+          </section>
         </section>
 
         <section id="companiesTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>Company Setup</h2>
               <p>Create organizations and initial departments.</p>
@@ -472,6 +467,10 @@
               <input id="companyLogo" type="file" accept="image/*" />
             </label>
             <div id="companyLogoPreview" class="logo-preview" aria-live="polite"></div>
+            <div class="field wide-field">
+              Timesheet colors
+              <div id="companyColorFields" class="color-grid"></div>
+            </div>
             <div class="form-actions">
               <button type="submit">Create Company</button>
             </div>
@@ -485,7 +484,7 @@
         </section>
 
         <section id="departmentsTab" class="tab-panel" hidden>
-          <div class="section-head">
+          <div class="section-head page-intro">
             <div>
               <h2>Department Setup</h2>
               <p>Link departments to companies, leaders, managers, work days, and shift duration.</p>
