@@ -4,16 +4,21 @@ import * as React from "react";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import {
   BarChart3,
+  Bell,
   Building2,
   CalendarDays,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
   Download,
   Eraser,
   Eye,
   FileText,
+  Image as ImageIcon,
   LayoutDashboard,
   LogOut,
   Paintbrush,
+  Palette,
   Plus,
   Save,
   Settings2,
@@ -72,6 +77,22 @@ const nav = [
   { value: "admins", label: "Admins", icon: ShieldCheck, setupOnly: true },
   { value: "settings", label: "Settings", icon: Settings2, setupOnly: true }
 ];
+
+const ENTRY_COLOR_KEYS = [
+  ["vacation", "CO"],
+  ["medical", "CM"],
+  ["overtime", "OT"],
+  ["absence", "AB"],
+  ["special_event", "SE"]
+] as const;
+
+const DEFAULT_ENTRY_COLORS: Record<string, string> = {
+  vacation: "#dcfce7",
+  medical: "#ffe4e6",
+  overtime: "#fef3c7",
+  absence: "#1c1917",
+  special_event: "#e7e5e4"
+};
 
 export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const supabase = React.useMemo<SupabaseClient | null>(() => {
@@ -244,6 +265,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     (departmentFilter === "all" || profile.department_id === departmentFilter || companyDepartments.find((department) => department.id === departmentFilter)?.team_leader_user_id === profile.id)
   ));
   const employees = activeCompany ? filteredEmployees(workspace, activeCompany.id, departmentFilter, teamFilter) : [];
+  const pendingApprovals = visibleLeaveRequests(workspace, activeCompany?.id || "").filter((request) => {
+    const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+    return request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
+  });
   const scopeTotals = employees.reduce(
     (acc, employee) => {
       const totals = totalsFor(employee, month, workspace);
@@ -296,19 +321,27 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 <Badge variant="outline">Development branch</Badge>
               </div>
               <h1 className="text-3xl font-black tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
-              <select
-                className="mt-2 rounded-md border border-stone-200 bg-white px-2 py-1 text-sm font-semibold text-stone-700"
-                value={activeCompany?.id || ""}
-                onChange={(event) => {
-                  setActiveCompanyId(event.target.value);
-                  setDepartmentFilter("all");
-                  setTeamFilter("all");
-                }}
-              >
-                {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </select>
+              <label className="mt-2 inline-flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                Company
+                <select
+                  className="bg-transparent text-sm font-semibold normal-case tracking-normal text-stone-800 outline-none"
+                  value={activeCompany?.id || ""}
+                  onChange={(event) => {
+                    setActiveCompanyId(event.target.value);
+                    setDepartmentFilter("all");
+                    setTeamFilter("all");
+                  }}
+                >
+                  {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                </select>
+              </label>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3">
+              {pendingApprovals.length ? (
+                <Button variant="outline" onClick={() => setActiveTab("leave")}>
+                  <Bell className="h-4 w-4" />{pendingApprovals.length} pending
+                </Button>
+              ) : null}
               <div className="text-right text-sm">
                 <strong className="block">{workspace.profile.full_name}</strong>
                 <span className="text-stone-500">{workspace.profile.position || ROLES[workspace.profile.role]} - {workspace.profile.email}</span>
@@ -1236,6 +1269,11 @@ function CompanyDepartmentManagement({
   const [shiftHours, setShiftHours] = React.useState("8");
   const [managerId, setManagerId] = React.useState("");
   const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [expandedCompanyId, setExpandedCompanyId] = React.useState("");
+  const [editingCompanyName, setEditingCompanyName] = React.useState<Record<string, string>>({});
+  const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
+  const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
+  const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
   const targetCompanyId = departmentCompanyId || workspace.companies[0]?.id || "";
   const companyManagers = workspace.profiles.filter((profile) => (
     ["department_manager", "company_manager"].includes(profile.role) &&
@@ -1245,6 +1283,56 @@ function CompanyDepartmentManagement({
     profile.role === "team_leader" &&
     profile.company_id === targetCompanyId
   ));
+
+  React.useEffect(() => {
+    setExpandedCompanyId((current) => current || workspace.companies[0]?.id || "");
+    setEditingCompanyName((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (next[company.id] === undefined) next[company.id] = company.name;
+      });
+      return next;
+    });
+    setColorDrafts((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (!next[company.id]) next[company.id] = { ...DEFAULT_ENTRY_COLORS, ...(company.entry_colors || {}) };
+      });
+      return next;
+    });
+    setDepartmentDrafts((current) => {
+      const next = { ...current };
+      workspace.departments.forEach((department) => {
+        if (!next[department.id]) {
+          next[department.id] = {
+            name: department.name,
+            manager: department.manager_user_id || "",
+            leader: department.team_leader_user_id || "",
+            hours: String(department.shift_hours || 8),
+            days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+          };
+        }
+      });
+      return next;
+    });
+  }, [workspace.companies, workspace.departments]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadLogos() {
+      if (!supabase) return;
+      const entries = await Promise.all(workspace.companies.map(async (company) => {
+        if (!company.logo_path) return [company.id, ""] as const;
+        const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+        return [company.id, data?.signedUrl || ""] as const;
+      }));
+      if (!cancelled) setLogoUrls(Object.fromEntries(entries));
+    }
+    void loadLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace.companies]);
 
   async function createCompany() {
     if (!supabase || !workspace.profile.environment_id || !companyName.trim()) return;
@@ -1258,6 +1346,39 @@ function CompanyDepartmentManagement({
       return;
     }
     setCompanyName("");
+    onReload();
+  }
+
+  async function updateCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from("companies")
+      .update({
+        name: editingCompanyName[company.id]?.trim() || company.name,
+        entry_colors: colorDrafts[company.id] || company.entry_colors || {}
+      })
+      .eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function uploadCompanyLogo(company: CompanyRow, file: File | null) {
+    if (!supabase || !workspace.profile.environment_id || !file) return;
+    const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+    const path = `${workspace.profile.environment_id}/${company.id}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("company-logos").upload(path, file, { upsert: true });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    const { error: updateError } = await supabase.from("companies").update({ logo_path: path }).eq("id", company.id);
+    if (updateError) {
+      onMessage(updateError.message);
+      return;
+    }
     onReload();
   }
 
@@ -1279,6 +1400,24 @@ function CompanyDepartmentManagement({
     setDepartmentName("");
     setManagerId("");
     setTeamLeaderId("");
+    onReload();
+  }
+
+  async function updateDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const draft = departmentDrafts[department.id];
+    if (!draft) return;
+    const { error } = await supabase.from("departments").update({
+      name: draft.name.trim() || department.name,
+      manager_user_id: draft.manager || null,
+      team_leader_user_id: draft.leader || null,
+      shift_hours: Number(draft.hours || 8),
+      work_days: draft.days.length ? draft.days : [1, 2, 3, 4, 5]
+    }).eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
     onReload();
   }
 
@@ -1360,29 +1499,160 @@ function CompanyDepartmentManagement({
       <Card>
         <CardHeader>
           <CardTitle>Company Hierarchy</CardTitle>
-          <CardDescription>Delete is blocked while child departments or users still exist.</CardDescription>
+          <CardDescription>Expand a company to edit its identity, colors, logo, and departments.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {workspace.companies.map((company) => {
             const departments = workspace.departments.filter((department) => department.company_id === company.id);
             const users = workspace.profiles.filter((profile) => profile.company_id === company.id);
+            const isOpen = expandedCompanyId === company.id;
+            const companyManagerOptions = workspace.profiles.filter((profile) => (
+              ["department_manager", "company_manager"].includes(profile.role) &&
+              (profile.company_id === company.id || companyIdsForProfile(profile, workspace).has(company.id))
+            ));
+            const teamLeaderOptions = workspace.profiles.filter((profile) => profile.role === "team_leader" && profile.company_id === company.id);
+            const colors = colorDrafts[company.id] || DEFAULT_ENTRY_COLORS;
             return (
               <div key={company.id} className="rounded-lg border border-stone-200 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <strong>{company.name}</strong>
-                    <p className="text-sm text-stone-500">{departments.length} departments - {users.length} users</p>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
-                </div>
-                <div className="mt-3 grid gap-2">
-                  {departments.length ? departments.map((department) => (
-                    <div key={department.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-stone-50 p-2 text-sm">
-                      <span><strong>{department.name}</strong> - {formatNumber(Number(department.shift_hours || 8))}h shift</span>
-                      <Button size="sm" variant="outline" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 text-left"
+                  onClick={() => setExpandedCompanyId(isOpen ? "" : company.id)}
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+                      {logoUrls[company.id] ? <img src={logoUrls[company.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
                     </div>
-                  )) : <p className="text-sm font-semibold text-stone-500">No departments yet.</p>}
-                </div>
+                    <div className="min-w-0">
+                      <strong className="block truncate">{company.name}</strong>
+                      <p className="text-sm text-stone-500">{departments.length} departments - {users.length} users</p>
+                    </div>
+                  </div>
+                  {isOpen ? <ChevronDown className="h-5 w-5 text-stone-500" /> : <ChevronRight className="h-5 w-5 text-stone-500" />}
+                </button>
+
+                {isOpen ? (
+                  <div className="mt-4 grid gap-4 border-t border-stone-200 pt-4">
+                    <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
+                      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                        <input
+                          className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold"
+                          value={editingCompanyName[company.id] || company.name}
+                          onChange={(event) => setEditingCompanyName((current) => ({ ...current, [company.id]: event.target.value }))}
+                          placeholder="Company name"
+                        />
+                        <label className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold">
+                          <ImageIcon className="h-4 w-4" />Logo
+                          <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(company, event.target.files?.[0] || null)} />
+                        </label>
+                      </div>
+                      <div className="flex gap-2 xl:justify-end">
+                        <Button variant="outline" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
+                        <Button onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+                      <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-stone-500"><Palette className="h-4 w-4" />Timesheet Colors</p>
+                      <div className="grid gap-2 md:grid-cols-5">
+                        {ENTRY_COLOR_KEYS.map(([key, label]) => (
+                          <label key={key} className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                            {label}
+                            <div className="flex h-9 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                              <input
+                                className="h-5 w-7 border-0 bg-transparent p-0"
+                                type="color"
+                                value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                                onChange={(event) => setColorDrafts((current) => ({
+                                  ...current,
+                                  [company.id]: { ...(current[company.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                                }))}
+                              />
+                              <input
+                                className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
+                                value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                                onChange={(event) => setColorDrafts((current) => ({
+                                  ...current,
+                                  [company.id]: { ...(current[company.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                                }))}
+                              />
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-2">
+                      {departments.length ? departments.map((department) => {
+                        const draft = departmentDrafts[department.id] || {
+                          name: department.name,
+                          manager: department.manager_user_id || "",
+                          leader: department.team_leader_user_id || "",
+                          hours: String(department.shift_hours || 8),
+                          days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+                        };
+                        return (
+                          <div key={department.id} className="grid gap-2 rounded-md bg-stone-50 p-3 text-sm">
+                            <div className="grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_90px_auto]">
+                              <input
+                                className="h-9 rounded-md border border-stone-200 px-2 font-semibold"
+                                value={draft.name}
+                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
+                              />
+                              <select
+                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
+                                value={draft.manager}
+                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
+                              >
+                                <option value="">No manager</option>
+                                {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                              </select>
+                              <select
+                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
+                                value={draft.leader}
+                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
+                              >
+                                <option value="">No team leader</option>
+                                {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                              </select>
+                              <input
+                                className="h-9 rounded-md border border-stone-200 px-2 font-semibold"
+                                value={draft.hours}
+                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
+                                type="number"
+                                min="1"
+                                max="24"
+                                step="0.25"
+                              />
+                              <div className="flex gap-2 lg:justify-end">
+                                <Button size="sm" variant="outline" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                                <Button size="sm" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => (
+                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold">
+                                  <input
+                                    type="checkbox"
+                                    checked={draft.days.includes(index)}
+                                    onChange={(event) => setDepartmentDrafts((current) => ({
+                                      ...current,
+                                      [department.id]: {
+                                        ...draft,
+                                        days: event.target.checked ? Array.from(new Set([...draft.days, index])).sort() : draft.days.filter((value) => value !== index)
+                                      }
+                                    }))}
+                                  />
+                                  {day}
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }) : <p className="text-sm font-semibold text-stone-500">No departments yet.</p>}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -1445,7 +1715,7 @@ function AccountManagement({
 
   React.useEffect(() => {
     if (!departmentId) return;
-    if (selectedDepartment?.manager_user_id && !reportsToId) setReportsToId(selectedDepartment.manager_user_id);
+    if (selectedDepartment?.manager_user_id && !reportsToId && ["employee", "team_leader"].includes(role)) setReportsToId(selectedDepartment.manager_user_id);
     if (role === "employee" && !teamLeaderId) {
       const leadersInDepartment = workspace.profiles.filter((profile) => (
         profile.role === "team_leader" &&
@@ -1457,6 +1727,31 @@ function AccountManagement({
     }
     if (role !== "employee") setTeamLeaderId("");
   }, [companyId, departmentId, reportsToId, role, selectedDepartment, teamLeaderId, workspace.profiles]);
+
+  function applyDepartmentDefaults(nextDepartmentId: string) {
+    setDepartmentId(nextDepartmentId);
+    const department = workspace.departments.find((item) => item.id === nextDepartmentId);
+    if (!department) {
+      setReportsToId("");
+      setTeamLeaderId("");
+      return;
+    }
+    if (["employee", "team_leader"].includes(role)) {
+      setReportsToId(department.manager_user_id || "");
+    }
+    if (role === "department_manager") {
+      const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
+      setReportsToId(companyManager?.id || "");
+      setTeamLeaderId("");
+      return;
+    }
+    if (role === "employee") {
+      const leaders = workspace.profiles.filter((profile) => profile.role === "team_leader" && profile.company_id === companyId && profile.department_id === nextDepartmentId);
+      setTeamLeaderId(department.team_leader_user_id || (leaders.length === 1 ? leaders[0].id : ""));
+    } else {
+      setTeamLeaderId("");
+    }
+  }
 
   function resetForm() {
     setEditingId("");
@@ -1578,7 +1873,19 @@ function AccountManagement({
         </CardHeader>
         <CardContent className="grid gap-3">
           <div className="grid gap-3 md:grid-cols-3">
-            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={role} onChange={(event) => setRole(event.target.value)}>
+            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={role} onChange={(event) => {
+              const nextRole = event.target.value;
+              setRole(nextRole);
+              if (nextRole !== "employee") setTeamLeaderId("");
+              if (departmentId) {
+                const department = workspace.departments.find((item) => item.id === departmentId);
+                if (["employee", "team_leader"].includes(nextRole)) setReportsToId(department?.manager_user_id || "");
+                if (nextRole === "department_manager") {
+                  const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
+                  setReportsToId(companyManager?.id || "");
+                }
+              }
+            }}>
               {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
             </select>
             <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={name} onChange={(event) => setName(event.target.value)} placeholder="Name" />
@@ -1606,7 +1913,7 @@ function AccountManagement({
                 }}>
                   {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                 </select>
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={departmentId} onChange={(event) => setDepartmentId(event.target.value)}>
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
                   <option value="">No department</option>
                   {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                 </select>
