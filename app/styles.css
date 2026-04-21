@@ -1029,6 +1029,10 @@ main:focus-visible {
   margin-bottom: 16px;
 }
 
+.page-intro {
+  display: none;
+}
+
 .section-head.compact {
   margin-bottom: 10px;
 }

@@ -377,7 +377,10 @@
       prefillReporting();
     });
     el.employeeDepartment.addEventListener("change", prefillReporting);
-    el.employeeRole.addEventListener("change", syncCompanyAccessVisibility);
+    el.employeeRole.addEventListener("change", () => {
+      syncCompanyAccessVisibility();
+      prefillReporting();
+    });
     el.employeeStartDate.addEventListener("change", updateCoEntitlementFromDates);
     el.employeeEndDate.addEventListener("change", updateCoEntitlementFromDates);
     el.adminUserForm.addEventListener("submit", saveAdminUser);
@@ -1915,6 +1918,7 @@
   function syncCompanyAccessVisibility() {
     const isPayroll = el.employeeRole.value === "payroll_admin";
     el.employeeCompanyAccess.closest(".field").hidden = !isPayroll;
+    el.employeeTeamLeader.closest(".field").hidden = ["team_leader", "department_manager"].includes(el.employeeRole.value);
     if (isPayroll && !selectedCompanyAccess().length && el.employeeCompany.value) {
       el.employeeCompanyAccess.querySelectorAll("input").forEach((input) => {
         input.checked = input.value === el.employeeCompany.value;
@@ -2073,22 +2077,42 @@
   function fillReportingOptions() {
     const companyId = el.employeeCompany.value || session.activeCompanyId;
     const departmentId = el.employeeDepartment.value;
-    const managers = users().filter((user) => ["department_manager", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId));
+    const role = el.employeeRole.value;
+    const managerRoles = role === "team_leader" ? ["department_manager"] : ["department_manager", "company_manager"];
+    let managers = users().filter((user) => managerRoles.includes(user.role) && companyIdsForUser(user).has(companyId));
+    if (departmentId && role !== "department_manager") {
+      managers = managers.filter((user) => user.role === "company_manager" || user.departmentId === departmentId);
+    }
     const leaders = users()
-      .filter((user) => ["team_leader", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId))
-      .filter((user) => !departmentId || user.role === "company_manager" || user.departmentId === departmentId);
+      .filter((user) => user.role === "team_leader" && user.companyId === companyId)
+      .filter((user) => !departmentId || user.departmentId === departmentId);
     el.employeeReportsTo.innerHTML = option("", "None") + managers.map((user) => option(user.id, user.name)).join("");
     el.employeeTeamLeader.innerHTML = option("", "None") + leaders.map((user) => option(user.id, user.name)).join("");
   }
 
   function prefillReporting() {
     fillReportingOptions();
+    const role = el.employeeRole.value;
     const department = departmentById(el.employeeDepartment.value);
     const companyManager = users().find((user) => user.role === "company_manager" && companyIdsForUser(user).has(el.employeeCompany.value));
-    if (department) {
-      el.employeeReportsTo.value = department.managerId || companyManager?.id || "";
-      el.employeeTeamLeader.value = department.teamLeaderId || companyManager?.id || "";
+    if (role === "department_manager") {
+      el.employeeReportsTo.value = companyManager?.id || "";
+      el.employeeTeamLeader.value = "";
+      return;
     }
+    if (!department) {
+      el.employeeReportsTo.value = "";
+      el.employeeTeamLeader.value = "";
+      return;
+    }
+    if (role === "team_leader") {
+      el.employeeReportsTo.value = department.managerId || "";
+      el.employeeTeamLeader.value = "";
+      return;
+    }
+    el.employeeReportsTo.value = department.managerId || "";
+    const leaders = users().filter((user) => user.role === "team_leader" && user.companyId === el.employeeCompany.value && user.departmentId === department.id);
+    el.employeeTeamLeader.value = leaders.length === 1 ? leaders[0].id : "";
   }
 
   async function saveEmployee(event) {
