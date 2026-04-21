@@ -1933,7 +1933,7 @@
         ? user.adminOwnerId === activeAdminId()
         : [...companyIdsForUser(user)].some((companyId) => companyIds.has(companyId));
     });
-    el.adminsList.innerHTML = list.length ? list.map((user) => userCard(user)).join("") : `<p class="hint">No admin users yet.</p>`;
+    el.adminsList.innerHTML = list.length ? list.map((user) => adminUserCard(user)).join("") : `<p class="hint">No admin users yet.</p>`;
     el.adminsList.querySelectorAll("[data-edit-user]").forEach((button) => {
       button.addEventListener("click", () => editAdminUser(button.dataset.editUser));
     });
@@ -1960,6 +1960,11 @@
     const usesCompanyAccess = ["payroll_admin", "company_manager"].includes(el.adminUserRole.value);
     el.adminUserCompany.closest(".field").hidden = usesCompanyAccess;
     el.adminUserCompanyAccess.closest(".field").hidden = !usesCompanyAccess;
+    el.adminUserPosition.closest(".field").hidden = usesCompanyAccess;
+    el.adminUserPosition.required = !usesCompanyAccess;
+    if (usesCompanyAccess) {
+      el.adminUserPosition.value = ROLES[el.adminUserRole.value];
+    }
     if (usesCompanyAccess && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
       el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
         input.checked = input.value === session.activeCompanyId;
@@ -1981,7 +1986,7 @@
       name: clean(el.adminUserName.value),
       email: clean(el.adminUserEmail.value).toLowerCase(),
       identificationNumber: clean(el.adminUserIdentification.value),
-      position: clean(el.adminUserPosition.value),
+      position: ["payroll_admin", "company_manager"].includes(role) ? ROLES[role] : clean(el.adminUserPosition.value),
       password: el.adminUserPassword.value,
       startDate: el.adminUserStartDate.value,
       endDate: el.adminUserEndDate.value,
@@ -1995,8 +2000,8 @@
       permittedCompanyIds: ["payroll_admin", "company_manager"].includes(role) ? selectedAdminCompanyAccess() : [],
       createdAt: existing?.createdAt || new Date().toISOString()
     };
-    if (!user.name || !user.email || !user.identificationNumber || !user.position || !user.password || !user.startDate) {
-      window.alert("Name, email, identification number, position, password, and start date are required.");
+    if (!user.name || !user.email || !user.identificationNumber || !user.password || !user.startDate) {
+      window.alert("Name, email, identification number, password, and start date are required.");
       return;
     }
     if (["payroll_admin", "company_manager"].includes(role) && !user.permittedCompanyIds.length) {
@@ -2265,12 +2270,33 @@
     </article>`;
   }
 
+  function adminUserCard(user) {
+    const companies = accessibleCompanyNamesForUser(user);
+    return `<article class="directory-row">
+      <div><strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(user.email || "")} - ${escapeHtml(user.identificationNumber || "")}</span></div>
+      <div><span>${ROLES[user.role]} - ${companies || "No companies assigned"}</span></div>
+      <div class="row-actions">
+        <button type="button" class="secondary" data-edit-user="${user.id}">Edit</button>
+        <button type="button" class="danger" data-delete-user="${user.id}">Delete</button>
+      </div>
+    </article>`;
+  }
+
+  function accessibleCompanyNamesForUser(user) {
+    const companyIds = companyIdsForUser(user);
+    return db.companies
+      .filter((company) => companyIds.has(company.id))
+      .map((company) => escapeHtml(company.name))
+      .join(", ");
+  }
+
   function renderCompanySetup() {
     el.companiesList.innerHTML = accessibleCompanies().map((company) => {
       const companyDepartments = departments().filter((department) => department.companyId === company.id);
       const companyUsers = users().filter((user) => user.companyId === company.id);
-      return `<details class="hierarchy-company" open>
+      return `<details class="hierarchy-company">
         <summary>
+          <span class="expand-indicator" aria-hidden="true"></span>
           <span class="company-row-title">
             ${company.logo?.dataUrl ? `<img src="${escapeAttr(company.logo.dataUrl)}" alt="${escapeAttr(company.name)} logo" />` : ""}
             <span><strong>${escapeHtml(company.name)}</strong><em>${companyDepartments.length} departments - ${companyUsers.length} users</em></span>
@@ -2361,6 +2387,7 @@
     const people = users().filter((user) => user.departmentId === department.id);
     return `<details class="hierarchy-department">
       <summary>
+        <span class="expand-indicator" aria-hidden="true"></span>
         <span><strong>${escapeHtml(department.name)}</strong><em>${people.length} users - ${department.shiftHours}h shift</em></span>
         <span class="row-actions">
           <button type="button" class="secondary mini" data-edit-dept="${department.id}">Edit</button>

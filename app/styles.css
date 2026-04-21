@@ -1070,9 +1070,9 @@ main:focus-visible {
 
 .hierarchy-company > summary,
 .hierarchy-department > summary {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
   cursor: pointer;
@@ -1080,7 +1080,21 @@ main:focus-visible {
 
 .hierarchy-company summary::marker,
 .hierarchy-department summary::marker {
-  color: var(--accent);
+  content: "";
+}
+
+.expand-indicator {
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg);
+  transition: transform 160ms ease;
+}
+
+.hierarchy-company[open] > summary .expand-indicator,
+.hierarchy-department[open] > summary .expand-indicator {
+  transform: rotate(45deg);
 }
 
 .hierarchy-company em,
@@ -1207,34 +1221,34 @@ main:focus-visible {
 
 .color-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(6, minmax(84px, 1fr));
+  gap: 6px;
 }
 
 .color-grid label {
   display: grid;
-  grid-template-columns: 1fr 38px;
+  grid-template-columns: 1fr 26px;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 7px 8px;
+  padding: 4px 6px;
   background: #ffffff;
-  font-size: 0.78rem;
+  font-size: 0.68rem;
   font-weight: 900;
 }
 
 .color-grid input[type="color"] {
-  width: 38px;
-  min-height: 28px;
-  height: 28px;
+  width: 26px;
+  min-height: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   background: transparent;
 }
 
 .compact-colors {
-  grid-template-columns: repeat(6, minmax(90px, 1fr));
+  grid-template-columns: repeat(6, minmax(76px, 1fr));
 }
 
 .logo-preview,
