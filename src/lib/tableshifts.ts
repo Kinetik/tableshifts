@@ -201,6 +201,42 @@ export function visibleEmployees(workspace: Workspace, activeCompanyId: string) 
   return list.toSorted((a, b) => a.full_name.localeCompare(b.full_name));
 }
 
+export function filteredEmployees(
+  workspace: Workspace,
+  activeCompanyId: string,
+  departmentId: string,
+  teamLeaderId: string
+) {
+  let list = visibleEmployees(workspace, activeCompanyId);
+  if (departmentId !== "all") {
+    list = list.filter((profile) => profile.department_id === departmentId);
+  }
+  if (teamLeaderId !== "all") {
+    const leader = workspace.profiles.find((profile) => profile.id === teamLeaderId);
+    list = list.filter((profile) => profile.id === teamLeaderId || (leader ? isEmployeeInLeaderTeam(profile, leader, workspace.departments) : false));
+  }
+  return list;
+}
+
+export function canEditEmployee(currentUser: ProfileRow, employee: ProfileRow, workspace: Workspace) {
+  if (["admin_account", "payroll_admin"].includes(currentUser.role)) return false;
+  if (currentUser.role === "company_manager") {
+    const ids = companyIdsForUser(currentUser, workspace.access);
+    return Boolean(employee.company_id && ids.has(employee.company_id));
+  }
+  if (currentUser.role === "department_manager") {
+    return employee.department_id === currentUser.department_id || employee.reports_to_user_id === currentUser.id;
+  }
+  if (currentUser.role === "team_leader") {
+    return employee.id === currentUser.id || isEmployeeInLeaderTeam(employee, currentUser, workspace.departments);
+  }
+  return employee.id === currentUser.id;
+}
+
+export function departmentFor(employee: ProfileRow, workspace: Workspace) {
+  return workspace.departments.find((department) => department.id === employee.department_id) || null;
+}
+
 export function holidayForEmployee(employee: ProfileRow, iso: string, workspace: Workspace) {
   return workspace.holidays.find((holiday) => {
     const companyMatches = !holiday.company_id || holiday.company_id === employee.company_id;
@@ -263,4 +299,3 @@ export function totalsFor(employee: ProfileRow, month: string, workspace: Worksp
 export function formatNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
-

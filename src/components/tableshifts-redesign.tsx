@@ -8,10 +8,13 @@ import {
   CalendarDays,
   ClipboardCheck,
   Download,
+  Eraser,
   LayoutDashboard,
   LogOut,
+  Paintbrush,
   Settings2,
   ShieldCheck,
+  SlidersHorizontal,
   UsersRound
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +34,13 @@ import {
   type ProfileRow,
   type Workspace,
   accessibleCompanies,
+  canEditEmployee,
   currentMonth,
   daysInMonth,
+  departmentFor,
   entryFor,
   formatNumber,
+  filteredEmployees,
   holidayForEmployee,
   isExpectedWorkDay,
   monthOptions,
@@ -75,11 +81,14 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
   const [activeTab, setActiveTab] = React.useState("timesheet");
   const [activeCompanyId, setActiveCompanyId] = React.useState("");
+  const [departmentFilter, setDepartmentFilter] = React.useState("all");
+  const [teamFilter, setTeamFilter] = React.useState("all");
   const [month, setMonth] = React.useState(currentMonth());
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
+  const [editor, setEditor] = React.useState<{ employee: ProfileRow; iso: string } | null>(null);
 
   const loadWorkspace = React.useCallback(async (user: User) => {
     if (!supabase) return;
@@ -219,7 +228,13 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
   const setupAllowed = ["admin_account", "payroll_admin"].includes(workspace.profile.role);
   const visibleNav = nav.filter((item) => !item.setupOnly || setupAllowed);
-  const employees = activeCompany ? visibleEmployees(workspace, activeCompany.id) : [];
+  const companyDepartments = workspace.departments.filter((department) => department.company_id === activeCompany?.id);
+  const companyTeamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === activeCompany?.id &&
+    (departmentFilter === "all" || profile.department_id === departmentFilter || companyDepartments.find((department) => department.id === departmentFilter)?.team_leader_user_id === profile.id)
+  ));
+  const employees = activeCompany ? filteredEmployees(workspace, activeCompany.id, departmentFilter, teamFilter) : [];
   const monthDays = daysInMonth(month);
   const scopeTotals = employees.reduce(
     (acc, employee) => {
@@ -275,7 +290,11 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               <select
                 className="mt-2 rounded-md border border-stone-200 bg-white px-2 py-1 text-sm font-semibold text-stone-700"
                 value={activeCompany?.id || ""}
-                onChange={(event) => setActiveCompanyId(event.target.value)}
+                onChange={(event) => {
+                  setActiveCompanyId(event.target.value);
+                  setDepartmentFilter("all");
+                  setTeamFilter("all");
+                }}
               >
                 {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
@@ -311,6 +330,37 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
               <TabsContent value="timesheet">
+                <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 lg:grid-cols-[1fr_1fr_auto]">
+                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                    Department
+                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentFilter} onChange={(event) => {
+                      setDepartmentFilter(event.target.value);
+                      setTeamFilter("all");
+                    }}>
+                      <option value="all">All departments</option>
+                      {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                    Team Leader
+                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamFilter} onChange={(event) => {
+                      const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
+                      setTeamFilter(event.target.value);
+                      if (leader?.department_id) setDepartmentFilter(leader.department_id);
+                    }}>
+                      <option value="all">All team leaders</option>
+                      {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
+                    </select>
+                  </label>
+                  <div className="flex items-end">
+                    <Button variant="outline" className="w-full lg:w-auto" onClick={() => {
+                      setDepartmentFilter("all");
+                      setTeamFilter("all");
+                    }}>
+                      <SlidersHorizontal className="h-4 w-4" /> Reset filters
+                    </Button>
+                  </div>
+                </div>
                 <div className="mb-4 grid gap-3 md:grid-cols-5">
                   <SummaryCard label="People" value={String(employees.length)} hint="visible scope" />
                   <SummaryCard label="Worked" value={`${formatNumber(scopeTotals.worked)}h`} hint="month total" />
@@ -318,7 +368,14 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                   <SummaryCard label="Leave" value={`${scopeTotals.co} CO / ${scopeTotals.cm} CM`} hint={`${scopeTotals.se} special events`} />
                   <SummaryCard label="Diff" value={`${scopeDifference > 0 ? "+" : ""}${formatNumber(scopeDifference)}h`} hint="worked vs norm" accent={scopeDifference < 0 ? "bad" : "good"} />
                 </div>
-                <TimesheetTable month={month} workspace={workspace} employees={employees} />
+                <TimesheetTable
+                  month={month}
+                  workspace={workspace}
+                  employees={employees}
+                  onEdit={(employee, iso) => setEditor({ employee, iso })}
+                  onFill={(employee) => void fillNormalTime(employee)}
+                  onClear={(employee) => void clearEmployeeMonth(employee)}
+                />
               </TabsContent>
 
               <TabsContent value="leave">
@@ -336,8 +393,67 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </div>
         </section>
       </div>
+      {editor ? (
+        <EntryEditor
+          editor={editor}
+          workspace={workspace}
+          month={month}
+          supabase={supabase}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null);
+            if (authUser) void loadWorkspace(authUser);
+          }}
+          onMessage={setMessage}
+        />
+      ) : null}
     </main>
   );
+
+  async function fillNormalTime(employee: ProfileRow) {
+    const currentWorkspace = workspace;
+    if (!supabase || !activeCompany || !currentWorkspace?.profile.environment_id) return;
+    const normal = normalHours(employee, currentWorkspace);
+    const rows = daysInMonth(month)
+      .filter((day) => isExpectedWorkDay(employee, day.iso, day.weekdayIndex, currentWorkspace))
+      .filter((day) => !entryFor(currentWorkspace.entries, employee.id, day.iso))
+      .map((day) => ({
+        environment_id: currentWorkspace.profile.environment_id,
+        company_id: activeCompany.id,
+        employee_user_id: employee.id,
+        department_id: employee.department_id,
+        work_date: day.iso,
+        type: "normal",
+        hours: normal,
+        created_by: currentWorkspace.profile.id,
+        updated_by: currentWorkspace.profile.id
+      }));
+    if (!rows.length) return;
+    const { error } = await supabase.from("timesheet_entries").upsert(rows, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
+  async function clearEmployeeMonth(employee: ProfileRow) {
+    if (!supabase) return;
+    const confirmed = window.confirm(`Clear all entries for ${employee.full_name} in ${month}?`);
+    if (!confirmed) return;
+    const range = monthRange(month);
+    const { error } = await supabase
+      .from("timesheet_entries")
+      .delete()
+      .eq("employee_user_id", employee.id)
+      .gte("work_date", range.start)
+      .lte("work_date", range.end);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
 }
 
 async function waitForProfile(supabase: SupabaseClient, userId: string) {
@@ -362,7 +478,21 @@ function SummaryCard({ label, value, hint, accent }: { label: string; value: str
   );
 }
 
-function TimesheetTable({ month, workspace, employees }: { month: string; workspace: Workspace; employees: ProfileRow[] }) {
+function TimesheetTable({
+  month,
+  workspace,
+  employees,
+  onEdit,
+  onFill,
+  onClear
+}: {
+  month: string;
+  workspace: Workspace;
+  employees: ProfileRow[];
+  onEdit: (employee: ProfileRow, iso: string) => void;
+  onFill: (employee: ProfileRow) => void;
+  onClear: (employee: ProfileRow) => void;
+}) {
   const days = daysInMonth(month);
   return (
     <Card className="overflow-hidden">
@@ -377,7 +507,7 @@ function TimesheetTable({ month, workspace, employees }: { month: string; worksp
                   <span className="text-[11px] font-bold text-stone-500">{day.weekday}</span>
                 </th>
               ))}
-              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE"].map((label) => (
+              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "Actions"].map((label) => (
                 <th key={label} className="border-l border-stone-200 px-3 py-3 text-center font-black">{label}</th>
               ))}
             </tr>
@@ -391,7 +521,7 @@ function TimesheetTable({ month, workspace, employees }: { month: string; worksp
                     <strong className="block text-base">{employee.full_name}</strong>
                     <span className="text-xs font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
                   </td>
-                  {days.map((day) => <EntryCell key={day.iso} employee={employee} day={day} workspace={workspace} />)}
+                  {days.map((day) => <EntryCell key={day.iso} employee={employee} day={day} workspace={workspace} onEdit={onEdit} />)}
                   <td className="border-l border-stone-200 px-3 text-center font-black">{formatNumber(totals.worked)}h</td>
                   <td className="border-l border-stone-200 px-3 text-center font-black">{formatNumber(totals.expected)}h</td>
                   <td className={cn("border-l border-stone-200 px-3 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
@@ -401,6 +531,12 @@ function TimesheetTable({ month, workspace, employees }: { month: string; worksp
                   <td className="border-l border-stone-200 px-3 text-center font-black">{totals.vacationDays}d</td>
                   <td className="border-l border-stone-200 px-3 text-center font-black">{totals.medicalDays}d</td>
                   <td className="border-l border-stone-200 px-3 text-center font-black">{totals.specialEventDays}d</td>
+                  <td className="border-l border-stone-200 px-2 text-center">
+                    <div className="flex justify-center gap-1">
+                      <Button size="sm" onClick={() => onFill(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Fill</Button>
+                      <Button size="sm" variant="outline" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
+                    </div>
+                  </td>
                 </tr>
               );
             }) : (
@@ -415,7 +551,17 @@ function TimesheetTable({ month, workspace, employees }: { month: string; worksp
   );
 }
 
-function EntryCell({ employee, day, workspace }: { employee: ProfileRow; day: ReturnType<typeof daysInMonth>[number]; workspace: Workspace }) {
+function EntryCell({
+  employee,
+  day,
+  workspace,
+  onEdit
+}: {
+  employee: ProfileRow;
+  day: ReturnType<typeof daysInMonth>[number];
+  workspace: Workspace;
+  onEdit: (employee: ProfileRow, iso: string) => void;
+}) {
   const entry = entryFor(workspace.entries, employee.id, day.iso);
   const holiday = holidayForEmployee(employee, day.iso, workspace);
   const expected = isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace);
@@ -423,11 +569,146 @@ function EntryCell({ employee, day, workspace }: { employee: ProfileRow; day: Re
   const code = entry ? ENTRY_LABELS[entry.type] || entry.type : holiday ? "H" : "";
   const detail = entry ? entryDetail(entry, normal) : "";
   const tooltip = entry ? entryTooltip(entry, normal) : holiday?.name || (expected ? "Expected working day" : "Non-working day");
+  const editable = canEditEmployee(workspace.profile, employee, workspace);
   return (
-    <td title={tooltip} className={cn("border-l border-stone-200 px-1 py-2 text-center", cellClass(entry?.type, Boolean(holiday), expected))}>
+    <td title={tooltip} className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected))}>
+      <button
+        type="button"
+        className={cn("min-h-12 w-full px-1 py-2 text-center", editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-500" : "cursor-default")}
+        onClick={() => editable && onEdit(employee, day.iso)}
+        disabled={!editable}
+      >
       <span className="block font-black">{code}</span>
       <span className="text-xs text-stone-500">{detail}</span>
+      </button>
     </td>
+  );
+}
+
+function EntryEditor({
+  editor,
+  workspace,
+  month,
+  supabase,
+  onClose,
+  onSaved,
+  onMessage
+}: {
+  editor: { employee: ProfileRow; iso: string };
+  workspace: Workspace;
+  month: string;
+  supabase: SupabaseClient | null;
+  onClose: () => void;
+  onSaved: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const existing = entryFor(workspace.entries, editor.employee.id, editor.iso);
+  const department = departmentFor(editor.employee, workspace);
+  const normal = normalHours(editor.employee, workspace);
+  const [type, setType] = React.useState(existing?.type || "normal");
+  const [hours, setHours] = React.useState(String(existing?.hours ?? normal));
+  const extra = Math.max(0, Number(hours || 0) - normal);
+
+  function quick(nextType: string) {
+    setType(nextType);
+    if (nextType === "normal" || nextType === "weekend") setHours(String(normal));
+    if (nextType === "overtime") setHours(String(normal + 2));
+    if (["vacation", "medical", "special_event", "absence"].includes(nextType)) setHours("0");
+  }
+
+  async function save() {
+    if (!supabase || !workspace.profile.environment_id || !editor.employee.company_id) return;
+    let nextHours = Number(hours || 0);
+    if (!Number.isFinite(nextHours)) nextHours = 0;
+    if (type === "overtime" && nextHours < normal) nextHours = normal;
+    const { error } = await supabase.from("timesheet_entries").upsert({
+      environment_id: workspace.profile.environment_id,
+      company_id: editor.employee.company_id,
+      employee_user_id: editor.employee.id,
+      department_id: editor.employee.department_id,
+      work_date: editor.iso,
+      type,
+      hours: nextHours,
+      updated_by: workspace.profile.id,
+      created_by: workspace.profile.id
+    }, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onSaved();
+  }
+
+  async function clear() {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from("timesheet_entries")
+      .delete()
+      .eq("employee_user_id", editor.employee.id)
+      .eq("work_date", editor.iso);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
+      <Card className="w-full max-w-2xl">
+        <CardHeader className="border-b border-stone-200">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>{editor.employee.full_name}</CardTitle>
+              <CardDescription>{editor.iso} - {department?.name || "No department"} - normal shift {formatNumber(normal)}h</CardDescription>
+            </div>
+            <Button variant="outline" onClick={onClose}>Close</Button>
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4 pt-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              ["normal", "Normal"],
+              ["overtime", "OT"],
+              ["vacation", "CO"],
+              ["medical", "CM"],
+              ["special_event", "SE"],
+              ["absence", "Absence"],
+              ["weekend", "Weekend"]
+            ].map(([value, label]) => (
+              <Button key={value} variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="grid gap-1 text-sm font-semibold">
+              Type
+              <select className="h-11 rounded-md border border-stone-200 bg-white px-3" value={type} onChange={(event) => quick(event.target.value)}>
+                <option value="normal">Normal</option>
+                <option value="overtime">Overtime</option>
+                <option value="vacation">Vacation CO</option>
+                <option value="medical">Medical CM</option>
+                <option value="special_event">Special Event</option>
+                <option value="absence">Absence</option>
+                <option value="weekend">Weekend</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              Total hours
+              <input className="h-11 rounded-md border border-stone-200 px-3" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
+            </label>
+          </div>
+          <p className="rounded-md bg-stone-50 p-3 text-sm font-semibold text-stone-600">
+            {type === "overtime"
+              ? `This records ${formatNumber(normal)}h normal time and ${formatNumber(extra)}h overtime.`
+              : "Holiday entries stay controlled from setup; this popup records employee day activity."}
+          </p>
+          <div className="flex flex-wrap justify-between gap-2">
+            <Button variant="outline" onClick={clear}><Eraser className="h-4 w-4" />Clear entry</Button>
+            <Button onClick={save}><Paintbrush className="h-4 w-4" />Save entry</Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
