@@ -13,9 +13,11 @@ import {
   LayoutDashboard,
   LogOut,
   Paintbrush,
+  Plus,
   Settings2,
   ShieldCheck,
   SlidersHorizontal,
+  Trash2,
   UsersRound
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -394,7 +396,15 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 />
               ) : null}
 
-              {["companies", "employees", "admins", "settings"].includes(activeTab) ? <Management workspace={workspace} /> : null}
+              {["companies", "employees", "admins", "settings"].includes(activeTab) ? (
+                <Management
+                  workspace={workspace}
+                  activeTab={activeTab}
+                  supabase={supabase}
+                  onReload={() => authUser && loadWorkspace(authUser)}
+                  onMessage={setMessage}
+                />
+              ) : null}
           </div>
         </section>
       </div>
@@ -505,21 +515,41 @@ function TimesheetTable({
   const days = daysInMonth(month);
   const compactColumns = ["Worked", "More"];
   const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "More", "Fill", "Clear"];
+  const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
+  const fixedCompactWidth = 176 + totalsColumns.length * 68;
+  const expandedMinWidth = 188 + days.length * 38 + totalsColumns.length * 74;
   return (
     <Card className="overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1120px] table-fixed border-collapse text-sm">
+      <div className={cn(totalsExpanded ? "overflow-x-auto" : "overflow-hidden")}>
+        <table
+          className={cn("w-full table-fixed border-collapse text-xs", totalsExpanded && "min-w-max")}
+          style={totalsExpanded ? { minWidth: `${expandedMinWidth}px` } : undefined}
+        >
+          <colgroup>
+            <col style={{ width: totalsExpanded ? "188px" : "176px" }} />
+            {days.map((day) => (
+              <col
+                key={day.iso}
+                style={totalsExpanded ? { width: "38px" } : { width: `calc((100% - ${fixedCompactWidth}px) / ${days.length})` }}
+              />
+            ))}
+            {totalsColumns.map((label) => (
+              <col key={label} style={{ width: totalsExpanded ? "74px" : "68px" }} />
+            ))}
+          </colgroup>
           <thead>
             <tr className="border-b border-stone-200 bg-stone-50">
-              <th className="sticky left-0 z-10 w-52 bg-stone-50 px-4 py-3 text-left font-black">Employee</th>
+              <th className="sticky left-0 z-10 bg-stone-50 px-3 py-2 text-left font-black">Employee</th>
               {days.map((day) => (
-                <th key={day.iso} className="w-10 border-l border-stone-200 px-1 py-2 text-center">
-                  <span className="block text-base font-black">{day.day}</span>
-                  <span className="text-[11px] font-bold text-stone-500">{day.weekday}</span>
+                <th key={day.iso} className="border-l border-stone-200 px-0.5 py-1.5 text-center">
+                  <span className="block text-sm font-black leading-tight">{day.day}</span>
+                  <span className="text-[10px] font-bold leading-tight text-stone-500">{day.weekday.slice(0, 3)}</span>
                 </th>
               ))}
-              {(totalsExpanded ? expandedColumns : compactColumns).map((label) => (
-                <th key={label} className="w-20 border-l border-stone-200 px-2 py-3 text-center font-black">{label}</th>
+              {totalsColumns.map((label) => (
+                <th key={label} className="border-l border-stone-200 px-1 py-2 text-center font-black">
+                  {label === "More" && totalsExpanded ? "Less" : label}
+                </th>
               ))}
             </tr>
           </thead>
@@ -528,26 +558,26 @@ function TimesheetTable({
               const totals = totalsFor(employee, month, workspace);
               return (
                 <tr key={employee.id} className="border-b border-stone-200 hover:bg-stone-50/60">
-                  <td className="sticky left-0 z-10 bg-white px-4 py-3">
-                    <strong className="block text-base">{employee.full_name}</strong>
-                    <span className="text-xs font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
+                  <td className="sticky left-0 z-10 bg-white px-3 py-2">
+                    <strong className="block truncate text-sm">{employee.full_name}</strong>
+                    <span className="block truncate text-[11px] font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
                   </td>
                   {days.map((day) => <EntryCell key={day.iso} employee={employee} day={day} workspace={workspace} onEdit={onEdit} />)}
-                  <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.worked)}h</td>
+                  <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
                   {totalsExpanded ? (
                     <>
-                      <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.expected)}h</td>
-                      <td className={cn("border-l border-stone-200 px-2 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.expected)}h</td>
+                      <td className={cn("border-l border-stone-200 px-1 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
                         {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
                       </td>
-                      <td className="border-l border-stone-200 px-2 text-center font-black">{formatNumber(totals.overtime)}h</td>
-                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.vacationDays}d</td>
-                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.medicalDays}d</td>
-                      <td className="border-l border-stone-200 px-2 text-center font-black">{totals.specialEventDays}d</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.overtime)}h</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.vacationDays}d</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.medicalDays}d</td>
+                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.specialEventDays}d</td>
                     </>
                   ) : null}
-                  <td className="border-l border-stone-200 px-2 text-center">
-                    <Button size="sm" variant="secondary" onClick={onToggleTotals}>More</Button>
+                  <td className="border-l border-stone-200 px-1 text-center">
+                    <Button size="sm" variant="secondary" onClick={onToggleTotals}>{totalsExpanded ? "Less" : "More"}</Button>
                   </td>
                   {totalsExpanded ? (
                     <>
@@ -596,12 +626,12 @@ function EntryCell({
     <td title={tooltip} className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected))}>
       <button
         type="button"
-        className={cn("min-h-12 w-full px-1 py-2 text-center", editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-500" : "cursor-default")}
+        className={cn("min-h-10 w-full px-0.5 py-1.5 text-center leading-tight", editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-emerald-500" : "cursor-default")}
         onClick={() => editable && onEdit(employee, day.iso)}
         disabled={!editable}
       >
-      <span className="block font-black">{code}</span>
-      <span className="text-xs text-stone-500">{detail}</span>
+      <span className="block text-[11px] font-black">{code}</span>
+      <span className="text-[10px] text-stone-500">{detail}</span>
       </button>
     </td>
   );
@@ -955,12 +985,209 @@ function Charts({ people, worked, expected, overtime, co, cm, se, difference }: 
   );
 }
 
-function Management({ workspace }: { workspace: Workspace }) {
+function Management({
+  workspace,
+  activeTab,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeTab: string;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  if (activeTab === "companies") {
+    return <CompanyDepartmentManagement workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
+  }
+  if (activeTab === "employees") {
+    const employees = workspace.profiles.filter((profile) => !["admin_account", "payroll_admin", "company_manager"].includes(profile.role));
+    return <EntityCard title="Employees" items={employees.map((profile) => `${profile.full_name} - ${profile.position || ROLES[profile.role]}`)} />;
+  }
+  if (activeTab === "admins") {
+    const admins = workspace.profiles.filter((profile) => ["admin_account", "payroll_admin", "company_manager"].includes(profile.role));
+    return <EntityCard title="Admins and Managers" items={admins.map((profile) => `${profile.full_name} - ${ROLES[profile.role]}`)} />;
+  }
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
-      <EntityCard title="Companies" items={workspace.companies.map((company) => company.name)} />
-      <EntityCard title="Departments" items={workspace.departments.map((department) => department.name)} />
-      <EntityCard title="People" items={workspace.profiles.map((profile) => `${profile.full_name} - ${ROLES[profile.role]}`)} />
+    <Card>
+      <CardHeader>
+        <CardTitle>Settings</CardTitle>
+        <CardDescription>National holidays, company colors, logos, and account danger areas will move here next.</CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function CompanyDepartmentManagement({
+  workspace,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const [companyName, setCompanyName] = React.useState("");
+  const [departmentCompanyId, setDepartmentCompanyId] = React.useState(workspace.companies[0]?.id || "");
+  const [departmentName, setDepartmentName] = React.useState("");
+  const [shiftHours, setShiftHours] = React.useState("8");
+  const [managerId, setManagerId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const targetCompanyId = departmentCompanyId || workspace.companies[0]?.id || "";
+  const companyManagers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === targetCompanyId || profile.role === "company_manager")
+  ));
+  const teamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === targetCompanyId
+  ));
+
+  async function createCompany() {
+    if (!supabase || !workspace.profile.environment_id || !companyName.trim()) return;
+    const { error } = await supabase.from("companies").insert({
+      environment_id: workspace.profile.environment_id,
+      name: companyName.trim(),
+      created_by: workspace.profile.id
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setCompanyName("");
+    onReload();
+  }
+
+  async function createDepartment() {
+    if (!supabase || !workspace.profile.environment_id || !targetCompanyId || !departmentName.trim()) return;
+    const { error } = await supabase.from("departments").insert({
+      environment_id: workspace.profile.environment_id,
+      company_id: targetCompanyId,
+      name: departmentName.trim(),
+      manager_user_id: managerId || null,
+      team_leader_user_id: teamLeaderId || null,
+      shift_hours: Number(shiftHours || 8),
+      work_days: [1, 2, 3, 4, 5]
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+    onReload();
+  }
+
+  async function deleteCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const hasDepartments = workspace.departments.some((department) => department.company_id === company.id);
+    const hasUsers = workspace.profiles.some((profile) => profile.company_id === company.id);
+    if (hasDepartments || hasUsers) {
+      onMessage(`Delete or move ${company.name}'s departments and users before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const hasUsers = workspace.profiles.some((profile) => profile.department_id === department.id);
+    if (hasUsers) {
+      onMessage(`Move or delete employees from ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
+    const { error } = await supabase.from("departments").delete().eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Company</CardTitle>
+            <CardDescription>Companies belong to this admin environment.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-2">
+            <input className="h-10 flex-1 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
+            <Button onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Create Department</CardTitle>
+            <CardDescription>Set company, manager, team leader, and shift duration.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            <div className="grid gap-2 md:grid-cols-2">
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
+                {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+            </div>
+            <div className="grid gap-2 md:grid-cols-3">
+              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)} type="number" min="1" max="24" step="0.25" />
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                <option value="">No manager</option>
+                {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+              </select>
+              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                <option value="">No team leader</option>
+                {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+              </select>
+            </div>
+            <Button onClick={createDepartment}><Plus className="h-4 w-4" />Add Department</Button>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Company Hierarchy</CardTitle>
+          <CardDescription>Delete is blocked while child departments or users still exist.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {workspace.companies.map((company) => {
+            const departments = workspace.departments.filter((department) => department.company_id === company.id);
+            const users = workspace.profiles.filter((profile) => profile.company_id === company.id);
+            return (
+              <div key={company.id} className="rounded-lg border border-stone-200 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <strong>{company.name}</strong>
+                    <p className="text-sm text-stone-500">{departments.length} departments - {users.length} users</p>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {departments.length ? departments.map((department) => (
+                    <div key={department.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-stone-50 p-2 text-sm">
+                      <span><strong>{department.name}</strong> - {formatNumber(Number(department.shift_hours || 8))}h shift</span>
+                      <Button size="sm" variant="outline" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                    </div>
+                  )) : <p className="text-sm font-semibold text-stone-500">No departments yet.</p>}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
     </div>
   );
 }
