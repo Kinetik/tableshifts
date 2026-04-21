@@ -59,10 +59,13 @@ async function profile(userId) {
 async function canPayrollDelete(callerProfile, targetProfile) {
   if (callerProfile.role !== "payroll_admin") return false;
   if (["admin_account", "payroll_admin"].includes(targetProfile.role)) return false;
-  if (!targetProfile.company_id) return true;
-  const owned = await supabaseFetch(`/rest/v1/companies?id=eq.${encodeURIComponent(targetProfile.company_id)}&created_by=eq.${encodeURIComponent(callerProfile.id)}&select=id`);
+  const targetAccess = await supabaseFetch(`/rest/v1/payroll_company_access?payroll_user_id=eq.${encodeURIComponent(targetProfile.id)}&select=company_id`);
+  const targetCompanyIds = [targetProfile.company_id, ...targetAccess.map((item) => item.company_id)].filter(Boolean);
+  if (!targetCompanyIds.length) return true;
+  const companyFilter = targetCompanyIds.map(encodeURIComponent).join(",");
+  const owned = await supabaseFetch(`/rest/v1/companies?id=in.(${companyFilter})&created_by=eq.${encodeURIComponent(callerProfile.id)}&select=id`);
   if (owned.length) return true;
-  const access = await supabaseFetch(`/rest/v1/payroll_company_access?payroll_user_id=eq.${encodeURIComponent(callerProfile.id)}&company_id=eq.${encodeURIComponent(targetProfile.company_id)}&select=company_id`);
+  const access = await supabaseFetch(`/rest/v1/payroll_company_access?payroll_user_id=eq.${encodeURIComponent(callerProfile.id)}&company_id=in.(${companyFilter})&select=company_id`);
   return access.length > 0;
 }
 

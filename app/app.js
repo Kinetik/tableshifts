@@ -20,6 +20,15 @@
     special_event: "SE",
     absence: "AB"
   };
+  const ENTRY_COLOR_FIELDS = [
+    ["vacation", "CO", "#e4f7e8"],
+    ["medical", "CM", "#ffe8e8"],
+    ["overtime", "OT", "#fff0d8"],
+    ["absence", "AB", "#1d2521"],
+    ["special_event", "SE", "#eeeeef"],
+    ["holiday", "Holiday", "#fff6d8"]
+  ];
+  const DEFAULT_ENTRY_COLORS = Object.fromEntries(ENTRY_COLOR_FIELDS.map(([key, , color]) => [key, color]));
   const HOLIDAY_COUNTRIES = [
     ["RO", "Romania"],
     ["US", "United States"],
@@ -90,7 +99,7 @@
     newAdminEmail: byId("newAdminEmail"),
     newAdminPassword: byId("newAdminPassword"),
     newAdminPassword2: byId("newAdminPassword2"),
-    sessionLabel: byId("sessionLabel"),
+    headerCompanySelect: byId("headerCompanySelect"),
     topIdentity: byId("topIdentity"),
     pendingApprovalsBtn: byId("pendingApprovalsBtn"),
     adminDangerZone: byId("adminDangerZone"),
@@ -192,6 +201,7 @@
     companyDepartments: byId("companyDepartments"),
     companyLogo: byId("companyLogo"),
     companyLogoPreview: byId("companyLogoPreview"),
+    companyColorFields: byId("companyColorFields"),
     companiesList: byId("companiesList"),
     companyLog: byId("companyLog"),
     departmentForm: byId("departmentForm"),
@@ -323,6 +333,13 @@
       saveSession();
       renderAll();
     });
+    el.headerCompanySelect.addEventListener("change", () => {
+      session.activeCompanyId = el.headerCompanySelect.value;
+      session.departmentFilter = "all";
+      session.teamFilter = "all";
+      saveSession();
+      renderAll();
+    });
     el.departmentScope.addEventListener("change", () => {
       session.departmentFilter = el.departmentScope.value;
       if (session.teamFilter !== "all") {
@@ -372,6 +389,7 @@
     el.cancelLeavePreviewBottomBtn.addEventListener("click", cancelLeaveRequestDraft);
     el.companyForm.addEventListener("submit", createCompany);
     el.companyLogo.addEventListener("change", previewCompanyLogo);
+    renderCompanyColorInputs();
     el.departmentForm.addEventListener("submit", saveDepartment);
     el.resetDepartmentFormBtn.addEventListener("click", resetDepartmentForm);
     el.departmentCompany.addEventListener("change", fillDepartmentManagerOptions);
@@ -410,7 +428,7 @@
     }
 
     session.userId = user.id;
-    session.activeCompanyId = ["admin_account", "payroll_admin"].includes(user.role)
+    session.activeCompanyId = ["admin_account", "payroll_admin", "company_manager"].includes(user.role)
       ? accessibleCompanies(user)[0]?.id || ""
       : user.companyId;
     session.activeTab = "timesheet";
@@ -644,6 +662,7 @@
       id: company.id,
       name: company.name,
       logo: company.logo_path ? { path: company.logo_path, name: "Company logo" } : null,
+      entryColors: normalizeEntryColors(company.entry_colors),
       ownerAdminId: ownerId,
       createdBy: company.created_by || ownerId,
       createdAt: company.created_at || new Date().toISOString()
@@ -700,7 +719,7 @@
 
   function startAuthenticatedSession(user) {
     session.userId = user.id;
-    session.activeCompanyId = ["admin_account", "payroll_admin"].includes(user.role)
+    session.activeCompanyId = ["admin_account", "payroll_admin", "company_manager"].includes(user.role)
       ? accessibleCompanies(user)[0]?.id || ""
       : user.companyId;
     session.activeTab = "timesheet";
@@ -762,6 +781,7 @@
       environment_id: currentUser().environmentId,
       name: company.name,
       logo_path: company.logo?.path || null,
+      entry_colors: normalizeEntryColors(company.entryColors),
       created_by: company.createdBy || currentUser().id
     }, { onConflict: "id" });
     if (error) throw error;
@@ -812,7 +832,7 @@
     const user = currentUser();
     const company = companyById(session.activeCompanyId);
     el.pageTitle.textContent = tabTitle(session.activeTab);
-    el.sessionLabel.textContent = company?.name || "";
+    fillHeaderCompanySelect(user);
     el.topIdentity.innerHTML = `<strong>${escapeHtml(user.name)}</strong><span>${ROLES[user.role]} - ${escapeHtml(user.email || "")}</span>`;
     const pendingCount = pendingApprovalsForCurrentUser().length;
     el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager"].includes(user.role);
@@ -830,6 +850,17 @@
       });
     });
     showActiveTab();
+  }
+
+  function fillHeaderCompanySelect(user = currentUser()) {
+    const companies = accessibleCompanies(user);
+    el.headerCompanySelect.hidden = !companies.length;
+    el.headerCompanySelect.innerHTML = companies.map((company) => option(company.id, company.name, company.id === session.activeCompanyId)).join("");
+    if (companies.length && !companies.some((company) => company.id === session.activeCompanyId)) {
+      session.activeCompanyId = companies[0].id;
+      el.headerCompanySelect.value = session.activeCompanyId;
+      saveSession();
+    }
   }
 
   function navHtml() {
@@ -934,10 +965,16 @@
       const holiday = holidayForEmployee(employee, day.iso);
       const isWorkDay = isExpectedWorkDay(employee, day, department);
       cell.dataset.workday = isWorkDay ? "true" : "false";
-      if (holiday) cell.dataset.holiday = "true";
+      if (holiday) {
+        cell.dataset.holiday = "true";
+        applyTimesheetCellColor(cell, "holiday", employee.companyId);
+        cell.title = holiday.name;
+      }
       if (entry) {
         cell.dataset.entryType = entry.type;
         const parts = entryParts(entry, department);
+        applyTimesheetCellColor(cell, entry.type, employee.companyId);
+        cell.title = entryTooltip(entry, department, holiday);
         cell.innerHTML = `<strong>${ENTRY_LABELS[entry.type] || "N"}</strong><span>${parts}</span>`;
       } else if (pendingLeaveForEmployee(employee.id, day.iso)) {
         cell.innerHTML = `<strong>REQ</strong>`;
@@ -947,7 +984,7 @@
       if (editable) {
         cell.tabIndex = 0;
         cell.setAttribute("role", "button");
-        cell.setAttribute("aria-label", `Edit ${employee.name} on ${day.iso}`);
+        cell.setAttribute("aria-label", cell.title || `Edit ${employee.name} on ${day.iso}`);
         cell.addEventListener("click", () => openEditor(employee.id, day.iso));
         cell.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -1091,7 +1128,8 @@
     } else if (user.role === "department_manager") {
       list = list.filter((item) => item.departmentId === user.departmentId || item.reportsToId === user.id);
     } else if (user.role === "company_manager") {
-      list = list.filter((item) => item.companyId === user.companyId);
+      const companyIds = companyIdsForUser(user);
+      list = list.filter((item) => companyIds.has(item.companyId));
     }
     if (session.departmentFilter !== "all") {
       list = list.filter((item) => item.departmentId === session.departmentFilter);
@@ -1105,7 +1143,7 @@
   function canEditEmployee(employee) {
     const user = currentUser();
     if (["admin_account", "payroll_admin"].includes(user.role)) return false;
-    if (user.role === "company_manager") return employee.companyId === user.companyId;
+    if (user.role === "company_manager") return companyIdsForUser(user).has(employee.companyId);
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.id === user.id || employee.teamLeaderId === user.id;
     return employee.id === user.id;
@@ -1341,10 +1379,24 @@
   function entryParts(entry, department) {
     const normalHours = department?.shiftHours || 8;
     if (entry.type === "overtime") {
-      return `${normalHours}+${formatHours(Math.max(0, Number(entry.hours || 0) - normalHours))}`;
+      return `${formatHours(normalHours)}h+${formatHours(Math.max(0, Number(entry.hours || 0) - normalHours))}h`;
     }
     if (entry.type === "vacation" || entry.type === "medical" || entry.type === "special_event") return "day";
-    return formatHours(Number(entry.hours || 0));
+    return `${formatHours(Number(entry.hours || 0))}h`;
+  }
+
+  function entryTooltip(entry, department, holiday) {
+    const normalHours = department?.shiftHours || 8;
+    if (entry.type === "overtime") {
+      const extra = Math.max(0, Number(entry.hours || 0) - normalHours);
+      return `Overtime of ${formatHours(extra)}h over normal shift of ${formatHours(normalHours)}h`;
+    }
+    if (entry.type === "holiday" && holiday?.name) return holiday.name;
+    if (entry.type === "vacation") return "Vacation day";
+    if (entry.type === "medical") return "Medical leave day";
+    if (entry.type === "special_event") return "Special event day";
+    if (entry.type === "absence") return "Absence";
+    return `${ENTRY_LABELS[entry.type] || "Normal"} ${formatHours(Number(entry.hours || 0))}h`;
   }
 
   function isExpectedWorkDay(employee, day, department) {
@@ -1363,7 +1415,6 @@
 
   function renderUserManagement() {
     fillEmployeeFormOptions();
-    el.adminDangerZone.hidden = currentUser().role !== "admin_account";
     const companyIds = new Set(accessibleCompanies().map((company) => company.id));
     const list = users().filter((user) => {
       if (user.role === "admin_account") return false;
@@ -1493,7 +1544,7 @@
     const employee = userById(request.employeeId);
     if (!employee || user.id === employee.id) return false;
     if (["admin_account", "payroll_admin"].includes(user.role)) return false;
-    if (user.role === "company_manager") return employee.companyId === user.companyId;
+    if (user.role === "company_manager") return companyIdsForUser(user).has(employee.companyId);
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
     if (user.role === "team_leader") return employee.teamLeaderId === user.id;
     return false;
@@ -1873,11 +1924,14 @@
 
   function renderAdminsManagement() {
     fillAdminFormOptions();
+    el.adminDangerZone.hidden = currentUser().role !== "admin_account";
     const companyIds = new Set(accessibleCompanies().map((company) => company.id));
     const list = users().filter((user) => {
       if (!["payroll_admin", "company_manager"].includes(user.role)) return false;
       if (currentUser().role === "admin_account" && user.role === "payroll_admin") return user.adminOwnerId === currentUser().id;
-      return user.role === "payroll_admin" ? user.adminOwnerId === activeAdminId() : companyIds.has(user.companyId);
+      return user.role === "payroll_admin"
+        ? user.adminOwnerId === activeAdminId()
+        : [...companyIdsForUser(user)].some((companyId) => companyIds.has(companyId));
     });
     el.adminsList.innerHTML = list.length ? list.map((user) => userCard(user)).join("") : `<p class="hint">No admin users yet.</p>`;
     el.adminsList.querySelectorAll("[data-edit-user]").forEach((button) => {
@@ -1903,10 +1957,10 @@
   }
 
   function syncAdminCompanyAccessVisibility() {
-    const isPayroll = el.adminUserRole.value === "payroll_admin";
-    el.adminUserCompany.closest(".field").hidden = isPayroll;
-    el.adminUserCompanyAccess.closest(".field").hidden = !isPayroll;
-    if (isPayroll && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
+    const usesCompanyAccess = ["payroll_admin", "company_manager"].includes(el.adminUserRole.value);
+    el.adminUserCompany.closest(".field").hidden = usesCompanyAccess;
+    el.adminUserCompanyAccess.closest(".field").hidden = !usesCompanyAccess;
+    if (usesCompanyAccess && !selectedAdminCompanyAccess().length && session.activeCompanyId) {
       el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
         input.checked = input.value === session.activeCompanyId;
       });
@@ -1932,17 +1986,21 @@
       startDate: el.adminUserStartDate.value,
       endDate: el.adminUserEndDate.value,
       role,
-      companyId: role === "company_manager" ? el.adminUserCompany.value : "",
+      companyId: role === "company_manager" ? selectedAdminCompanyAccess()[0] || el.adminUserCompany.value : "",
       departmentId: "",
       reportsToId: "",
       teamLeaderId: "",
       coAvailable: 0,
       adminOwnerId: activeAdminId(),
-      permittedCompanyIds: role === "payroll_admin" ? selectedAdminCompanyAccess() : [],
+      permittedCompanyIds: ["payroll_admin", "company_manager"].includes(role) ? selectedAdminCompanyAccess() : [],
       createdAt: existing?.createdAt || new Date().toISOString()
     };
     if (!user.name || !user.email || !user.identificationNumber || !user.position || !user.password || !user.startDate) {
       window.alert("Name, email, identification number, position, password, and start date are required.");
+      return;
+    }
+    if (["payroll_admin", "company_manager"].includes(role) && !user.permittedCompanyIds.length) {
+      window.alert("Select at least one company for this admin user.");
       return;
     }
     const emailTaken = users().some((item) => item.id !== id && clean(item.email).toLowerCase() === user.email);
@@ -1981,7 +2039,7 @@
     el.adminUserRole.value = user.role;
     fillAdminFormOptions();
     el.adminUserRole.value = user.role;
-    el.adminUserCompany.value = user.companyId || session.activeCompanyId;
+    el.adminUserCompany.value = user.companyId || user.permittedCompanyIds?.[0] || session.activeCompanyId;
     el.adminUserCompanyAccess.querySelectorAll("input").forEach((input) => {
       input.checked = (user.permittedCompanyIds || []).includes(input.value);
     });
@@ -2010,9 +2068,9 @@
   function fillReportingOptions() {
     const companyId = el.employeeCompany.value || session.activeCompanyId;
     const departmentId = el.employeeDepartment.value;
-    const managers = users().filter((user) => user.companyId === companyId && ["department_manager", "company_manager"].includes(user.role));
+    const managers = users().filter((user) => ["department_manager", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId));
     const leaders = users()
-      .filter((user) => user.companyId === companyId && ["team_leader", "company_manager"].includes(user.role))
+      .filter((user) => ["team_leader", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId))
       .filter((user) => !departmentId || user.role === "company_manager" || user.departmentId === departmentId);
     el.employeeReportsTo.innerHTML = option("", "None") + managers.map((user) => option(user.id, user.name)).join("");
     el.employeeTeamLeader.innerHTML = option("", "None") + leaders.map((user) => option(user.id, user.name)).join("");
@@ -2021,7 +2079,7 @@
   function prefillReporting() {
     fillReportingOptions();
     const department = departmentById(el.employeeDepartment.value);
-    const companyManager = users().find((user) => user.companyId === el.employeeCompany.value && user.role === "company_manager");
+    const companyManager = users().find((user) => user.role === "company_manager" && companyIdsForUser(user).has(el.employeeCompany.value));
     if (department) {
       el.employeeReportsTo.value = department.managerId || companyManager?.id || "";
       el.employeeTeamLeader.value = department.teamLeaderId || companyManager?.id || "";
@@ -2223,6 +2281,7 @@
           </span>
         </summary>
         <div class="hierarchy-children">
+          ${companyColorEditor(company)}
           ${companyDepartments.length ? companyDepartments.map((department) => hierarchyDepartmentRow(department)).join("") : `<p class="hint">No departments yet.</p>`}
         </div>
       </details>`;
@@ -2244,7 +2303,58 @@
     el.companiesList.querySelectorAll("[data-delete-dept]").forEach((button) => {
       button.addEventListener("click", () => deleteDepartment(button.dataset.deleteDept));
     });
+    el.companiesList.querySelectorAll("[data-company-color]").forEach((input) => {
+      input.addEventListener("change", () => saveCompanyColors(input.dataset.companyColor));
+    });
     renderLogs();
+  }
+
+  function companyColorEditor(company) {
+    const colors = normalizeEntryColors(company.entryColors);
+    return `<div class="company-color-panel">
+      <strong>Timesheet colors</strong>
+      <div class="color-grid compact-colors">
+        ${ENTRY_COLOR_FIELDS.map(([key, label]) => `
+          <label>
+            ${escapeHtml(label)}
+            <input type="color" data-company-color="${company.id}" data-color-key="${key}" value="${escapeAttr(colors[key])}" />
+          </label>
+        `).join("")}
+      </div>
+    </div>`;
+  }
+
+  async function saveCompanyColors(companyId) {
+    const company = companyById(companyId);
+    if (!company) return;
+    company.entryColors = normalizeEntryColors(Object.fromEntries(
+      Array.from(el.companiesList.querySelectorAll("[data-company-color]"))
+        .filter((input) => input.dataset.companyColor === companyId)
+        .map((input) => [input.dataset.colorKey, input.value])
+    ));
+    saveDb();
+    try {
+      await saveCompanyToSupabase(company);
+    } catch (error) {
+      console.warn("Could not save company colors", error);
+    }
+    renderTimesheet();
+  }
+
+  function renderCompanyColorInputs(colors = DEFAULT_ENTRY_COLORS) {
+    el.companyColorFields.innerHTML = ENTRY_COLOR_FIELDS.map(([key, label]) => `
+      <label>
+        ${escapeHtml(label)}
+        <input type="color" data-new-company-color="${key}" value="${escapeAttr(normalizeEntryColors(colors)[key])}" />
+      </label>
+    `).join("");
+  }
+
+  function companyFormColors() {
+    return normalizeEntryColors(Object.fromEntries(
+      Array.from(el.companyColorFields.querySelectorAll("[data-new-company-color]"))
+        .map((input) => [input.dataset.newCompanyColor, input.value])
+    ));
   }
 
   function hierarchyDepartmentRow(department) {
@@ -2272,6 +2382,7 @@
       id: recordId("org"),
       name,
       logo,
+      entryColors: companyFormColors(),
       ownerAdminId: activeAdminId(),
       createdBy: currentUser().id,
       createdAt: new Date().toISOString()
@@ -2305,6 +2416,7 @@
     }
     el.companyForm.reset();
     el.companyLogoPreview.innerHTML = "";
+    renderCompanyColorInputs();
     session.activeCompanyId = company.id;
     saveSession();
     saveDb();
@@ -2368,8 +2480,8 @@
 
   function fillDepartmentManagerOptions() {
     const companyId = el.departmentCompany.value || session.activeCompanyId;
-    const managers = users().filter((user) => user.companyId === companyId && ["department_manager", "company_manager"].includes(user.role));
-    const leaders = users().filter((user) => user.companyId === companyId && ["team_leader", "company_manager"].includes(user.role));
+    const managers = users().filter((user) => ["department_manager", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId));
+    const leaders = users().filter((user) => ["team_leader", "company_manager"].includes(user.role) && companyIdsForUser(user).has(companyId));
     el.departmentManager.innerHTML = option("", "None") + managers.map((user) => option(user.id, user.name)).join("");
     el.departmentTeamLeader.innerHTML = option("", "None") + leaders.map((user) => option(user.id, user.name)).join("");
   }
@@ -2378,7 +2490,7 @@
     event.preventDefault();
     const existing = departmentById(el.departmentId.value);
     const id = existing?.id || recordId("dep");
-    const companyManager = users().find((user) => user.companyId === el.departmentCompany.value && user.role === "company_manager");
+    const companyManager = users().find((user) => user.role === "company_manager" && companyIdsForUser(user).has(el.departmentCompany.value));
       const department = {
       id,
       name: clean(el.departmentName.value),
@@ -3063,6 +3175,7 @@
     value.companies = (value.companies || []).map((company) => ({
       ...company,
       logo: company.logo || null,
+      entryColors: normalizeEntryColors(company.entryColors),
       ownerAdminId: company.ownerAdminId || firstAdminId,
       createdBy: company.createdBy || firstAdminId
     }));
@@ -3135,7 +3248,7 @@
 
   function defaultDepartment(name, companyId) {
     const now = new Date().toISOString();
-    const companyManager = users().find((user) => user.companyId === companyId && user.role === "company_manager");
+    const companyManager = users().find((user) => user.role === "company_manager" && companyIdsForUser(user).has(companyId));
     return {
       id: recordId("dep"),
       name,
@@ -3220,7 +3333,15 @@
       });
       return db.companies.filter((company) => permitted.has(company.id));
     }
+    if (user.role === "company_manager") {
+      const permitted = companyIdsForUser(user);
+      return db.companies.filter((company) => permitted.has(company.id));
+    }
     return db.companies.filter((company) => company.id === user.companyId);
+  }
+
+  function companyIdsForUser(user) {
+    return new Set([user.companyId, ...(user.permittedCompanyIds || [])].filter(Boolean));
   }
 
   function activeAdminId(user = currentUser()) {
@@ -3268,6 +3389,38 @@
 
   function deptName(id) {
     return departmentById(id)?.name || "No department";
+  }
+
+  function normalizeEntryColors(colors = {}) {
+    return Object.fromEntries(ENTRY_COLOR_FIELDS.map(([key, , fallback]) => [key, validHex(colors[key]) || fallback]));
+  }
+
+  function validHex(value) {
+    const text = String(value || "").trim();
+    return /^#[0-9a-f]{6}$/i.test(text) ? text : "";
+  }
+
+  function entryColor(type, companyId = session.activeCompanyId) {
+    const colors = normalizeEntryColors(companyById(companyId)?.entryColors);
+    return colors[type] || DEFAULT_ENTRY_COLORS[type] || "";
+  }
+
+  function applyTimesheetCellColor(cell, type, companyId = session.activeCompanyId) {
+    const color = entryColor(type, companyId);
+    if (!color) return;
+    cell.style.setProperty("--cell-bg", color);
+    if (type === "absence") {
+      cell.style.setProperty("--cell-fg", readableTextColor(color));
+    }
+  }
+
+  function readableTextColor(hex) {
+    const value = validHex(hex);
+    if (!value) return "";
+    const r = parseInt(value.slice(1, 3), 16);
+    const g = parseInt(value.slice(3, 5), 16);
+    const b = parseInt(value.slice(5, 7), 16);
+    return (r * 299 + g * 587 + b * 114) / 1000 < 135 ? "#ffffff" : "#1d2521";
   }
 
   function byId(id) {

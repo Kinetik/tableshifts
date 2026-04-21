@@ -129,7 +129,7 @@
           <div>
             <p class="eyebrow">TABLESHIFTS</p>
             <h1 id="pageTitle">Timesheet</h1>
-            <p id="sessionLabel" class="session-label"></p>
+            <select id="headerCompanySelect" class="session-label company-title-select" aria-label="Selected company"></select>
           </div>
           <div class="top-user">
             <div id="topIdentity" class="top-identity"></div>
@@ -356,7 +356,7 @@
               <select id="employeeCompany"></select>
             </label>
             <label class="field">
-              Payroll company access
+              Company access
               <div id="employeeCompanyAccess" class="check-list"></div>
             </label>
             <label class="field">
@@ -382,13 +382,6 @@
           </form>
 
           <div id="usersList" class="directory"></div>
-          <section id="adminDangerZone" class="danger-zone" hidden>
-            <div>
-              <h3>Admin account danger area</h3>
-              <p>Deleting this Admin Account removes its companies, departments, users, timesheets, holidays, leave requests, and logs.</p>
-            </div>
-            <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
-          </section>
         </section>
 
         <section id="adminsTab" class="tab-panel" hidden>
@@ -438,7 +431,7 @@
               <select id="adminUserCompany"></select>
             </label>
             <label class="field">
-              Payroll company access
+              Company access
               <div id="adminUserCompanyAccess" class="check-list"></div>
             </label>
             <div class="form-actions">
@@ -448,6 +441,13 @@
           </form>
 
           <div id="adminsList" class="directory"></div>
+          <section id="adminDangerZone" class="danger-zone" hidden>
+            <div>
+              <h3>Admin account danger area</h3>
+              <p>Deleting this Admin Account removes its companies, departments, users, timesheets, holidays, leave requests, and logs.</p>
+            </div>
+            <button id="deleteAdminAccountBtn" type="button" class="danger">Delete Admin Account</button>
+          </section>
         </section>
 
         <section id="companiesTab" class="tab-panel" hidden>
@@ -472,6 +472,10 @@
               <input id="companyLogo" type="file" accept="image/*" />
             </label>
             <div id="companyLogoPreview" class="logo-preview" aria-live="polite"></div>
+            <div class="field wide-field">
+              Timesheet colors
+              <div id="companyColorFields" class="color-grid"></div>
+            </div>
             <div class="form-actions">
               <button type="submit">Create Company</button>
             </div>
