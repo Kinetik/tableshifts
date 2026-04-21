@@ -836,7 +836,8 @@
     const company = companyById(session.activeCompanyId);
     el.pageTitle.textContent = tabTitle(session.activeTab);
     fillHeaderCompanySelect(user);
-    el.topIdentity.innerHTML = `<strong>${escapeHtml(user.name)}</strong><span>${ROLES[user.role]} - ${escapeHtml(user.email || "")}</span>`;
+    const identityLabel = user.position || ROLES[user.role] || "";
+    el.topIdentity.innerHTML = `<strong>${escapeHtml(user.name)}</strong><span>${escapeHtml(identityLabel)} - ${escapeHtml(user.email || "")}</span>`;
     const pendingCount = pendingApprovalsForCurrentUser().length;
     el.pendingApprovalsBtn.hidden = !["team_leader", "department_manager", "company_manager"].includes(user.role);
     el.pendingApprovalsBtn.textContent = pendingCount ? `${pendingCount} pending leave` : "No pending leave";
@@ -1127,7 +1128,7 @@
     if (user.role === "employee") {
       list = list.filter((item) => item.id === user.id);
     } else if (user.role === "team_leader") {
-      list = list.filter((item) => item.id === user.id || item.teamLeaderId === user.id);
+      list = list.filter((item) => item.id === user.id || isEmployeeInLeaderTeam(item, user));
     } else if (user.role === "department_manager") {
       list = list.filter((item) => item.departmentId === user.departmentId || item.reportsToId === user.id);
     } else if (user.role === "company_manager") {
@@ -1138,9 +1139,18 @@
       list = list.filter((item) => item.departmentId === session.departmentFilter);
     }
     if (session.teamFilter !== "all") {
-      list = list.filter((item) => item.teamLeaderId === session.teamFilter || item.id === session.teamFilter);
+      const selectedLeader = userById(session.teamFilter);
+      list = list.filter((item) => item.id === session.teamFilter || isEmployeeInLeaderTeam(item, selectedLeader));
     }
     return list.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function isEmployeeInLeaderTeam(employee, leader) {
+    if (!employee || !leader || leader.role !== "team_leader") return false;
+    const department = departmentById(employee.departmentId);
+    return employee.teamLeaderId === leader.id ||
+      department?.teamLeaderId === leader.id ||
+      (employee.departmentId && employee.departmentId === leader.departmentId);
   }
 
   function canEditEmployee(employee) {
@@ -1148,7 +1158,7 @@
     if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return companyIdsForUser(user).has(employee.companyId);
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
-    if (user.role === "team_leader") return employee.id === user.id || employee.teamLeaderId === user.id;
+    if (user.role === "team_leader") return employee.id === user.id || isEmployeeInLeaderTeam(employee, user);
     return employee.id === user.id;
   }
 
@@ -1549,7 +1559,7 @@
     if (["admin_account", "payroll_admin"].includes(user.role)) return false;
     if (user.role === "company_manager") return companyIdsForUser(user).has(employee.companyId);
     if (user.role === "department_manager") return employee.departmentId === user.departmentId || employee.reportsToId === user.id;
-    if (user.role === "team_leader") return employee.teamLeaderId === user.id;
+    if (user.role === "team_leader") return isEmployeeInLeaderTeam(employee, user);
     return false;
   }
 
