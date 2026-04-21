@@ -1024,6 +1024,13 @@ main:focus-visible {
   white-space: nowrap;
 }
 
+.sheet-grid .total-cell .mini {
+  width: calc(100% - 10px);
+  min-width: 0;
+  padding: 0 4px;
+  justify-self: center;
+}
+
 .section-head {
   display: flex;
   justify-content: space-between;
