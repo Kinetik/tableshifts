@@ -679,8 +679,8 @@ function TimesheetTable({
             {employees.length ? employees.map((employee) => {
               const totals = totalsFor(employee, month, workspace);
               return (
-                <tr key={employee.id} className="border-b border-stone-200 hover:bg-stone-50/60">
-                  <td className="sticky left-0 z-10 bg-white px-3 py-2">
+                <tr key={employee.id} className="h-12 border-b border-stone-200 hover:bg-stone-50/60">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1">
                     <strong className="block truncate text-sm">{employee.full_name}</strong>
                     <span className="block truncate text-[11px] font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
                   </td>
@@ -836,7 +836,7 @@ function EntryCell({
       }}
     >
       <div
-        className={cn("relative h-full min-h-10 w-full px-0.5 py-1 text-center leading-tight", editable ? "cursor-text hover:bg-white/25" : "cursor-default")}
+        className={cn("relative flex h-12 w-full flex-col items-center justify-center px-0.5 py-0.5 text-center leading-tight", editable ? "cursor-text hover:bg-white/25" : "cursor-default")}
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
@@ -848,7 +848,7 @@ function EntryCell({
         {numericEntry ? (
           <>
             {entry?.type === "overtime" ? <span className="block text-[10px] font-black text-amber-900">OT</span> : null}
-            <span className="mx-auto flex h-5 max-w-full items-center justify-center">
+            <span className="mx-auto flex h-5 max-w-full items-center justify-center leading-none">
               <input
                 aria-label={`${employee.full_name} ${day.iso} hours`}
                 className={cn(
@@ -892,8 +892,7 @@ function EntryCell({
             ["normal", "Normal shift"],
             ["vacation", "Vacation CO"],
             ["medical", "Medical CM"],
-            ["absence", "Absence"],
-            ["clear", "Clear"]
+            ["absence", "Absence"]
           ].map(([value, label]) => (
             <button
               key={value}
@@ -920,6 +919,13 @@ function EntryCell({
               ))}
             </div>
           </div>
+          <button
+            type="button"
+            className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50"
+            onClick={() => applyType("clear")}
+          >
+            Clear
+          </button>
         </div>
       ) : null}
     </td>
