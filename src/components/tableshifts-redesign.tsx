@@ -829,7 +829,7 @@ function EntryEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="w-full max-w-md overflow-hidden">
+      <Card className="w-full max-w-[17.5rem] overflow-hidden">
         <CardHeader className="border-b border-stone-200 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -840,7 +840,7 @@ function EntryEditor({
           </div>
         </CardHeader>
         <CardContent className="grid gap-2.5 p-3">
-          <div className="grid grid-cols-[1fr_104px] gap-2">
+          <div className="grid grid-cols-[1fr_76px] gap-2">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
               <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => quick(event.target.value)}>
