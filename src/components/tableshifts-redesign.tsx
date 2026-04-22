@@ -751,6 +751,14 @@ function EntryEditor({
     : null;
   const linkedDocument = linkedRequest?.generated_document_html || "";
   const attachmentPath = existing?.attachment_path || linkedRequest?.attachment_path || "";
+  const typeOptions = [
+    ["normal", "Normal"],
+    ["overtime", "Overtime"],
+    ["vacation", "Vacation CO"],
+    ["medical", "Medical CM"],
+    ["special_event", "Special Event"],
+    ["absence", "Absence"]
+  ] as const;
 
   function quick(nextType: string) {
     setType(nextType);
@@ -821,56 +829,41 @@ function EntryEditor({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="w-full max-w-xl overflow-hidden">
-        <CardHeader className="border-b border-stone-200 p-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <CardTitle className="text-xl">{editor.employee.full_name}</CardTitle>
-              <CardDescription>{editor.iso} - {department?.name || "No department"} - normal shift {formatNumber(normal)}h</CardDescription>
+      <Card className="w-full max-w-md overflow-hidden">
+        <CardHeader className="border-b border-stone-200 p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <CardTitle className="truncate text-lg">{editor.employee.full_name}</CardTitle>
+              <CardDescription className="truncate text-xs">{editor.iso} - {department?.name || "No department"}</CardDescription>
             </div>
             <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 p-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {[
-              ["normal", "Normal"],
-              ["overtime", "Overtime"],
-              ["vacation", "Vacation"],
-              ["medical", "Medical"],
-              ["special_event", "Special Event"],
-              ["absence", "Absence"]
-            ].map(([value, label]) => (
-              <Button key={value} size="sm" className="h-10 text-xs" variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
-            ))}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="grid gap-1 text-sm font-semibold">
+        <CardContent className="grid gap-2.5 p-3">
+          <div className="grid grid-cols-[1fr_104px] gap-2">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
-              <select className="h-9 rounded-md border border-stone-200 bg-white px-3" value={type} onChange={(event) => quick(event.target.value)}>
-                <option value="normal">Normal</option>
-                <option value="overtime">Overtime</option>
-                <option value="vacation">Vacation CO</option>
-                <option value="medical">Medical CM</option>
-                <option value="special_event">Special Event</option>
-                <option value="absence">Absence</option>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => quick(event.target.value)}>
+                {typeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className="grid gap-1 text-sm font-semibold">
-              Total hours
-              <input className="h-9 rounded-md border border-stone-200 px-3" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Hours
+              <span className="flex h-9 items-center rounded-md border border-stone-200 bg-white px-2">
+                <input className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-stone-900 outline-none" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
+                <span className="text-xs font-black text-stone-500">h</span>
+              </span>
             </label>
           </div>
           {type === "overtime" ? (
-            <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">
-              This records {formatNumber(normal)}h normal time and {formatNumber(extra)}h overtime.
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+              {formatNumber(normal)}h normal + {formatNumber(extra)}h overtime.
             </p>
           ) : null}
           {canAttachDocument ? (
-            <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
-              <p className="text-xs font-black uppercase tracking-wide text-stone-500">Leave document</p>
-              <label className="flex h-9 cursor-pointer items-center justify-between gap-3 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold">
-                <span className="rounded bg-stone-100 px-2 py-1 text-stone-700">Choose file</span>
+            <div className="grid gap-2 rounded-md border border-stone-200 bg-stone-50 p-2">
+              <label className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-md border border-stone-200 bg-white px-2 text-xs font-semibold">
+                <span className="rounded bg-stone-100 px-2 py-1 text-stone-700">File</span>
                 <span className="min-w-0 flex-1 truncate text-right text-stone-500">{file?.name || "No file selected"}</span>
                 <input className="hidden" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
               </label>
@@ -883,14 +876,14 @@ function EntryEditor({
             </div>
           ) : null}
           {!canAttachDocument && linkedDocument ? (
-            <div className="flex flex-wrap gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+            <div className="flex flex-wrap gap-2 rounded-md border border-stone-200 bg-stone-50 p-2">
               <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button>
               <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button>
             </div>
           ) : null}
-          <div className="flex flex-wrap justify-between gap-2">
-            <Button variant="outline" onClick={clear}><Eraser className="h-4 w-4" />Clear entry</Button>
-            <Button onClick={save}><Paintbrush className="h-4 w-4" />Save entry</Button>
+          <div className="flex justify-between gap-2 pt-1">
+            <Button size="sm" variant="outline" onClick={clear}><Eraser className="h-4 w-4" />Clear</Button>
+            <Button size="sm" onClick={save}><Paintbrush className="h-4 w-4" />Save</Button>
           </div>
         </CardContent>
       </Card>
