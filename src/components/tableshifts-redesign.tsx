@@ -356,7 +356,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
 
             {activeTab === "timesheet" ? (
-              <div className="grid gap-1.5 rounded-lg border border-stone-200 bg-white p-3 shadow-xl shadow-stone-950/5">
+              <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
                 <label>
                   <span className="sr-only">Month</span>
                   <select className="h-7 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-xs font-semibold text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
