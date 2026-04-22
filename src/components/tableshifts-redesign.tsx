@@ -300,9 +300,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const scopeDifference = scopeTotals.worked - scopeTotals.expected;
 
   return (
-    <main className="min-h-screen p-4 text-stone-950 md:p-6">
-      <div className="grid min-h-[calc(100vh-48px)] grid-cols-1 gap-4 lg:grid-cols-[250px_1fr]">
-        <aside className="rounded-lg border border-emerald-900/10 bg-emerald-950 p-4 text-white shadow-xl shadow-emerald-950/10">
+    <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
+      <div className="grid h-full min-w-0 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[250px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-lg border border-emerald-900/10 bg-emerald-950 p-4 text-white shadow-xl shadow-emerald-950/10">
           <div className="flex items-center gap-3 border-b border-white/10 pb-5">
             <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white text-sm font-black text-emerald-900">TS</div>
             <div>
@@ -327,10 +327,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </nav>
         </aside>
 
-        <section className="grid content-start gap-4 overflow-visible">
+        <section className="grid min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden">
           <header
             className={cn(
-              "grid items-stretch gap-4",
+              "grid min-w-0 items-stretch gap-4",
               activeTab === "timesheet"
                 ? "xl:grid-cols-[minmax(220px,1fr)_minmax(260px,360px)_minmax(260px,340px)]"
                 : "lg:grid-cols-[1fr_auto]"
@@ -409,7 +409,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
           </header>
 
-          <div>
+          <div className={cn("min-w-0", activeTab === "timesheet" ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden pr-1")}>
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
               {activeTab === "timesheet" ? (
@@ -578,8 +578,8 @@ function TimesheetTable({
   const fixedCompactWidth = 176 + totalsColumns.length * 68;
   const expandedMinWidth = 188 + days.length * 38 + totalsColumns.length * 74;
   return (
-    <Card className="overflow-hidden">
-      <div className={cn(totalsExpanded ? "overflow-x-auto" : "overflow-hidden")}>
+    <Card className="max-w-full overflow-hidden">
+      <div className={cn("max-h-[calc(100vh-260px)] max-w-full", totalsExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
         <table
           className={cn("w-full table-fixed border-collapse text-xs", totalsExpanded && "min-w-max")}
           style={totalsExpanded ? { minWidth: `${expandedMinWidth}px` } : undefined}
