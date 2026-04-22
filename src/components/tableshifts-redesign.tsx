@@ -336,10 +336,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 : "lg:grid-cols-[1fr_auto] lg:items-start"
             )}
           >
-            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
+            <div className="min-w-0 rounded-lg border border-stone-200 bg-white px-4 py-3 shadow-xl shadow-stone-950/5">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Tableshifts</p>
-              <h1 className="mt-1 truncate text-3xl font-black tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
-              <label className="mt-3 inline-flex max-w-full rounded-md border border-stone-200 bg-stone-50 px-2 py-1">
+              <h1 className="mt-1 truncate text-[1.8rem] font-black leading-tight tracking-normal text-stone-950 md:text-[2.35rem]">{tabLabel(activeTab)}</h1>
+              <label className="mt-2 inline-flex max-w-full rounded-md border border-stone-200 bg-stone-50 px-2 py-0.5">
                 <span className="sr-only">Company</span>
                 <select
                   className="min-w-0 bg-transparent text-sm font-semibold text-stone-800 outline-none"
