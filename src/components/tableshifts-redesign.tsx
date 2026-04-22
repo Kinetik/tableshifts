@@ -635,6 +635,18 @@ function TimesheetTable({
   onClear: (employee: ProfileRow) => void;
 }) {
   const days = daysInMonth(month);
+  const editableCellKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    employees.forEach((employee) => {
+      if (!canEditEmployee(workspace.profile, employee, workspace)) return;
+      days.forEach((day) => {
+        if (isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace)) {
+          keys.push(`${employee.id}:${day.iso}`);
+        }
+      });
+    });
+    return keys;
+  }, [employees, month, workspace]);
   const compactColumns = ["Worked", "More"];
   const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left", "More", "Fill", "Clear"];
   const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
@@ -693,6 +705,15 @@ function TimesheetTable({
                       onSetHours={onSetHours}
                       onSetType={onSetType}
                       onClearDay={onClearDay}
+                      onMove={(key, direction) => {
+                        const currentIndex = editableCellKeys.indexOf(key);
+                        if (currentIndex < 0) return;
+                        const nextKey = editableCellKeys[currentIndex + direction];
+                        if (!nextKey) return;
+                        const nextInput = document.querySelector<HTMLInputElement>(`[data-cell-key="${nextKey}"] input`);
+                        nextInput?.focus();
+                        nextInput?.select();
+                      }}
                     />
                   ))}
                   <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
@@ -759,7 +780,8 @@ function EntryCell({
   workspace,
   onSetHours,
   onSetType,
-  onClearDay
+  onClearDay,
+  onMove
 }: {
   employee: ProfileRow;
   day: ReturnType<typeof daysInMonth>[number];
@@ -767,6 +789,7 @@ function EntryCell({
   onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
   onSetType: (employee: ProfileRow, iso: string, type: string) => void;
   onClearDay: (employee: ProfileRow, iso: string) => void;
+  onMove: (key: string, direction: 1 | -1) => void;
 }) {
   const entry = entryFor(workspace.entries, employee.id, day.iso);
   const holiday = holidayForEmployee(employee, day.iso, workspace);
@@ -782,7 +805,9 @@ function EntryCell({
   const initialHours = numericEntry && entry ? String(formatNumber(Number(entry.hours || 0))) : "";
   const [draftHours, setDraftHours] = React.useState(initialHours);
   const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
   const longPressRef = React.useRef<number | null>(null);
+  const cellKey = `${employee.id}:${day.iso}`;
 
   React.useEffect(() => {
     setDraftHours(initialHours);
@@ -825,6 +850,12 @@ function EntryCell({
     onSetType(employee, day.iso, nextType);
   }
 
+  function focusCellInput() {
+    if (!editable || !numericEntry) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }
+
   return (
     <td
       title={tooltip}
@@ -836,7 +867,12 @@ function EntryCell({
       }}
     >
       <div
-        className={cn("relative flex h-12 w-full flex-col items-center justify-center px-0.5 py-0.5 text-center leading-tight", editable ? "cursor-text hover:bg-white/25" : "cursor-default")}
+        data-cell-key={cellKey}
+        className={cn(
+          "relative flex h-12 w-full flex-col items-center justify-center px-0.5 py-0.5 text-center leading-tight focus-within:z-20 focus-within:shadow-[inset_0_0_0_2px_#047857]",
+          editable && numericEntry ? "cursor-text hover:bg-white/25" : "cursor-default"
+        )}
+        onClick={focusCellInput}
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
@@ -848,14 +884,16 @@ function EntryCell({
         {numericEntry ? (
           <>
             {entry?.type === "overtime" ? <span className="block text-[10px] font-black text-amber-900">OT</span> : null}
-            <span className="mx-auto flex h-5 max-w-full items-center justify-center leading-none">
+            <span className="mx-auto flex h-5 max-w-full items-center justify-center gap-0.5 leading-none">
               <input
+                ref={inputRef}
                 aria-label={`${employee.full_name} ${day.iso} hours`}
                 className={cn(
-                  "min-w-0 bg-transparent text-right text-[11px] font-black outline-none",
-                  draftHours ? "w-[1.5rem]" : "w-full text-center",
+                  "min-w-0 bg-transparent p-0 text-center text-[11px] font-black leading-none outline-none",
+                  draftHours ? "w-auto" : "w-full",
                   editable ? "text-stone-950" : "text-stone-500"
                 )}
+                style={draftHours ? { width: `${Math.max(1, draftHours.length)}ch` } : undefined}
                 value={draftHours}
                 placeholder={holiday ? "H" : ""}
                 disabled={!editable}
@@ -865,6 +903,11 @@ function EntryCell({
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.currentTarget.blur();
+                  }
+                  if (event.key === "Tab") {
+                    event.preventDefault();
+                    commitHours();
+                    onMove(cellKey, event.shiftKey ? -1 : 1);
                   }
                   if (event.key === "Escape") {
                     setDraftHours(initialHours);
