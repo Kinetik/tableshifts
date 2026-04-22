@@ -2043,6 +2043,19 @@ function AccountManagement({
     if (mode === "employees" && startDate) setCoAvailable(String(calculateCoEntitlement(startDate, value)));
   }
 
+  function updateRole(nextRole: string) {
+    setRole(nextRole);
+    if (nextRole !== "employee") setTeamLeaderId("");
+    if (departmentId) {
+      const department = workspace.departments.find((item) => item.id === departmentId);
+      if (["employee", "team_leader"].includes(nextRole)) setReportsToId(department?.manager_user_id || "");
+      if (nextRole === "department_manager") {
+        const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
+        setReportsToId(companyManager?.id || "");
+      }
+    }
+  }
+
   function editAccount(profile: ProfileRow) {
     const access = workspace.access.filter((item) => item.payroll_user_id === profile.id).map((item) => item.company_id);
     setEditingId(profile.id);
@@ -2144,60 +2157,39 @@ function AccountManagement({
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Role
-            <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={role} onChange={(event) => {
-              const nextRole = event.target.value;
-              setRole(nextRole);
-              if (nextRole !== "employee") setTeamLeaderId("");
-              if (departmentId) {
-                const department = workspace.departments.find((item) => item.id === departmentId);
-                if (["employee", "team_leader"].includes(nextRole)) setReportsToId(department?.manager_user_id || "");
-                if (nextRole === "department_manager") {
-                  const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
-                  setReportsToId(companyManager?.id || "");
-                }
-              }
-            }}>
-              {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
-            </select>
-            </label>
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Name
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
-            </label>
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Email
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
-            </label>
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Password
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
-            </label>
-            {mode === "employees" ? (
-              <>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Position
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Payroll specialist" />
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Identification Number
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Employee ID" />
-                </label>
-              </>
-            ) : null}
-          </div>
-
           {mode === "employees" ? (
-            <>
-              <div className="grid gap-3 md:grid-cols-3">
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Company
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={companyId} onChange={(event) => {
+            <div className="grid gap-3">
+              <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr_0.9fr]">
+                <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-xs font-black transition-colors",
+                          role === option
+                            ? "border-emerald-700 bg-emerald-700 text-white"
+                            : "border-stone-200 bg-white text-stone-600 hover:border-emerald-300 hover:text-emerald-800"
+                        )}
+                        onClick={() => updateRole(option)}
+                      >
+                        {ROLES[option]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900 md:col-span-2" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Identification number" />
+                  </div>
+                </div>
+
+                <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+                  <p className="text-xs font-black uppercase tracking-wide text-stone-500">Organization</p>
+                  <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={companyId} onChange={(event) => {
                     setCompanyId(event.target.value);
                     setDepartmentId("");
                     setReportsToId("");
@@ -2205,75 +2197,94 @@ function AccountManagement({
                   }}>
                     {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                   </select>
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Department
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                  <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
                     <option value="">No department</option>
                     {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                   </select>
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Available CO Days
-                  <div className="flex gap-2">
-                    <input className="h-10 min-w-0 flex-1 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
-                    <Button type="button" size="sm" variant="outline" onClick={() => setCoAvailable(String(suggestedCoDays))}>Suggest</Button>
-                  </div>
-                </label>
-              </div>
-              <div className="grid gap-3 md:grid-cols-4">
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Start Date
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={startDate} onChange={(event) => updateStartDate(event.target.value)} type="date" />
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  End Date
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={endDate} onChange={(event) => updateEndDate(event.target.value)} type="date" />
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Reports To
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
-                    <option value="">Reports to none</option>
-                    {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                  </select>
-                </label>
-                {role === "employee" ? (
-                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                    Team Leader
-                    <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
-                      <option value="">No team leader</option>
-                      {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
+                    <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                      <option value="">Reports to none</option>
+                      {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                     </select>
+                    {role === "employee" ? (
+                      <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                        <option value="">No team leader</option>
+                        {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                      </select>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-black uppercase tracking-wide text-stone-500">Contract</p>
+                    <button type="button" className="text-xs font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
+                      Use {suggestedCoDays} CO
+                    </button>
+                  </div>
+                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
+                    <DateInput label="Start date" value={startDate} onChange={updateStartDate} />
+                    <DateInput label="End date" value={endDate} onChange={updateEndDate} />
+                  </div>
+                  <label className="grid gap-1">
+                    <span className="text-xs font-black uppercase tracking-wide text-stone-500">Available CO Days</span>
+                    <input className="h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-sm font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
                   </label>
-                ) : <div />}
+                </div>
               </div>
-            </>
-          ) : (
-            <div className="rounded-lg border border-stone-200 p-3">
-              <p className="mb-2 text-xs font-black uppercase tracking-wide text-stone-500">Company Access</p>
-              <div className="grid max-h-40 gap-2 overflow-auto md:grid-cols-2">
-                {workspace.companies.map((company) => (
-                  <label key={company.id} className="flex items-center gap-2 rounded-md bg-stone-50 p-2 text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={permittedCompanyIds.includes(company.id)}
-                      onChange={(event) => {
-                        setPermittedCompanyIds((current) => event.target.checked
-                          ? Array.from(new Set([...current, company.id]))
-                          : current.filter((id) => id !== company.id));
-                      }}
-                    />
-                    {company.name}
-                  </label>
-                ))}
+
+              <div className="flex flex-wrap justify-end gap-2 rounded-lg border border-stone-200 bg-white p-2">
+                <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+                <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
               </div>
             </div>
+          ) : (
+            <>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Role
+                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={role} onChange={(event) => updateRole(event.target.value)}>
+                    {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Name
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Account name" />
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Email
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                </label>
+              </div>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                Password
+                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+              </label>
+              <div className="rounded-lg border border-stone-200 p-3">
+                <p className="mb-2 text-xs font-black uppercase tracking-wide text-stone-500">Company Access</p>
+                <div className="grid max-h-40 gap-2 overflow-auto md:grid-cols-2">
+                  {workspace.companies.map((company) => (
+                    <label key={company.id} className="flex items-center gap-2 rounded-md bg-stone-50 p-2 text-sm font-semibold">
+                      <input
+                        type="checkbox"
+                        checked={permittedCompanyIds.includes(company.id)}
+                        onChange={(event) => {
+                          setPermittedCompanyIds((current) => event.target.checked
+                            ? Array.from(new Set([...current, company.id]))
+                            : current.filter((id) => id !== company.id));
+                        }}
+                      />
+                      {company.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap justify-between gap-2">
+                <Button variant="outline" onClick={resetForm}>Reset</Button>
+                <Button onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+              </div>
+            </>
           )}
-
-          <div className="flex flex-wrap justify-between gap-2">
-            <Button variant="outline" onClick={resetForm}>Reset</Button>
-            <Button onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
-          </div>
         </CardContent>
       </Card>
 
@@ -2311,6 +2322,24 @@ function companyIdsForProfile(profile: ProfileRow, workspace: Workspace) {
   if (profile.company_id) ids.add(profile.company_id);
   workspace.access.filter((item) => item.payroll_user_id === profile.id).forEach((item) => ids.add(item.company_id));
   return ids;
+}
+
+function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="relative grid gap-1">
+      <span className="text-xs font-black uppercase tracking-wide text-stone-500">{label}</span>
+      <input
+        className={cn(
+          "h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-sm font-semibold text-stone-900",
+          !value && "text-transparent"
+        )}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        type="date"
+      />
+      {!value ? <span className="pointer-events-none absolute bottom-2 left-3 text-sm font-semibold text-stone-400">--/--/----</span> : null}
+    </label>
+  );
 }
 
 function calculateCoEntitlement(startDate: string, endDate?: string) {
