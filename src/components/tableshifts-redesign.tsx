@@ -328,17 +328,21 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
         </aside>
 
         <section className="overflow-hidden rounded-lg border border-stone-200 bg-white/72 shadow-xl shadow-stone-950/5 backdrop-blur">
-          <header className="flex flex-col gap-4 border-b border-stone-200 bg-white p-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="mb-2 flex items-center gap-2">
-                <Badge variant="success">Real Supabase data</Badge>
-                <Badge variant="outline">Development branch</Badge>
-              </div>
-              <h1 className="text-3xl font-black tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
-              <label className="mt-2 inline-flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-stone-500">
+          <header
+            className={cn(
+              "grid gap-4 border-b border-stone-200 bg-white p-4",
+              activeTab === "timesheet"
+                ? "xl:grid-cols-[minmax(220px,1fr)_minmax(260px,360px)_minmax(260px,340px)] xl:items-start"
+                : "lg:grid-cols-[1fr_auto] lg:items-start"
+            )}
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Tableshifts</p>
+              <h1 className="mt-1 truncate text-3xl font-black tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
+              <label className="mt-2 inline-flex max-w-full items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-stone-500">
                 Company
                 <select
-                  className="bg-transparent text-sm font-semibold normal-case tracking-normal text-stone-800 outline-none"
+                  className="min-w-0 bg-transparent text-sm font-semibold normal-case tracking-normal text-stone-800 outline-none"
                   value={activeCompany?.id || ""}
                   onChange={(event) => {
                     setActiveCompanyId(event.target.value);
@@ -350,59 +354,65 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 </select>
               </label>
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3">
+
+            {activeTab === "timesheet" ? (
+              <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Month
+                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
+                    {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Department
+                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentFilter} onChange={(event) => {
+                    setDepartmentFilter(event.target.value);
+                    setTeamFilter("all");
+                  }}>
+                    <option value="all">All departments</option>
+                    {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Team Leader
+                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamFilter} onChange={(event) => {
+                    const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
+                    setTeamFilter(event.target.value);
+                    if (leader?.department_id) setDepartmentFilter(leader.department_id);
+                  }}>
+                    <option value="all">All team leaders</option>
+                    {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
+                  </select>
+                </label>
+              </div>
+            ) : null}
+
+            <div className="grid gap-2 lg:justify-items-end">
               {pendingApprovals.length ? (
-                <Button variant="outline" onClick={() => setActiveTab("leave")}>
+                <Button size="sm" variant="outline" onClick={() => setActiveTab("leave")}>
                   <Bell className="h-4 w-4" />{pendingApprovals.length} pending
                 </Button>
               ) : null}
-              <div className="text-right text-sm">
+              <div className="text-left text-sm lg:text-right">
                 <strong className="block">{workspace.profile.full_name}</strong>
-                <span className="text-stone-500">{workspace.profile.position || ROLES[workspace.profile.role]} - {workspace.profile.email}</span>
+                <span className="block text-stone-600">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
+                <span className="block text-stone-500">{workspace.profile.email}</span>
               </div>
-              <Button variant="outline" onClick={signOut}><LogOut className="h-4 w-4" />Logout</Button>
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {activeTab === "timesheet" ? (
+                  <Button size="sm" variant="outline" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                    <Download className="h-4 w-4" /> Export CSV
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" onClick={signOut}><LogOut className="h-4 w-4" />Logout</Button>
+              </div>
             </div>
           </header>
 
-          <div className="p-5">
+          <div className="p-4">
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
               {activeTab === "timesheet" ? (
-                <>
-                <div className="mb-4 grid gap-3 rounded-lg border border-stone-200 bg-white p-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
-                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                    Month
-                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
-                      {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                    Department
-                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentFilter} onChange={(event) => {
-                      setDepartmentFilter(event.target.value);
-                      setTeamFilter("all");
-                    }}>
-                      <option value="all">All departments</option>
-                      {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                    </select>
-                  </label>
-                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                    Team Leader
-                    <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamFilter} onChange={(event) => {
-                      const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
-                      setTeamFilter(event.target.value);
-                      if (leader?.department_id) setDepartmentFilter(leader.department_id);
-                    }}>
-                      <option value="all">All team leaders</option>
-                      {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
-                    </select>
-                  </label>
-                  <div className="flex items-end">
-                    <Button variant="outline" className="w-full lg:w-auto" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
-                      <Download className="h-4 w-4" /> Export CSV
-                    </Button>
-                  </div>
-                </div>
                 <TimesheetTable
                   month={month}
                   workspace={workspace}
@@ -413,7 +423,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                   onFill={(employee) => void fillNormalTime(employee)}
                   onClear={(employee) => void clearEmployeeMonth(employee)}
                 />
-                </>
               ) : null}
 
               {activeTab === "leave" ? (
