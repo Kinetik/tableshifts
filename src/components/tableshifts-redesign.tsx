@@ -420,6 +420,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                   totalsExpanded={totalsExpanded}
                   onToggleTotals={() => setTotalsExpanded((value) => !value)}
                   onEdit={(employee, iso) => setEditor({ employee, iso })}
+                  onSetHours={(employee, iso, hours) => void saveCellHours(employee, iso, hours)}
+                  onSetType={(employee, iso, type) => void saveCellType(employee, iso, type)}
+                  onClearDay={(employee, iso) => void clearEmployeeDay(employee, iso)}
                   onFill={(employee) => void fillNormalTime(employee)}
                   onClear={(employee) => void clearEmployeeMonth(employee)}
                 />
@@ -511,6 +514,70 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     if (authUser) await loadWorkspace(authUser);
   }
 
+  async function saveCellEntry(employee: ProfileRow, iso: string, type: string, hours: number) {
+    const currentWorkspace = workspace;
+    if (!supabase || !currentWorkspace?.profile.environment_id || !employee.company_id) return;
+    const existing = entryFor(currentWorkspace.entries, employee.id, iso);
+    const entryId = existing?.id || crypto.randomUUID();
+    const { error } = await supabase.from("timesheet_entries").upsert({
+      id: entryId,
+      environment_id: currentWorkspace.profile.environment_id,
+      company_id: employee.company_id,
+      employee_user_id: employee.id,
+      department_id: employee.department_id,
+      work_date: iso,
+      type,
+      hours,
+      attachment_path: type === "vacation" ? existing?.attachment_path || null : null,
+      updated_by: currentWorkspace.profile.id,
+      created_by: currentWorkspace.profile.id
+    }, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
+  async function saveCellHours(employee: ProfileRow, iso: string, rawHours: string) {
+    const currentWorkspace = workspace;
+    if (!currentWorkspace) return;
+    const trimmed = rawHours.trim();
+    if (!trimmed) {
+      await clearEmployeeDay(employee, iso);
+      return;
+    }
+    const parsed = Number(trimmed.replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 24) {
+      setMessage("Enter hours between 0 and 24.");
+      return;
+    }
+    const normal = normalHours(employee, currentWorkspace);
+    await saveCellEntry(employee, iso, parsed > normal ? "overtime" : "normal", parsed);
+  }
+
+  async function saveCellType(employee: ProfileRow, iso: string, type: string) {
+    const currentWorkspace = workspace;
+    if (!currentWorkspace) return;
+    const normal = normalHours(employee, currentWorkspace);
+    const hours = type === "normal" ? normal : type === "overtime" ? normal + 2 : 0;
+    await saveCellEntry(employee, iso, type, hours);
+  }
+
+  async function clearEmployeeDay(employee: ProfileRow, iso: string) {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from("timesheet_entries")
+      .delete()
+      .eq("employee_user_id", employee.id)
+      .eq("work_date", iso);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
   async function clearEmployeeMonth(employee: ProfileRow) {
     if (!supabase) return;
     const confirmed = window.confirm(`Clear all entries for ${employee.full_name} in ${month}?`);
@@ -559,6 +626,9 @@ function TimesheetTable({
   totalsExpanded,
   onToggleTotals,
   onEdit,
+  onSetHours,
+  onSetType,
+  onClearDay,
   onFill,
   onClear
 }: {
@@ -568,6 +638,9 @@ function TimesheetTable({
   totalsExpanded: boolean;
   onToggleTotals: () => void;
   onEdit: (employee: ProfileRow, iso: string) => void;
+  onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
+  onSetType: (employee: ProfileRow, iso: string, type: string) => void;
+  onClearDay: (employee: ProfileRow, iso: string) => void;
   onFill: (employee: ProfileRow) => void;
   onClear: (employee: ProfileRow) => void;
 }) {
@@ -621,7 +694,18 @@ function TimesheetTable({
                     <strong className="block truncate text-sm">{employee.full_name}</strong>
                     <span className="block truncate text-[11px] font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
                   </td>
-                  {days.map((day) => <EntryCell key={day.iso} employee={employee} day={day} workspace={workspace} onEdit={onEdit} />)}
+                  {days.map((day) => (
+                    <EntryCell
+                      key={day.iso}
+                      employee={employee}
+                      day={day}
+                      workspace={workspace}
+                      onEdit={onEdit}
+                      onSetHours={onSetHours}
+                      onSetType={onSetType}
+                      onClearDay={onClearDay}
+                    />
+                  ))}
                   <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
                   {totalsExpanded ? (
                     <>
@@ -684,12 +768,18 @@ function EntryCell({
   employee,
   day,
   workspace,
-  onEdit
+  onEdit,
+  onSetHours,
+  onSetType,
+  onClearDay
 }: {
   employee: ProfileRow;
   day: ReturnType<typeof daysInMonth>[number];
   workspace: Workspace;
   onEdit: (employee: ProfileRow, iso: string) => void;
+  onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
+  onSetType: (employee: ProfileRow, iso: string, type: string) => void;
+  onClearDay: (employee: ProfileRow, iso: string) => void;
 }) {
   const entry = entryFor(workspace.entries, employee.id, day.iso);
   const holiday = holidayForEmployee(employee, day.iso, workspace);
@@ -701,21 +791,140 @@ function EntryCell({
   const editable = canEditEmployee(workspace.profile, employee, workspace);
   const company = workspace.companies.find((item) => item.id === employee.company_id);
   const customColor = entry?.type ? entryColor(company, entry.type) : null;
+  const numericEntry = !entry || ["normal", "overtime"].includes(entry.type);
+  const initialHours = numericEntry && entry ? String(formatNumber(Number(entry.hours || 0))) : "";
+  const [draftHours, setDraftHours] = React.useState(initialHours);
+  const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const longPressRef = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    setDraftHours(initialHours);
+  }, [initialHours]);
+
+  React.useEffect(() => {
+    if (!menu) return;
+    function close() {
+      setMenu(null);
+    }
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [menu]);
+
+  function commitHours() {
+    if (!editable || !numericEntry || draftHours === initialHours) return;
+    onSetHours(employee, day.iso, draftHours);
+  }
+
+  function openMenu(x: number, y: number) {
+    if (!editable) return;
+    setMenu({ x, y });
+  }
+
+  function clearLongPress() {
+    if (longPressRef.current) window.clearTimeout(longPressRef.current);
+    longPressRef.current = null;
+  }
+
+  function applyType(nextType: string) {
+    setMenu(null);
+    if (nextType === "clear") {
+      onClearDay(employee, day.iso);
+      return;
+    }
+    onSetType(employee, day.iso, nextType);
+  }
+
   return (
     <td
       title={tooltip}
       className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected, Boolean(customColor)))}
       style={customColor ? { backgroundColor: customColor } : undefined}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        openMenu(event.clientX, event.clientY);
+      }}
     >
-      <button
-        type="button"
-        className={cn("h-full min-h-10 w-full px-0.5 py-1.5 text-center leading-tight", editable ? "cursor-pointer hover:bg-white/25" : "cursor-default")}
-        onClick={() => editable && onEdit(employee, day.iso)}
-        disabled={!editable}
+      <div
+        className={cn("relative h-full min-h-10 w-full px-0.5 py-1 text-center leading-tight", editable ? "cursor-text hover:bg-white/25" : "cursor-default")}
+        onDoubleClick={() => editable && onEdit(employee, day.iso)}
+        onPointerDown={(event) => {
+          if (!editable) return;
+          clearLongPress();
+          longPressRef.current = window.setTimeout(() => openMenu(event.clientX, event.clientY), 550);
+        }}
+        onPointerUp={clearLongPress}
+        onPointerLeave={clearLongPress}
       >
-      <span className="block text-[11px] font-black">{code}</span>
-      <span className="text-[10px] text-stone-500">{detail}</span>
-      </button>
+        {numericEntry ? (
+          <>
+            {entry?.type === "overtime" ? <span className="block text-[10px] font-black text-amber-900">OT</span> : null}
+            <input
+              aria-label={`${employee.full_name} ${day.iso} hours`}
+              className={cn(
+                "mx-auto block h-5 w-full bg-transparent text-center text-[11px] font-black outline-none",
+                editable ? "text-stone-950" : "text-stone-500"
+              )}
+              value={draftHours}
+              placeholder={holiday ? "H" : ""}
+              disabled={!editable}
+              inputMode="decimal"
+              onChange={(event) => setDraftHours(event.target.value)}
+              onBlur={commitHours}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+                if (event.key === "Escape") {
+                  setDraftHours(initialHours);
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            <span className="text-[10px] text-stone-500">{draftHours ? "h" : ""}</span>
+          </>
+        ) : (
+          <>
+            <span className="block text-[11px] font-black">{code}</span>
+            <span className="text-[10px] text-stone-500">{detail}</span>
+          </>
+        )}
+      </div>
+      {menu ? (
+        <div
+          className="fixed z-[80] grid min-w-36 overflow-hidden rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
+          style={{ left: menu.x, top: menu.y }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          {[
+            ["normal", "Normal shift"],
+            ["overtime", "Overtime"],
+            ["vacation", "Vacation CO"],
+            ["medical", "Medical CM"],
+            ["special_event", "Special Event"],
+            ["absence", "Absence"],
+            ["clear", "Clear"]
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={cn(
+                "rounded px-2 py-1.5 text-left hover:bg-stone-100",
+                value === "clear" && "text-rose-700 hover:bg-rose-50"
+              )}
+              onClick={() => applyType(value)}
+            >
+              {label}
+            </button>
+          ))}
+          <button type="button" className="rounded px-2 py-1.5 text-left text-stone-500 hover:bg-stone-100" onClick={() => onEdit(employee, day.iso)}>
+            Details...
+          </button>
+        </div>
+      ) : null}
     </td>
   );
 }
