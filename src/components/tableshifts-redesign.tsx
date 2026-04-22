@@ -327,22 +327,22 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </nav>
         </aside>
 
-        <section className="overflow-hidden rounded-lg border border-stone-200 bg-white/72 shadow-xl shadow-stone-950/5 backdrop-blur">
+        <section className="grid content-start gap-4 overflow-visible">
           <header
             className={cn(
-              "grid gap-4 border-b border-stone-200 bg-white p-4",
+              "grid gap-4",
               activeTab === "timesheet"
                 ? "xl:grid-cols-[minmax(220px,1fr)_minmax(260px,360px)_minmax(260px,340px)] xl:items-start"
                 : "lg:grid-cols-[1fr_auto] lg:items-start"
             )}
           >
-            <div className="min-w-0">
+            <div className="min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
               <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Tableshifts</p>
               <h1 className="mt-1 truncate text-3xl font-black tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
-              <label className="mt-2 inline-flex max-w-full items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-2 py-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                Company
+              <label className="mt-3 inline-flex max-w-full rounded-md border border-stone-200 bg-stone-50 px-2 py-1">
+                <span className="sr-only">Company</span>
                 <select
-                  className="min-w-0 bg-transparent text-sm font-semibold normal-case tracking-normal text-stone-800 outline-none"
+                  className="min-w-0 bg-transparent text-sm font-semibold text-stone-800 outline-none"
                   value={activeCompany?.id || ""}
                   onChange={(event) => {
                     setActiveCompanyId(event.target.value);
@@ -356,16 +356,16 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
 
             {activeTab === "timesheet" ? (
-              <div className="grid gap-2 rounded-lg border border-stone-200 bg-stone-50 p-3">
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Month
-                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
+              <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
+                <label>
+                  <span className="sr-only">Month</span>
+                  <select className="h-9 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
                     {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Department
-                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentFilter} onChange={(event) => {
+                <label>
+                  <span className="sr-only">Department</span>
+                  <select className="h-9 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={departmentFilter} onChange={(event) => {
                     setDepartmentFilter(event.target.value);
                     setTeamFilter("all");
                   }}>
@@ -373,9 +373,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                     {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                   </select>
                 </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Team Leader
-                  <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamFilter} onChange={(event) => {
+                <label>
+                  <span className="sr-only">Team Leader</span>
+                  <select className="h-9 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={teamFilter} onChange={(event) => {
                     const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
                     setTeamFilter(event.target.value);
                     if (leader?.department_id) setDepartmentFilter(leader.department_id);
@@ -387,7 +387,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               </div>
             ) : null}
 
-            <div className="grid gap-2 lg:justify-items-end">
+            <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5 lg:justify-items-end">
               {pendingApprovals.length ? (
                 <Button size="sm" variant="outline" onClick={() => setActiveTab("leave")}>
                   <Bell className="h-4 w-4" />{pendingApprovals.length} pending
@@ -409,7 +409,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
           </header>
 
-          <div className="p-4">
+          <div>
               {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
 
               {activeTab === "timesheet" ? (
