@@ -831,6 +831,15 @@ function EntryCell({
     onSetHours(employee, day.iso, draftHours);
   }
 
+  function updateDraftHours(value: string) {
+    const digits = value.replace(/\D/g, "");
+    if (!digits) {
+      setDraftHours("");
+      return;
+    }
+    setDraftHours(String(Math.min(24, Number(digits))));
+  }
+
   function openMenu(x: number, y: number) {
     if (!editable) return;
     setMenu({ x, y });
@@ -897,10 +906,14 @@ function EntryCell({
                 value={draftHours}
                 placeholder={holiday ? "H" : ""}
                 disabled={!editable}
-                inputMode="decimal"
-                onChange={(event) => setDraftHours(event.target.value)}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                onChange={(event) => updateDraftHours(event.target.value)}
                 onBlur={commitHours}
                 onKeyDown={(event) => {
+                  if (event.key.length === 1 && !/\d/.test(event.key)) {
+                    event.preventDefault();
+                  }
                   if (event.key === "Enter") {
                     event.currentTarget.blur();
                   }
