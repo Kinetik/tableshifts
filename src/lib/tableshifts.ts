@@ -276,12 +276,13 @@ export function generatedLeaveDocumentHtml(
   <meta charset="utf-8" />
   <title>Leave Request</title>
   <style>
-    body { font-family: Arial, sans-serif; color: #15211b; padding: 40px; line-height: 1.55; }
-    .brand { color: #047857; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.16em; }
-    h1 { margin: 8px 0 24px; font-size: 30px; }
-    .box { border: 1px solid #d7ded8; border-radius: 8px; padding: 20px; margin: 18px 0; }
+    body { font-family: Arial, sans-serif; color: #15211b; padding: 24px; line-height: 1.42; font-size: 14px; }
+    .brand { color: #047857; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.14em; }
+    h1 { margin: 6px 0 14px; font-size: 24px; }
+    p { margin: 8px 0; }
+    .box { border: 1px solid #d7ded8; border-radius: 8px; padding: 14px; margin: 12px 0; }
     .muted { color: #68736d; }
-    .status { display: inline-block; padding: 6px 10px; border-radius: 6px; background: #ecfdf5; color: #047857; font-weight: 800; }
+    .status { display: inline-block; padding: 5px 9px; border-radius: 6px; background: #ecfdf5; color: #047857; font-weight: 800; }
   </style>
 </head>
 <body>

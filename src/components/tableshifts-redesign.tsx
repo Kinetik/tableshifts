@@ -634,10 +634,26 @@ function TimesheetTable({
                   {totalsExpanded ? (
                     <>
                       <td className="border-l border-stone-200 px-2 text-center">
-                        <Button size="sm" onClick={() => onFill(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Fill</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-emerald-700 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                          onClick={() => onFill(employee)}
+                          disabled={!canEditEmployee(workspace.profile, employee, workspace)}
+                        >
+                          Fill
+                        </Button>
                       </td>
                       <td className="border-l border-stone-200 px-2 text-center">
-                        <Button size="sm" className="bg-rose-700 text-white hover:bg-rose-800" onClick={() => onClear(employee)} disabled={!canEditEmployee(workspace.profile, employee, workspace)}>Clear</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-rose-700 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          onClick={() => onClear(employee)}
+                          disabled={!canEditEmployee(workspace.profile, employee, workspace)}
+                        >
+                          Clear
+                        </Button>
                       </td>
                     </>
                   ) : null}
@@ -729,7 +745,7 @@ function EntryEditor({
 
   function quick(nextType: string) {
     setType(nextType);
-    if (nextType === "normal" || nextType === "weekend") setHours(String(normal));
+    if (nextType === "normal") setHours(String(normal));
     if (nextType === "overtime") setHours(String(normal + 2));
     if (["vacation", "medical", "special_event", "absence"].includes(nextType)) setHours("0");
   }
@@ -807,17 +823,16 @@ function EntryEditor({
           </div>
         </CardHeader>
         <CardContent className="grid gap-3 p-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {[
               ["normal", "Normal"],
-              ["overtime", "OT"],
-              ["vacation", "CO"],
-              ["medical", "CM"],
-              ["special_event", "SE"],
-              ["absence", "Absence"],
-              ["weekend", "Weekend"]
+              ["overtime", "Overtime"],
+              ["vacation", "Vacation"],
+              ["medical", "Medical"],
+              ["special_event", "Special Event"],
+              ["absence", "Absence"]
             ].map(([value, label]) => (
-              <Button key={value} size="sm" variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
+              <Button key={value} size="sm" className="h-10 text-xs" variant={type === value ? "default" : "outline"} onClick={() => quick(value)}>{label}</Button>
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -830,7 +845,6 @@ function EntryEditor({
                 <option value="medical">Medical CM</option>
                 <option value="special_event">Special Event</option>
                 <option value="absence">Absence</option>
-                <option value="weekend">Weekend</option>
               </select>
             </label>
             <label className="grid gap-1 text-sm font-semibold">
@@ -1691,14 +1705,20 @@ function CompanyDepartmentManagement({
                   {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                 </select>
               </label>
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
-                <option value="">No manager</option>
-                {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-              </select>
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
-                <option value="">No team leader</option>
-                {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-              </select>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                Manager
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                  <option value="">No manager</option>
+                  {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                Team Leader
+                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                  <option value="">No team leader</option>
+                  {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                </select>
+              </label>
             </div>
             <Button onClick={createDepartment}><Plus className="h-4 w-4" />Add Department</Button>
           </CardContent>
@@ -1846,7 +1866,15 @@ function CompanyDepartmentManagement({
                               );
                             })()}
                             <div className="flex flex-wrap gap-2">
-                              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, index) => (
+                              {([
+                                ["Mon", 1],
+                                ["Tue", 2],
+                                ["Wed", 3],
+                                ["Thu", 4],
+                                ["Fri", 5],
+                                ["Sat", 6],
+                                ["Sun", 0]
+                              ] as const).map(([day, index]) => (
                                 <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold">
                                   <input
                                     type="checkbox"
@@ -1905,7 +1933,7 @@ function AccountManagement({
   const [departmentId, setDepartmentId] = React.useState("");
   const [position, setPosition] = React.useState("");
   const [identificationNumber, setIdentificationNumber] = React.useState("");
-  const [startDate, setStartDate] = React.useState(new Date().toISOString().slice(0, 10));
+  const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [coAvailable, setCoAvailable] = React.useState("0");
   const [reportsToId, setReportsToId] = React.useState("");
@@ -1988,7 +2016,7 @@ function AccountManagement({
     setDepartmentId("");
     setPosition("");
     setIdentificationNumber("");
-    setStartDate(new Date().toISOString().slice(0, 10));
+    setStartDate("");
     setEndDate("");
     setCoAvailable("0");
     setReportsToId("");
@@ -1998,7 +2026,12 @@ function AccountManagement({
 
   function updateStartDate(value: string) {
     setStartDate(value);
-    if (mode === "employees" && !editingId) setCoAvailable(String(calculateCoEntitlement(value, endDate)));
+    if (mode === "employees" && value) setCoAvailable(String(calculateCoEntitlement(value, endDate)));
+  }
+
+  function updateEndDate(value: string) {
+    setEndDate(value);
+    if (mode === "employees" && startDate) setCoAvailable(String(calculateCoEntitlement(startDate, value)));
   }
 
   function editAccount(profile: ProfileRow) {
@@ -2012,7 +2045,7 @@ function AccountManagement({
     setDepartmentId(profile.department_id || "");
     setPosition(profile.position || "");
     setIdentificationNumber(profile.identification_number || "");
-    setStartDate(profile.start_date || new Date().toISOString().slice(0, 10));
+    setStartDate(profile.start_date || "");
     setEndDate(profile.end_date || "");
     setCoAvailable(String(profile.co_available || 0));
     setReportsToId(profile.reports_to_user_id || "");
@@ -2153,18 +2186,24 @@ function AccountManagement({
           {mode === "employees" ? (
             <>
               <div className="grid gap-3 md:grid-cols-3">
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={companyId} onChange={(event) => {
-                  setCompanyId(event.target.value);
-                  setDepartmentId("");
-                  setReportsToId("");
-                  setTeamLeaderId("");
-                }}>
-                  {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-                </select>
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
-                  <option value="">No department</option>
-                  {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                </select>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Company
+                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={companyId} onChange={(event) => {
+                    setCompanyId(event.target.value);
+                    setDepartmentId("");
+                    setReportsToId("");
+                    setTeamLeaderId("");
+                  }}>
+                    {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Department
+                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                    <option value="">No department</option>
+                    {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </select>
+                </label>
                 <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                   Available CO Days
                   <div className="flex gap-2">
@@ -2180,17 +2219,23 @@ function AccountManagement({
                 </label>
                 <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                   End Date
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={endDate} onChange={(event) => setEndDate(event.target.value)} type="date" />
+                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={endDate} onChange={(event) => updateEndDate(event.target.value)} type="date" />
                 </label>
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
-                  <option value="">Reports to none</option>
-                  {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                </select>
-                {role === "employee" ? (
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
-                    <option value="">No team leader</option>
-                    {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                  Reports To
+                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                    <option value="">Reports to none</option>
+                    {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                   </select>
+                </label>
+                {role === "employee" ? (
+                  <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                    Team Leader
+                    <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                      <option value="">No team leader</option>
+                      {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </select>
+                  </label>
                 ) : <div />}
               </div>
             </>
@@ -2307,7 +2352,7 @@ function DocumentPreview({ html, onClose }: { html: string; onClose: () => void 
           <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
         </CardHeader>
         <CardContent className="p-0">
-          <iframe className="h-[520px] w-full bg-white" srcDoc={html} title="Leave request document preview" />
+          <iframe className="h-[430px] w-full bg-white" srcDoc={html} title="Leave request document preview" />
         </CardContent>
       </Card>
     </div>
