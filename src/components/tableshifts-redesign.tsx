@@ -11,13 +11,10 @@ import {
   ChevronRight,
   ClipboardCheck,
   Download,
-  Eraser,
   Eye,
-  FileText,
   Image as ImageIcon,
   LayoutDashboard,
   LogOut,
-  Paintbrush,
   Palette,
   Plus,
   Save,
@@ -93,6 +90,17 @@ const DEFAULT_ENTRY_COLORS: Record<string, string> = {
   special_event: "#e7e5e4"
 };
 
+const SPECIAL_EVENT_REASONS = [
+  "Family death",
+  "Child birth",
+  "Marriage",
+  "Blood donation",
+  "Moving house",
+  "Jury duty",
+  "Civic duty",
+  "Other special event"
+];
+
 const COUNTRY_OPTIONS = [
   ["RO", "Romania"],
   ["AT", "Austria"],
@@ -128,7 +136,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [password, setPassword] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
-  const [editor, setEditor] = React.useState<{ employee: ProfileRow; iso: string } | null>(null);
   const [totalsExpanded, setTotalsExpanded] = React.useState(false);
 
   const loadWorkspace = React.useCallback(async (user: User) => {
@@ -419,7 +426,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                   employees={employees}
                   totalsExpanded={totalsExpanded}
                   onToggleTotals={() => setTotalsExpanded((value) => !value)}
-                  onEdit={(employee, iso) => setEditor({ employee, iso })}
                   onSetHours={(employee, iso, hours) => void saveCellHours(employee, iso, hours)}
                   onSetType={(employee, iso, type) => void saveCellType(employee, iso, type)}
                   onClearDay={(employee, iso) => void clearEmployeeDay(employee, iso)}
@@ -470,20 +476,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           </div>
         </section>
       </div>
-      {editor ? (
-        <EntryEditor
-          editor={editor}
-          workspace={workspace}
-          month={month}
-          supabase={supabase}
-          onClose={() => setEditor(null)}
-          onSaved={() => {
-            setEditor(null);
-            if (authUser) void loadWorkspace(authUser);
-          }}
-          onMessage={setMessage}
-        />
-      ) : null}
     </main>
   );
 
@@ -528,7 +520,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
       work_date: iso,
       type,
       hours,
-      attachment_path: type === "vacation" ? existing?.attachment_path || null : null,
+      attachment_path: ["vacation", "medical"].includes(type) ? existing?.attachment_path || null : null,
       updated_by: currentWorkspace.profile.id,
       created_by: currentWorkspace.profile.id
     }, { onConflict: "employee_user_id,work_date" });
@@ -625,7 +617,6 @@ function TimesheetTable({
   employees,
   totalsExpanded,
   onToggleTotals,
-  onEdit,
   onSetHours,
   onSetType,
   onClearDay,
@@ -637,7 +628,6 @@ function TimesheetTable({
   employees: ProfileRow[];
   totalsExpanded: boolean;
   onToggleTotals: () => void;
-  onEdit: (employee: ProfileRow, iso: string) => void;
   onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
   onSetType: (employee: ProfileRow, iso: string, type: string) => void;
   onClearDay: (employee: ProfileRow, iso: string) => void;
@@ -700,7 +690,6 @@ function TimesheetTable({
                       employee={employee}
                       day={day}
                       workspace={workspace}
-                      onEdit={onEdit}
                       onSetHours={onSetHours}
                       onSetType={onSetType}
                       onClearDay={onClearDay}
@@ -768,7 +757,6 @@ function EntryCell({
   employee,
   day,
   workspace,
-  onEdit,
   onSetHours,
   onSetType,
   onClearDay
@@ -776,7 +764,6 @@ function EntryCell({
   employee: ProfileRow;
   day: ReturnType<typeof daysInMonth>[number];
   workspace: Workspace;
-  onEdit: (employee: ProfileRow, iso: string) => void;
   onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
   onSetType: (employee: ProfileRow, iso: string, type: string) => void;
   onClearDay: (employee: ProfileRow, iso: string) => void;
@@ -850,7 +837,6 @@ function EntryCell({
     >
       <div
         className={cn("relative h-full min-h-10 w-full px-0.5 py-1 text-center leading-tight", editable ? "cursor-text hover:bg-white/25" : "cursor-default")}
-        onDoubleClick={() => editable && onEdit(employee, day.iso)}
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
@@ -862,29 +848,32 @@ function EntryCell({
         {numericEntry ? (
           <>
             {entry?.type === "overtime" ? <span className="block text-[10px] font-black text-amber-900">OT</span> : null}
-            <input
-              aria-label={`${employee.full_name} ${day.iso} hours`}
-              className={cn(
-                "mx-auto block h-5 w-full bg-transparent text-center text-[11px] font-black outline-none",
-                editable ? "text-stone-950" : "text-stone-500"
-              )}
-              value={draftHours}
-              placeholder={holiday ? "H" : ""}
-              disabled={!editable}
-              inputMode="decimal"
-              onChange={(event) => setDraftHours(event.target.value)}
-              onBlur={commitHours}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-                if (event.key === "Escape") {
-                  setDraftHours(initialHours);
-                  event.currentTarget.blur();
-                }
-              }}
-            />
-            <span className="text-[10px] text-stone-500">{draftHours ? "h" : ""}</span>
+            <span className="mx-auto flex h-5 max-w-full items-center justify-center">
+              <input
+                aria-label={`${employee.full_name} ${day.iso} hours`}
+                className={cn(
+                  "min-w-0 bg-transparent text-right text-[11px] font-black outline-none",
+                  draftHours ? "w-[1.5rem]" : "w-full text-center",
+                  editable ? "text-stone-950" : "text-stone-500"
+                )}
+                value={draftHours}
+                placeholder={holiday ? "H" : ""}
+                disabled={!editable}
+                inputMode="decimal"
+                onChange={(event) => setDraftHours(event.target.value)}
+                onBlur={commitHours}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                  if (event.key === "Escape") {
+                    setDraftHours(initialHours);
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              {draftHours ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
+            </span>
           </>
         ) : (
           <>
@@ -895,16 +884,14 @@ function EntryCell({
       </div>
       {menu ? (
         <div
-          className="fixed z-[80] grid min-w-36 overflow-hidden rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
+          className="fixed z-[80] grid min-w-36 overflow-visible rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
           style={{ left: menu.x, top: menu.y }}
           onClick={(event) => event.stopPropagation()}
         >
           {[
             ["normal", "Normal shift"],
-            ["overtime", "Overtime"],
             ["vacation", "Vacation CO"],
             ["medical", "Medical CM"],
-            ["special_event", "Special Event"],
             ["absence", "Absence"],
             ["clear", "Clear"]
           ].map(([value, label]) => (
@@ -920,184 +907,22 @@ function EntryCell({
               {label}
             </button>
           ))}
-          <button type="button" className="rounded px-2 py-1.5 text-left text-stone-500 hover:bg-stone-100" onClick={() => onEdit(employee, day.iso)}>
-            Details...
-          </button>
+          <div className="group relative">
+            <button type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
+              Special Event
+              <span className="text-stone-400">›</span>
+            </button>
+            <div className="absolute left-full top-0 hidden min-w-44 rounded-md border border-stone-200 bg-white p-1 shadow-xl shadow-stone-950/15 group-hover:grid group-focus-within:grid">
+              {SPECIAL_EVENT_REASONS.map((reason) => (
+                <button key={reason} type="button" className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => applyType("special_event")}>
+                  {reason}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
     </td>
-  );
-}
-
-function EntryEditor({
-  editor,
-  workspace,
-  month,
-  supabase,
-  onClose,
-  onSaved,
-  onMessage
-}: {
-  editor: { employee: ProfileRow; iso: string };
-  workspace: Workspace;
-  month: string;
-  supabase: SupabaseClient | null;
-  onClose: () => void;
-  onSaved: () => void;
-  onMessage: (message: string) => void;
-}) {
-  const existing = entryFor(workspace.entries, editor.employee.id, editor.iso);
-  const department = departmentFor(editor.employee, workspace);
-  const normal = normalHours(editor.employee, workspace);
-  const [type, setType] = React.useState(existing?.type || "normal");
-  const [hours, setHours] = React.useState(String(existing?.hours ?? normal));
-  const [file, setFile] = React.useState<File | null>(null);
-  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
-  const extra = Math.max(0, Number(hours || 0) - normal);
-  const canAttachDocument = type === "vacation";
-  const linkedRequest = existing?.leave_request_id
-    ? workspace.leaveRequests.find((request) => request.id === existing.leave_request_id)
-    : null;
-  const linkedDocument = linkedRequest?.generated_document_html || "";
-  const attachmentPath = existing?.attachment_path || linkedRequest?.attachment_path || "";
-  const typeOptions = [
-    ["normal", "Normal"],
-    ["overtime", "Overtime"],
-    ["vacation", "Vacation CO"],
-    ["medical", "Medical CM"],
-    ["special_event", "Special Event"],
-    ["absence", "Absence"]
-  ] as const;
-
-  function quick(nextType: string) {
-    setType(nextType);
-    if (nextType === "normal") setHours(String(normal));
-    if (nextType === "overtime") setHours(String(normal + 2));
-    if (["vacation", "medical", "special_event", "absence"].includes(nextType)) setHours("0");
-  }
-
-  async function save() {
-    if (!supabase || !workspace.profile.environment_id || !editor.employee.company_id) return;
-    let nextHours = Number(hours || 0);
-    if (!Number.isFinite(nextHours)) nextHours = 0;
-    if (type === "overtime" && nextHours < normal) nextHours = normal;
-    const entryId = existing?.id || crypto.randomUUID();
-    let uploadedPath = existing?.attachment_path || null;
-    try {
-      uploadedPath = canAttachDocument && file
-        ? await uploadLeaveDocument(supabase, workspace, entryId, file)
-        : uploadedPath;
-    } catch (error) {
-      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
-      return;
-    }
-    const { error } = await supabase.from("timesheet_entries").upsert({
-      id: entryId,
-      environment_id: workspace.profile.environment_id,
-      company_id: editor.employee.company_id,
-      employee_user_id: editor.employee.id,
-      department_id: editor.employee.department_id,
-      work_date: editor.iso,
-      type,
-      hours: nextHours,
-      attachment_path: canAttachDocument ? uploadedPath : null,
-      updated_by: workspace.profile.id,
-      created_by: workspace.profile.id
-    }, { onConflict: "employee_user_id,work_date" });
-    if (error) {
-      onMessage(error.message);
-      return;
-    }
-    onSaved();
-  }
-
-  async function removeAttachment() {
-    if (!supabase || !existing?.id || !existing.attachment_path) return;
-    await supabase.storage.from("leave-documents").remove([existing.attachment_path]);
-    const { error } = await supabase.from("timesheet_entries").update({ attachment_path: null }).eq("id", existing.id);
-    if (error) {
-      onMessage(error.message);
-      return;
-    }
-    onSaved();
-  }
-
-  async function clear() {
-    if (!supabase) return;
-    const { error } = await supabase
-      .from("timesheet_entries")
-      .delete()
-      .eq("employee_user_id", editor.employee.id)
-      .eq("work_date", editor.iso);
-    if (error) {
-      onMessage(error.message);
-      return;
-    }
-    onSaved();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="w-full max-w-[17.5rem] overflow-hidden">
-        <CardHeader className="border-b border-stone-200 p-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <CardTitle className="truncate text-lg">{editor.employee.full_name}</CardTitle>
-              <CardDescription className="truncate text-xs">{editor.iso} - {department?.name || "No department"}</CardDescription>
-            </div>
-            <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
-          </div>
-        </CardHeader>
-        <CardContent className="grid gap-2.5 p-3">
-          <div className="grid grid-cols-[1fr_76px] gap-2">
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Type
-              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => quick(event.target.value)}>
-                {typeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-              Hours
-              <span className="flex h-9 items-center rounded-md border border-stone-200 bg-white px-2">
-                <input className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-stone-900 outline-none" value={hours} onChange={(event) => setHours(event.target.value)} type="number" min="0" max="24" step="0.25" />
-                <span className="text-xs font-black text-stone-500">h</span>
-              </span>
-            </label>
-          </div>
-          {type === "overtime" ? (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
-              {formatNumber(normal)}h normal + {formatNumber(extra)}h overtime.
-            </p>
-          ) : null}
-          {canAttachDocument ? (
-            <div className="grid gap-2 rounded-md border border-stone-200 bg-stone-50 p-2">
-              <label className="flex h-8 cursor-pointer items-center justify-between gap-2 rounded-md border border-stone-200 bg-white px-2 text-xs font-semibold">
-                <span className="rounded bg-stone-100 px-2 py-1 text-stone-700">File</span>
-                <span className="min-w-0 flex-1 truncate text-right text-stone-500">{file?.name || "No file selected"}</span>
-                <input className="hidden" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {attachmentPath ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", attachmentPath)}>Download attached file</Button> : null}
-                {existing?.attachment_path ? <Button size="sm" variant="outline" onClick={() => void removeAttachment()}><X className="h-4 w-4" />Remove file</Button> : null}
-                {linkedDocument ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button> : null}
-                {linkedDocument ? <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button> : null}
-              </div>
-            </div>
-          ) : null}
-          {!canAttachDocument && linkedDocument ? (
-            <div className="flex flex-wrap gap-2 rounded-md border border-stone-200 bg-stone-50 p-2">
-              <Button size="sm" variant="outline" onClick={() => setPreviewHtml(linkedDocument)}><FileText className="h-4 w-4" />Preview request</Button>
-              <Button size="sm" variant="outline" onClick={() => downloadHtml(linkedDocument, `${editor.employee.full_name}-${editor.iso}-leave.html`)}>Download request</Button>
-            </div>
-          ) : null}
-          <div className="flex justify-between gap-2 pt-1">
-            <Button size="sm" variant="outline" onClick={clear}><Eraser className="h-4 w-4" />Clear</Button>
-            <Button size="sm" onClick={save}><Paintbrush className="h-4 w-4" />Save</Button>
-          </div>
-        </CardContent>
-      </Card>
-      {previewHtml ? <DocumentPreview html={previewHtml} onClose={() => setPreviewHtml(null)} /> : null}
-    </div>
   );
 }
 
@@ -1249,6 +1074,24 @@ function LeaveRequests({
     onReload();
   }
 
+  async function attachRecordedEntryFile(entry: EntryRow, file: File | null) {
+    if (!supabase || !file) return;
+    try {
+      const path = await uploadLeaveDocument(supabase, workspace, entry.id, file);
+      const { error } = await supabase
+        .from("timesheet_entries")
+        .update({ attachment_path: path })
+        .eq("id", entry.id);
+      if (error) {
+        onMessage(error.message);
+        return;
+      }
+      onReload();
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
+    }
+  }
+
   return (
     <div className="grid gap-4">
       {canCreate ? (
@@ -1335,6 +1178,16 @@ function LeaveRequests({
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <Badge variant="secondary">Recorded</Badge>
+                  {["vacation", "medical"].includes(entry.type) ? (
+                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-800 hover:bg-stone-50">
+                      {entry.attachment_path ? "Replace file" : "Attach file"}
+                      <input
+                        className="hidden"
+                        type="file"
+                        onChange={(event) => void attachRecordedEntryFile(entry, event.target.files?.[0] || null)}
+                      />
+                    </label>
+                  ) : null}
                   {entry.attachment_path ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", entry.attachment_path || "")}><Download className="h-4 w-4" />File</Button> : null}
                 </div>
               </div>
