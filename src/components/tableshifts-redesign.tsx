@@ -305,175 +305,172 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     { worked: 0, expected: 0, overtime: 0, co: 0, cm: 0, se: 0, ab: 0 }
   );
   const scopeDifference = scopeTotals.worked - scopeTotals.expected;
+  const activePanel = activeTab === "timesheet" ? null : activeTab;
+  const sheetWide = ["companies", "employees", "admins", "settings"].includes(activeTab);
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
-      <div className="grid h-full min-w-0 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="min-w-0 rounded-lg border border-emerald-900/10 bg-emerald-950 p-4 text-white shadow-xl shadow-emerald-950/10">
-          <div className="flex items-center gap-3 border-b border-white/10 pb-5">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-white text-sm font-black text-emerald-900">TS</div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-200">Tableshifts</p>
-              <p className="text-sm text-emerald-50">Development</p>
-            </div>
-          </div>
-          <nav className="mt-5 grid gap-1">
-            {visibleNav.map((item) => (
-              <button
-                key={item.value}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2.5 text-left text-sm font-semibold text-emerald-50/80 transition-colors hover:bg-white/10 hover:text-white",
-                  activeTab === item.value && "bg-white text-emerald-950 hover:bg-white hover:text-emerald-950"
-                )}
-                onClick={() => setActiveTab(item.value)}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        <section className="grid min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-4 overflow-hidden">
-          <header
-            className={cn(
-              "grid min-w-0 items-stretch gap-4",
-              activeTab === "timesheet"
-                ? "xl:grid-cols-[minmax(220px,1fr)_minmax(260px,360px)_minmax(260px,340px)]"
-                : "lg:grid-cols-[1fr_auto]"
-            )}
-          >
-            <div className="h-full min-w-0 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Tableshifts</p>
-              <h1 className="mt-1 truncate text-3xl font-black leading-tight tracking-normal text-stone-950 md:text-4xl">{tabLabel(activeTab)}</h1>
-              <label className="mt-2 inline-flex max-w-full rounded-md border border-stone-200 bg-stone-50 px-2 py-1">
-                <span className="sr-only">Company</span>
-                <select
-                  className="min-w-0 bg-transparent text-sm font-semibold text-stone-800 outline-none"
-                  value={activeCompany?.id || ""}
-                  onChange={(event) => {
-                    setActiveCompanyId(event.target.value);
-                    setDepartmentFilter("all");
-                    setTeamFilter("all");
-                  }}
-                >
-                  {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-                </select>
-              </label>
-            </div>
-
-            {activeTab === "timesheet" ? (
-              <div className="grid h-full content-center gap-2 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5">
-                <label>
-                  <span className="sr-only">Month</span>
-                  <select className="h-7 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-xs font-semibold text-stone-900" value={month} onChange={(event) => setMonth(event.target.value)}>
-                    {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span className="sr-only">Department</span>
-                  <select className="h-7 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-xs font-semibold text-stone-900" value={departmentFilter} onChange={(event) => {
-                    setDepartmentFilter(event.target.value);
-                    setTeamFilter("all");
-                  }}>
-                    <option value="all">All departments</option>
-                    {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                  </select>
-                </label>
-                <label>
-                  <span className="sr-only">Team Leader</span>
-                  <select className="h-7 w-full rounded-md border border-stone-200 bg-stone-50 px-2 text-xs font-semibold text-stone-900" value={teamFilter} onChange={(event) => {
-                    const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
-                    setTeamFilter(event.target.value);
-                    if (leader?.department_id) setDepartmentFilter(leader.department_id);
-                  }}>
-                    <option value="all">All team leaders</option>
-                    {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
-                  </select>
-                </label>
+      <div className="grid h-full min-w-0 grid-cols-[280px_minmax(0,1fr)] gap-4 overflow-hidden">
+        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-4 rounded-[24px] border border-emerald-900/10 bg-[#062f23] p-4 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
+          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-sm font-black text-emerald-900 shadow-sm">TS</div>
+              <div className="min-w-0">
+                <p className="truncate text-xs font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
+                <p className="truncate text-base font-semibold text-white">Control Room</p>
               </div>
-            ) : null}
+            </div>
+            <label className="mt-4 grid gap-2">
+              <span className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/80">Company</span>
+              <select
+                className="h-11 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
+                value={activeCompany?.id || ""}
+                onChange={(event) => {
+                  setActiveCompanyId(event.target.value);
+                  setDepartmentFilter("all");
+                  setTeamFilter("all");
+                }}
+              >
+                {companies.map((company) => <option key={company.id} value={company.id} className="text-stone-900">{company.name}</option>)}
+              </select>
+            </label>
+          </div>
 
-            <div className="grid h-full content-center gap-2 rounded-lg border border-stone-200 bg-white p-4 shadow-xl shadow-stone-950/5 lg:justify-items-end">
+          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/80">Workspace</p>
+                <h1 className="text-2xl font-black text-white">Timesheet</h1>
+              </div>
               {pendingApprovals.length ? (
-                <Button size="sm" variant="outline" onClick={() => setActiveTab("leave")}>
-                  <Bell className="h-4 w-4" />{pendingApprovals.length} pending
+                <Button size="sm" variant="outline" className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => setActiveTab("leave")}>
+                  <Bell className="h-4 w-4" /> {pendingApprovals.length}
                 </Button>
               ) : null}
-              <div className="text-left text-sm lg:text-right">
-                <strong className="block">{workspace.profile.full_name}</strong>
-                <span className="block text-stone-600">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
-                <span className="block text-stone-500">{workspace.profile.email}</span>
-              </div>
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                {activeTab === "timesheet" ? (
-                  <Button size="sm" variant="outline" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
-                    <Download className="h-4 w-4" /> Export CSV
-                  </Button>
-                ) : null}
-                <Button size="sm" variant="outline" onClick={signOut}><LogOut className="h-4 w-4" />Logout</Button>
-              </div>
             </div>
-          </header>
-
-          <div className={cn("min-w-0", activeTab === "timesheet" ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden pr-1")}>
-              {message ? <p className="mb-4 rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
-
-              {activeTab === "timesheet" ? (
-                <TimesheetTable
-                  month={month}
-                  workspace={workspace}
-                  employees={employees}
-                  totalsExpanded={totalsExpanded}
-                  onToggleTotals={() => setTotalsExpanded((value) => !value)}
-                  onSetHours={(employee, iso, hours) => void saveCellHours(employee, iso, hours)}
-                  onSetType={(employee, iso, type) => void saveCellType(employee, iso, type)}
-                  onClearDay={(employee, iso) => void clearEmployeeDay(employee, iso)}
-                  onFill={(employee) => void fillNormalTime(employee)}
-                  onClear={(employee) => void clearEmployeeMonth(employee)}
-                />
-              ) : null}
-
-              {activeTab === "leave" ? (
-                <LeaveRequests
-                  workspace={workspace}
-                  activeCompany={activeCompany}
-                  supabase={supabase}
-                  onReload={() => authUser && loadWorkspace(authUser)}
-                  onMessage={setMessage}
-                />
-              ) : null}
-
-              {activeTab === "charts" ? (
-                <Charts
-                  workspace={workspace}
-                  activeCompany={activeCompany}
-                  employees={employees}
-                  month={month}
-                  people={employees.length}
-                  worked={scopeTotals.worked}
-                  expected={scopeTotals.expected}
-                  overtime={scopeTotals.overtime}
-                  co={scopeTotals.co}
-                  cm={scopeTotals.cm}
-                  se={scopeTotals.se}
-                  ab={scopeTotals.ab}
-                  difference={scopeDifference}
-                />
-              ) : null}
-
-              {["companies", "employees", "admins", "settings"].includes(activeTab) ? (
-                <Management
-                  workspace={workspace}
-                  activeTab={activeTab}
-                  activeCompany={activeCompany}
-                  supabase={supabase}
-                  onReload={() => authUser && loadWorkspace(authUser)}
-                  onSignOut={signOut}
-                  onMessage={setMessage}
-                />
-              ) : null}
+            <div className="grid gap-2">
+              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={month} onChange={(event) => setMonth(event.target.value)}>
+                {monthOptions(month).map((option) => <option key={option.value} value={option.value} className="text-stone-900">{option.label}</option>)}
+              </select>
+              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={departmentFilter} onChange={(event) => {
+                setDepartmentFilter(event.target.value);
+                setTeamFilter("all");
+              }}>
+                <option value="all" className="text-stone-900">All departments</option>
+                {companyDepartments.map((department) => <option key={department.id} value={department.id} className="text-stone-900">{department.name}</option>)}
+              </select>
+              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={teamFilter} onChange={(event) => {
+                const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
+                setTeamFilter(event.target.value);
+                if (leader?.department_id) setDepartmentFilter(leader.department_id);
+              }}>
+                <option value="all" className="text-stone-900">All team leaders</option>
+                {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id} className="text-stone-900">{leader.full_name}</option>)}
+              </select>
+            </div>
           </div>
+
+          <div className="min-h-0 rounded-[20px] border border-white/10 bg-white/5 p-3">
+            <div className="mb-2 px-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Navigation</div>
+            <nav className="grid gap-1 overflow-y-auto pr-1">
+              {visibleNav.map((item) => (
+                <button
+                  key={item.value}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-emerald-50/80 transition-colors hover:bg-white/10 hover:text-white",
+                    activeTab === item.value && "bg-white text-emerald-950 hover:bg-white hover:text-emerald-950"
+                  )}
+                  onClick={() => setActiveTab(item.value)}
+                >
+                  <item.icon className="h-4 w-4" />
+                  <span className="truncate">{item.label}</span>
+                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-4 w-4 opacity-60" /> : null}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+            <div className="text-sm">
+              <strong className="block truncate text-white">{workspace.profile.full_name}</strong>
+              <span className="block truncate text-emerald-100/90">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
+              <span className="block truncate text-emerald-200/75">{workspace.profile.email}</span>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <Button size="sm" variant="outline" className="flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                <Download className="h-4 w-4" /> Export
+              </Button>
+              <Button size="sm" variant="outline" className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={signOut}>
+                <LogOut className="h-4 w-4" /> Logout
+              </Button>
+            </div>
+          </div>
+        </aside>
+
+        <section className="relative min-w-0 overflow-hidden rounded-[28px] border border-stone-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.06)] backdrop-blur">
+          <div className="h-full min-w-0 overflow-hidden p-3 md:p-4">
+            {message ? <p className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
+            <TimesheetTable
+              month={month}
+              workspace={workspace}
+              employees={employees}
+              totalsExpanded={totalsExpanded}
+              onToggleTotals={() => setTotalsExpanded((value) => !value)}
+              onSetHours={(employee, iso, hours) => void saveCellHours(employee, iso, hours)}
+              onSetType={(employee, iso, type) => void saveCellType(employee, iso, type)}
+              onClearDay={(employee, iso) => void clearEmployeeDay(employee, iso)}
+              onFill={(employee) => void fillNormalTime(employee)}
+              onClear={(employee) => void clearEmployeeMonth(employee)}
+            />
+          </div>
+
+          <SideSheet
+            open={Boolean(activePanel)}
+            title={tabLabel(activeTab)}
+            description={sheetDescription(activeTab)}
+            wide={sheetWide}
+            onClose={() => setActiveTab("timesheet")}
+          >
+            {activeTab === "leave" ? (
+              <LeaveRequests
+                workspace={workspace}
+                activeCompany={activeCompany}
+                supabase={supabase}
+                onReload={() => authUser && loadWorkspace(authUser)}
+                onMessage={setMessage}
+              />
+            ) : null}
+
+            {activeTab === "charts" ? (
+              <Charts
+                workspace={workspace}
+                activeCompany={activeCompany}
+                employees={employees}
+                month={month}
+                people={employees.length}
+                worked={scopeTotals.worked}
+                expected={scopeTotals.expected}
+                overtime={scopeTotals.overtime}
+                co={scopeTotals.co}
+                cm={scopeTotals.cm}
+                se={scopeTotals.se}
+                ab={scopeTotals.ab}
+                difference={scopeDifference}
+              />
+            ) : null}
+
+            {["companies", "employees", "admins", "settings"].includes(activeTab) ? (
+              <Management
+                workspace={workspace}
+                activeTab={activeTab}
+                activeCompany={activeCompany}
+                supabase={supabase}
+                onReload={() => authUser && loadWorkspace(authUser)}
+                onSignOut={signOut}
+                onMessage={setMessage}
+              />
+            ) : null}
+          </SideSheet>
         </section>
       </div>
     </main>
@@ -2595,4 +2592,64 @@ function exportCsv(companyName: string, month: string, employees: ProfileRow[], 
 
 function tabLabel(tab: string) {
   return nav.find((item) => item.value === tab)?.label || "Timesheet";
+}
+
+function sheetDescription(tab: string) {
+  if (tab === "leave") return "Requests, approvals, and supporting leave documents.";
+  if (tab === "charts") return "Compact analytics for the current visible scope.";
+  if (tab === "companies") return "Company setup, department hierarchy, and visual preferences.";
+  if (tab === "employees") return "Create and manage employees, team leaders, and managers.";
+  if (tab === "admins") return "Admin-account access, payroll admins, and company managers.";
+  if (tab === "settings") return "Holidays, danger actions, and deployment-safe preferences.";
+  return "Workspace panel";
+}
+
+function SideSheet({
+  open,
+  title,
+  description,
+  wide,
+  onClose,
+  children
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  wide?: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <>
+      <div
+        className={cn(
+          "absolute inset-0 z-20 bg-emerald-950/8 backdrop-blur-[1px] transition-opacity",
+          open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        )}
+        onClick={onClose}
+      />
+      <aside
+        className={cn(
+          "absolute inset-y-3 left-3 z-30 flex min-w-0 flex-col overflow-hidden rounded-[26px] border border-stone-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.14)] transition-transform duration-300",
+          wide ? "w-[min(820px,calc(100%-1.5rem))]" : "w-[min(620px,calc(100%-1.5rem))]",
+          open ? "translate-x-0" : "-translate-x-[106%]"
+        )}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Sidebar Sheet</p>
+            <h2 className="truncate text-2xl font-black text-stone-950">{title}</h2>
+            <p className="mt-1 text-sm text-stone-500">{description}</p>
+          </div>
+          <Button size="sm" variant="outline" onClick={onClose}>
+            <X className="h-4 w-4" />
+            Close
+          </Button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+          {children}
+        </div>
+      </aside>
+    </>
+  );
 }
