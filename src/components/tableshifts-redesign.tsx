@@ -310,20 +310,20 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
-      <div className="grid h-full min-w-0 grid-cols-[280px_minmax(0,1fr)] gap-4 overflow-hidden">
-        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-4 rounded-[24px] border border-emerald-900/10 bg-[#062f23] p-4 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
-          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-sm font-black text-emerald-900 shadow-sm">TS</div>
+      <div className="grid h-full min-w-0 grid-cols-[236px_minmax(0,1fr)] gap-4 overflow-hidden">
+        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
+          <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
               <div className="min-w-0">
-                <p className="truncate text-xs font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
-                <p className="truncate text-base font-semibold text-white">Control Room</p>
+                <p className="truncate text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
+                <p className="truncate text-sm font-semibold text-white/92">Control Room</p>
               </div>
             </div>
-            <label className="mt-4 grid gap-2">
-              <span className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/80">Company</span>
+            <label className="mt-3 grid gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/75">Company</span>
               <select
-                className="h-11 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
+                className="h-9 rounded-xl border border-white/10 bg-white/8 px-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
                 value={activeCompany?.id || ""}
                 onChange={(event) => {
                   setActiveCompanyId(event.target.value);
@@ -336,72 +336,43 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </label>
           </div>
 
-          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/80">Workspace</p>
-                <h1 className="text-2xl font-black text-white">Timesheet</h1>
-              </div>
-              {pendingApprovals.length ? (
-                <Button size="sm" variant="outline" className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => setActiveTab("leave")}>
-                  <Bell className="h-4 w-4" /> {pendingApprovals.length}
-                </Button>
-              ) : null}
-            </div>
-            <div className="grid gap-2">
-              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={month} onChange={(event) => setMonth(event.target.value)}>
-                {monthOptions(month).map((option) => <option key={option.value} value={option.value} className="text-stone-900">{option.label}</option>)}
-              </select>
-              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={departmentFilter} onChange={(event) => {
-                setDepartmentFilter(event.target.value);
-                setTeamFilter("all");
-              }}>
-                <option value="all" className="text-stone-900">All departments</option>
-                {companyDepartments.map((department) => <option key={department.id} value={department.id} className="text-stone-900">{department.name}</option>)}
-              </select>
-              <select className="h-10 rounded-xl border border-white/10 bg-white/10 px-3 text-sm font-semibold text-white outline-none focus:border-emerald-300" value={teamFilter} onChange={(event) => {
-                const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
-                setTeamFilter(event.target.value);
-                if (leader?.department_id) setDepartmentFilter(leader.department_id);
-              }}>
-                <option value="all" className="text-stone-900">All team leaders</option>
-                {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id} className="text-stone-900">{leader.full_name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="min-h-0 rounded-[20px] border border-white/10 bg-white/5 p-3">
-            <div className="mb-2 px-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-200/70">Navigation</div>
-            <nav className="grid gap-1 overflow-y-auto pr-1">
+          <div className="min-h-0 rounded-[18px] border border-white/10 bg-white/5 p-2.5">
+            <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Navigation</div>
+            <nav className="grid gap-0.5 overflow-y-auto pr-1">
               {visibleNav.map((item) => (
                 <button
                   key={item.value}
                   className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-emerald-50/80 transition-colors hover:bg-white/10 hover:text-white",
+                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-emerald-50/78 transition-colors hover:bg-white/8 hover:text-white",
                     activeTab === item.value && "bg-white text-emerald-950 hover:bg-white hover:text-emerald-950"
                   )}
                   onClick={() => setActiveTab(item.value)}
                 >
-                  <item.icon className="h-4 w-4" />
+                  <item.icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{item.label}</span>
-                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-4 w-4 opacity-60" /> : null}
+                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-55" /> : null}
                 </button>
               ))}
             </nav>
           </div>
 
-          <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-            <div className="text-sm">
-              <strong className="block truncate text-white">{workspace.profile.full_name}</strong>
-              <span className="block truncate text-emerald-100/90">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
-              <span className="block truncate text-emerald-200/75">{workspace.profile.email}</span>
-            </div>
-            <div className="mt-4 flex gap-2">
-              <Button size="sm" variant="outline" className="flex-1 border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
-                <Download className="h-4 w-4" /> Export
+          <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+            {pendingApprovals.length ? (
+              <Button size="sm" variant="outline" className="mb-3 h-8 w-full border-white/12 bg-white/8 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => setActiveTab("leave")}>
+                <Bell className="h-3.5 w-3.5" /> {pendingApprovals.length} pending
               </Button>
-              <Button size="sm" variant="outline" className="border-white/15 bg-white/10 text-white hover:bg-white/15 hover:text-white" onClick={signOut}>
-                <LogOut className="h-4 w-4" /> Logout
+            ) : null}
+            <div className="text-xs">
+              <strong className="block truncate text-white">{workspace.profile.full_name}</strong>
+              <span className="block truncate text-emerald-100/85">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
+              <span className="mt-0.5 block truncate text-emerald-200/70">{workspace.profile.email}</span>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <Button size="sm" variant="outline" className="h-8 flex-1 border-white/12 bg-white/8 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                <Download className="h-3.5 w-3.5" /> Export
+              </Button>
+              <Button size="sm" variant="outline" className="h-8 border-white/12 bg-white/8 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={signOut}>
+                <LogOut className="h-3.5 w-3.5" /> Logout
               </Button>
             </div>
           </div>
@@ -410,6 +381,27 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
         <section className="relative min-w-0 overflow-hidden rounded-[28px] border border-stone-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.06)] backdrop-blur">
           <div className="h-full min-w-0 overflow-hidden p-3 md:p-4">
             {message ? <p className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <p className="mr-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Timesheet</p>
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={month} onChange={(event) => setMonth(event.target.value)}>
+                {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={departmentFilter} onChange={(event) => {
+                setDepartmentFilter(event.target.value);
+                setTeamFilter("all");
+              }}>
+                <option value="all">All departments</option>
+                {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={teamFilter} onChange={(event) => {
+                const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
+                setTeamFilter(event.target.value);
+                if (leader?.department_id) setDepartmentFilter(leader.department_id);
+              }}>
+                <option value="all">All team leaders</option>
+                {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
+              </select>
+            </div>
             <TimesheetTable
               month={month}
               workspace={workspace}
