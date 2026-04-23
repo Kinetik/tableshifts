@@ -1903,7 +1903,7 @@ function CompanyDepartmentManagement({
               <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
               <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
             </label>
-            <div className="flex justify-end">
+            <div className="flex justify-center">
               <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createCompany}><Plus className="h-4 w-4" />Add company</Button>
             </div>
           </CardContent>
@@ -1911,8 +1911,13 @@ function CompanyDepartmentManagement({
 
         <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">New Department</CardTitle>
-            <CardDescription className="text-xs">Attach it to a company and set the lead structure.</CardDescription>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle className="text-base">New Department</CardTitle>
+                <CardDescription className="mt-1 text-xs">Attach it to a company and set the lead structure.</CardDescription>
+              </div>
+              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createDepartment}><Plus className="h-4 w-4" />Add</Button>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-2">
             <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -1927,7 +1932,7 @@ function CompanyDepartmentManagement({
                 <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
               </label>
             </div>
-            <div className="grid gap-2 md:grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+            <div className="grid gap-3 md:grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)]">
               <label className="grid gap-1 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
                 <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
@@ -1948,9 +1953,6 @@ function CompanyDepartmentManagement({
                   {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
-              <div className="flex items-end md:justify-end">
-                <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createDepartment}><Plus className="h-4 w-4" />Add</Button>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -2024,8 +2026,8 @@ function CompanyDepartmentManagement({
                       <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
                       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                         {ENTRY_COLOR_KEYS.map(([key, label]) => (
-                          <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
-                            {label}
+                          <label key={key} className="grid justify-items-center gap-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                            {ENTRY_LABELS[label] || label}
                             <div className="flex h-8 min-w-0 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
                               <input
                                 className="h-5 w-7 border-0 bg-transparent p-0"
@@ -2074,29 +2076,38 @@ function CompanyDepartmentManagement({
                               });
                               return (
                             <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_88px]">
-                              <input
-                                className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold"
-                                value={draft.name}
-                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
-                              />
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
+                                <input
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold"
+                                  value={draft.name}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
+                                />
+                              </label>
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Manager</span>
+                                <select
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                  value={draft.manager}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
+                                >
+                                  <option value="">No manager</option>
+                                  {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                                </select>
+                              </label>
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Team Leader</span>
+                                <select
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                  value={draft.leader}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
+                                >
+                                  <option value="">No team leader</option>
+                                  {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                                </select>
+                              </label>
                               <select
-                                className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
-                                value={draft.manager}
-                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
-                              >
-                                <option value="">No manager</option>
-                                {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                              </select>
-                              <select
-                                className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
-                                value={draft.leader}
-                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
-                              >
-                                <option value="">No team leader</option>
-                                {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                              </select>
-                              <select
-                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                className="self-end h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
                                 value={draft.hours}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
                               >
