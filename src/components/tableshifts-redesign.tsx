@@ -82,6 +82,14 @@ const ENTRY_COLOR_KEYS = [
   ["special_event", "SE"]
 ] as const;
 
+const ENTRY_COLOR_LABELS: Record<string, string> = {
+  vacation: "Vacation",
+  medical: "Medical",
+  overtime: "Overtime",
+  absence: "Absence",
+  special_event: "Special Event"
+};
+
 const DEFAULT_ENTRY_COLORS: Record<string, string> = {
   vacation: "#dcfce7",
   medical: "#ffe4e6",
@@ -1932,7 +1940,7 @@ function CompanyDepartmentManagement({
                 <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
               </label>
             </div>
-            <div className="grid gap-3 md:grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)]">
               <label className="grid gap-1 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
                 <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
@@ -1941,14 +1949,14 @@ function CompanyDepartmentManagement({
               </label>
               <label className="grid gap-1 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
-                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
                   <option value="">No manager</option>
                   {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 min-w-0">
                 <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
-                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
                   <option value="">No team leader</option>
                   {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
@@ -2025,10 +2033,10 @@ function CompanyDepartmentManagement({
                     <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
                       <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
                       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                        {ENTRY_COLOR_KEYS.map(([key, label]) => (
+                        {ENTRY_COLOR_KEYS.map(([key]) => (
                           <label key={key} className="grid justify-items-center gap-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
-                            {ENTRY_LABELS[label] || label}
-                            <div className="flex h-8 min-w-0 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                            {ENTRY_COLOR_LABELS[key]}
+                            <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
                               <input
                                 className="h-5 w-7 border-0 bg-transparent p-0"
                                 type="color"
@@ -2066,7 +2074,7 @@ function CompanyDepartmentManagement({
                           days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
                         };
                         return (
-                          <div key={department.id} className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-sm">
+                          <div key={department.id} className="grid gap-1.5 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-sm">
                             {(() => {
                               const teamLeaderOptions = workspace.profiles.filter((profile) => {
                                 const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
@@ -2075,7 +2083,7 @@ function CompanyDepartmentManagement({
                                   (!assignedDepartment || assignedDepartment.id === department.id);
                               });
                               return (
-                            <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_88px]">
+                            <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_88px]">
                               <label className="grid gap-1 min-w-0">
                                 <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
                                 <input
@@ -2142,7 +2150,7 @@ function CompanyDepartmentManagement({
                                 </label>
                               ))}
                             </div>
-                            <div className="flex flex-wrap justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2 pt-0.5">
                               <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
                               <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
                             </div>
