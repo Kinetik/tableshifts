@@ -1892,74 +1892,76 @@ function CompanyDepartmentManagement({
 
   return (
     <div className="grid gap-3">
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card className="rounded-[22px] border-stone-200 shadow-none">
-          <CardHeader className="pb-2.5">
-            <CardTitle className="text-lg">Create Company</CardTitle>
-            <CardDescription className="text-[13px]">Companies belong to this admin environment.</CardDescription>
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
+        <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">New Company</CardTitle>
+            <CardDescription className="text-xs">Create a company inside this admin environment.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <CardContent className="grid gap-2">
             <label className="grid gap-1">
-              <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Name</span>
-              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
+              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+              <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
             </label>
-            <div className="flex items-end">
-              <Button size="sm" className="h-9 text-xs" onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
+            <div className="flex justify-end">
+              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createCompany}><Plus className="h-4 w-4" />Add company</Button>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="rounded-[22px] border-stone-200 shadow-none">
-          <CardHeader className="pb-2.5">
-            <CardTitle className="text-lg">Create Department</CardTitle>
-            <CardDescription className="text-[13px]">Set company, manager, team leader, and shift duration.</CardDescription>
+        <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">New Department</CardTitle>
+            <CardDescription className="text-xs">Attach it to a company and set the lead structure.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
-            <div className="grid gap-2 md:grid-cols-2">
-              <label className="grid gap-1">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company</span>
-                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
+            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+              <label className="grid gap-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company</span>
+                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
                   {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                 </select>
               </label>
-              <label className="grid gap-1">
-                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Department</span>
-                <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+              <label className="grid gap-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
               </label>
             </div>
-            <div className="grid gap-2 md:grid-cols-3">
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
-                Shift length
-                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+            <div className="grid gap-2 md:grid-cols-[96px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+              <label className="grid gap-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
+                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
                   {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                 </select>
               </label>
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
-                Manager
-                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+              <label className="grid gap-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
+                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
                   <option value="">No manager</option>
                   {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
-              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
-                Team Leader
-                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+              <label className="grid gap-1 min-w-0">
+                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
                   <option value="">No team leader</option>
                   {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
+              <div className="flex items-end md:justify-end">
+                <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createDepartment}><Plus className="h-4 w-4" />Add</Button>
+              </div>
             </div>
-            <Button size="sm" className="h-9 text-xs" onClick={createDepartment}><Plus className="h-4 w-4" />Add Department</Button>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="rounded-[22px] border-stone-200 shadow-none">
-        <CardHeader className="pb-2.5">
-          <CardTitle className="text-lg">Company Hierarchy</CardTitle>
-          <CardDescription className="text-[13px]">Expand a company to edit its identity, colors, logo, and departments.</CardDescription>
+      <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Company Hierarchy</CardTitle>
+          <CardDescription className="text-xs">Expand a company to edit identity, colors, logo, and departments.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-2.5">
           {workspace.companies.map((company) => {
             const departments = workspace.departments.filter((department) => department.company_id === company.id);
             const users = workspace.profiles.filter((profile) => profile.company_id === company.id);
@@ -1970,7 +1972,7 @@ function CompanyDepartmentManagement({
             ));
             const colors = colorDrafts[company.id] || DEFAULT_ENTRY_COLORS;
             return (
-              <div key={company.id} className="rounded-[18px] border border-stone-200 bg-white p-3">
+              <div key={company.id} className="min-w-0 rounded-[18px] border border-stone-200 bg-white p-3">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 text-left"
@@ -1981,7 +1983,7 @@ function CompanyDepartmentManagement({
                       {logoUrls[company.id] ? <img src={logoUrls[company.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
                     </div>
                     <div className="min-w-0">
-                      <strong className="block truncate text-[15px]">{company.name}</strong>
+                      <strong className="block truncate text-[14px]">{company.name}</strong>
                       <div className="mt-1 flex flex-wrap gap-1.5">
                         <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{departments.length} departments</span>
                         <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{users.length} users</span>
@@ -1992,39 +1994,39 @@ function CompanyDepartmentManagement({
                 </button>
 
                 {isOpen ? (
-                  <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4">
-                    <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
-                      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
-                        <label className="grid gap-1">
-                          <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company name</span>
+                  <div className="mt-3 grid min-w-0 gap-3 border-t border-stone-200 pt-3">
+                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_156px]">
+                        <label className="grid gap-1 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
                           <input
-                            className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
+                            className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
                             value={editingCompanyName[company.id] || company.name}
                             onChange={(event) => setEditingCompanyName((current) => ({ ...current, [company.id]: event.target.value }))}
                             placeholder="Company name"
                           />
                         </label>
-                        <label className="grid gap-1">
-                          <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Logo</span>
-                          <span className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold">
+                        <label className="grid gap-1 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                          <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
                             <ImageIcon className="h-4 w-4" />Upload
                             <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(company, event.target.files?.[0] || null)} />
                           </span>
                         </label>
                       </div>
-                      <div className="flex gap-2 xl:justify-end">
-                        <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
-                        <Button size="sm" className="h-9 text-xs" onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
+                      <div className="flex flex-wrap gap-2 lg:justify-end">
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
+                        <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
-                      <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500"><Palette className="h-4 w-4" />Timesheet Colors</p>
-                      <div className="grid gap-2 md:grid-cols-5">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                      <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
                         {ENTRY_COLOR_KEYS.map(([key, label]) => (
-                          <label key={key} className="grid gap-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
+                          <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
                             {label}
-                            <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                            <div className="flex h-8 min-w-0 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
                               <input
                                 className="h-5 w-7 border-0 bg-transparent p-0"
                                 type="color"
@@ -2049,6 +2051,10 @@ function CompanyDepartmentManagement({
                     </div>
 
                     <div className="grid gap-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Departments</p>
+                        <span className="text-[11px] font-semibold text-stone-500">{departments.length} configured</span>
+                      </div>
                       {departments.length ? departments.map((department) => {
                         const draft = departmentDrafts[department.id] || {
                           name: department.name,
@@ -2058,7 +2064,7 @@ function CompanyDepartmentManagement({
                           days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
                         };
                         return (
-                          <div key={department.id} className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm">
+                          <div key={department.id} className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-sm">
                             {(() => {
                               const teamLeaderOptions = workspace.profiles.filter((profile) => {
                                 const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
@@ -2067,14 +2073,14 @@ function CompanyDepartmentManagement({
                                   (!assignedDepartment || assignedDepartment.id === department.id);
                               });
                               return (
-                            <div className="grid gap-2 lg:grid-cols-[1.45fr_1fr_1fr_88px_auto]">
+                            <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)_88px]">
                               <input
-                                className="h-8 rounded-md border border-stone-200 px-2 text-[13px] font-semibold"
+                                className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold"
                                 value={draft.name}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
                               />
                               <select
-                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
+                                className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
                                 value={draft.manager}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
                               >
@@ -2082,7 +2088,7 @@ function CompanyDepartmentManagement({
                                 {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                               </select>
                               <select
-                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
+                                className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
                                 value={draft.leader}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
                               >
@@ -2090,20 +2096,16 @@ function CompanyDepartmentManagement({
                                 {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                               </select>
                               <select
-                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
+                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
                                 value={draft.hours}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
                               >
                                 {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                               </select>
-                              <div className="flex gap-2 lg:justify-end">
-                                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
-                                <Button size="sm" className="h-8 text-[11px]" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
-                              </div>
                             </div>
                               );
                             })()}
-                            <div className="flex flex-wrap gap-2">
+                            <div className="flex flex-wrap gap-1.5">
                               {([
                                 ["Mon", 1],
                                 ["Tue", 2],
@@ -2113,7 +2115,7 @@ function CompanyDepartmentManagement({
                                 ["Sat", 6],
                                 ["Sun", 0]
                               ] as const).map(([day, index]) => (
-                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-bold">
+                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[10px] font-bold">
                                   <input
                                     type="checkbox"
                                     checked={draft.days.includes(index)}
@@ -2128,6 +2130,10 @@ function CompanyDepartmentManagement({
                                   {day}
                                 </label>
                               ))}
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                              <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
                             </div>
                           </div>
                         );
