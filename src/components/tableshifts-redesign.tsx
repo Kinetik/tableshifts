@@ -342,7 +342,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 <p className="truncate text-[13px] font-semibold text-white/88">Control Room</p>
               </div>
             </div>
-            <div className="relative">
+            <div className="relative px-1">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -430,7 +430,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </nav>
           </div>
 
-          <div className="relative">
+          <div className="relative px-1">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
