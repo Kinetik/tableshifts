@@ -332,7 +332,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
-      <div className="grid h-full min-w-0 grid-cols-[228px_minmax(0,1fr)] gap-4 overflow-hidden">
+      <div className="grid h-full min-w-0 grid-cols-[252px_minmax(0,1fr)] gap-4 overflow-hidden">
         <aside className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
           <div>
             <div className="mb-3 px-2 text-center">
