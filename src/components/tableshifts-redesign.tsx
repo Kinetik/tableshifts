@@ -1144,17 +1144,17 @@ function LeaveRequests({
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-3">
       {canCreate ? (
         <Card className="rounded-[22px] border-stone-200 shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xl">New Leave Request</CardTitle>
-            <CardDescription>Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">New Leave Request</CardTitle>
+            <CardDescription className="text-[13px]">Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1.2fr_1.1fr_auto_auto]">
+          <CardContent className="grid gap-2.5 lg:grid-cols-[140px_1fr_1fr_1.15fr_1fr_auto_auto]">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
                 <option value="vacation">Vacation CO</option>
                 <option value="medical">Medical CM</option>
                 <option value="special_event">Special Events</option>
@@ -1162,47 +1162,47 @@ function LeaveRequests({
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Start
-              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               End
-              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Notes
-              <input className="h-10 rounded-md border border-stone-200 px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Document
-              <input className="h-10 rounded-md border border-stone-200 bg-white px-2 py-1 text-sm font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+              <input className="h-9 rounded-md border border-stone-200 bg-white px-2 py-1 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
             </label>
             <div className="flex items-end">
-              <Button variant="outline" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
+              <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
                 <Eye className="h-4 w-4" /> Preview
               </Button>
             </div>
             <div className="flex items-end">
-              <Button onClick={submitRequest}>Submit</Button>
+              <Button size="sm" className="h-9 text-xs" onClick={submitRequest}>Submit</Button>
             </div>
           </CardContent>
         </Card>
       ) : null}
 
       <Card className="rounded-[22px] border-stone-200 shadow-none">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl">Leave Requests</CardTitle>
-          <CardDescription>One row per request, with approval and document actions.</CardDescription>
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">Leave Requests</CardTitle>
+          <CardDescription className="text-[13px]">One row per request, with approval and document actions.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-2.5">
           {requests.length ? requests.map((request) => {
             const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
             const canDecide = request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
             const documentHtml = request.generated_document_html || (employee ? generatedLeaveDocumentHtml(request, employee, activeCompany) : "");
             return (
-              <div key={request.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-stone-50/55 p-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+              <div key={request.id} className="grid gap-2.5 rounded-2xl border border-stone-200 bg-stone-50/55 p-2.5 lg:grid-cols-[1fr_auto_auto] lg:items-center">
                 <div>
                   <strong>{employee?.full_name || "Employee"}</strong>
-                  <p className="text-sm text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}{request.notes ? ` - ${request.notes}` : ""}</p>
+                  <p className="text-[13px] text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}{request.notes ? ` - ${request.notes}` : ""}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
@@ -1222,15 +1222,15 @@ function LeaveRequests({
           {recordedEntries.map((entry) => {
             const employee = workspace.profiles.find((profile) => profile.id === entry.employee_user_id);
             return (
-              <div key={entry.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-stone-50/55 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div key={entry.id} className="grid gap-2.5 rounded-2xl border border-stone-200 bg-stone-50/55 p-2.5 lg:grid-cols-[1fr_auto] lg:items-center">
                 <div>
                   <strong>{employee?.full_name || "Employee"}</strong>
-                  <p className="text-sm text-stone-500">{entry.work_date} - {ENTRY_LABELS[entry.type] || entry.type} recorded in Timesheet</p>
+                  <p className="text-[13px] text-stone-500">{entry.work_date} - {ENTRY_LABELS[entry.type] || entry.type} recorded in Timesheet</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <Badge variant="secondary">Recorded</Badge>
                   {["vacation", "medical"].includes(entry.type) ? (
-                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-800 hover:bg-stone-50">
+                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50">
                       {entry.attachment_path ? "Replace file" : "Attach file"}
                       <input
                         className="hidden"
@@ -1511,27 +1511,27 @@ function SettingsPage({
   }
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>National Holidays</CardTitle>
-          <CardDescription>Load public holidays, adjust the list, and apply them to all companies or one scope.</CardDescription>
+    <div className="grid gap-3">
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">National Holidays</CardTitle>
+          <CardDescription className="text-[13px]">Load public holidays, adjust the list, and apply them to all companies or one scope.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+        <CardContent className="grid gap-3">
+          <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Country
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={countryCode} onChange={(event) => setCountryCode(event.target.value)}>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={countryCode} onChange={(event) => setCountryCode(event.target.value)}>
                 {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
               </select>
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Year
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayYear} onChange={(event) => setHolidayYear(event.target.value)} type="number" min="2020" max="2100" />
+              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayYear} onChange={(event) => setHolidayYear(event.target.value)} type="number" min="2020" max="2100" />
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Company
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayCompanyId} onChange={(event) => {
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayCompanyId} onChange={(event) => {
                 setHolidayCompanyId(event.target.value);
                 setHolidayDepartmentId("all");
               }}>
@@ -1541,42 +1541,42 @@ function SettingsPage({
             </label>
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Department
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={holidayDepartmentId} onChange={(event) => setHolidayDepartmentId(event.target.value)} disabled={holidayCompanyId === "all"}>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayDepartmentId} onChange={(event) => setHolidayDepartmentId(event.target.value)} disabled={holidayCompanyId === "all"}>
                 <option value="all">All departments</option>
                 {scopedDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
               </select>
             </label>
             <div className="flex items-end">
-              <Button className="w-full" onClick={() => void loadPublicHolidays()} disabled={!setupAllowed}><CalendarDays className="h-4 w-4" />Load</Button>
+              <Button size="sm" className="h-9 w-full text-xs" onClick={() => void loadPublicHolidays()} disabled={!setupAllowed}><CalendarDays className="h-4 w-4" />Load</Button>
             </div>
           </div>
-          <div className="grid gap-3 md:grid-cols-[1fr_1.5fr_auto]">
-            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} />
-            <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="Manual holiday name" />
-            <Button variant="outline" onClick={addManualHoliday}>Add manual</Button>
+          <div className="grid gap-2.5 md:grid-cols-[1fr_1.5fr_auto]">
+            <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} />
+            <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="Manual holiday name" />
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={addManualHoliday}>Add manual</Button>
           </div>
           <div className="grid max-h-72 gap-2 overflow-auto">
             {preview.length ? preview.map((holiday) => (
-              <div key={`${holiday.date}-${holiday.name}`} className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-2 text-sm font-semibold">
+              <div key={`${holiday.date}-${holiday.name}`} className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-2 text-[13px] font-semibold">
                 <span>{holiday.date} - {holiday.name}</span>
-                <Button size="sm" variant="ghost" onClick={() => setPreview((current) => current.filter((item) => item !== holiday))}><X className="h-4 w-4" />Remove</Button>
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPreview((current) => current.filter((item) => item !== holiday))}><X className="h-4 w-4" />Remove</Button>
               </div>
             )) : <p className="text-sm font-semibold text-stone-500">Load holidays or add them manually before applying.</p>}
           </div>
           <div className="flex justify-end">
-            <Button onClick={() => void applyHolidays()} disabled={!setupAllowed || !preview.length}>Apply holidays</Button>
+            <Button size="sm" className="h-9 text-xs" onClick={() => void applyHolidays()} disabled={!setupAllowed || !preview.length}>Apply holidays</Button>
           </div>
         </CardContent>
       </Card>
 
       {workspace.profile.role === "admin_account" ? (
-        <Card className="border-rose-200">
-          <CardHeader>
-            <CardTitle>Admin Account Danger Area</CardTitle>
-            <CardDescription>Delete this Admin Account and all associated company data.</CardDescription>
+        <Card className="rounded-[22px] border-rose-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">Admin Account Danger Area</CardTitle>
+            <CardDescription className="text-[13px]">Delete this Admin Account and all associated company data.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button className="bg-rose-700 text-white hover:bg-rose-800" onClick={() => void deleteAdminAccount()}><Trash2 className="h-4 w-4" />Delete Admin Account</Button>
+            <Button size="sm" className="h-9 bg-rose-700 text-xs text-white hover:bg-rose-800" onClick={() => void deleteAdminAccount()}><Trash2 className="h-4 w-4" />Delete Admin Account</Button>
           </CardContent>
         </Card>
       ) : null}
@@ -1788,62 +1788,62 @@ function CompanyDepartmentManagement({
   }
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Company</CardTitle>
-            <CardDescription>Companies belong to this admin environment.</CardDescription>
+    <div className="grid gap-3">
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Card className="rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">Create Company</CardTitle>
+            <CardDescription className="text-[13px]">Companies belong to this admin environment.</CardDescription>
           </CardHeader>
           <CardContent className="flex gap-2">
-            <input className="h-10 flex-1 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
-            <Button onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
+            <input className="h-9 flex-1 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
+            <Button size="sm" className="h-9 text-xs" onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Create Department</CardTitle>
-            <CardDescription>Set company, manager, team leader, and shift duration.</CardDescription>
+        <Card className="rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">Create Department</CardTitle>
+            <CardDescription className="text-[13px]">Set company, manager, team leader, and shift duration.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-2">
             <div className="grid gap-2 md:grid-cols-2">
-              <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
                 {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
               </select>
-              <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
             </div>
             <div className="grid gap-2 md:grid-cols-3">
               <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                 Shift length
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
                   {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                 Manager
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
                   <option value="">No manager</option>
                   {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
               <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
                 Team Leader
-                <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
                   <option value="">No team leader</option>
                   {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
             </div>
-            <Button onClick={createDepartment}><Plus className="h-4 w-4" />Add Department</Button>
+            <Button size="sm" className="h-9 text-xs" onClick={createDepartment}><Plus className="h-4 w-4" />Add Department</Button>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Company Hierarchy</CardTitle>
-          <CardDescription>Expand a company to edit its identity, colors, logo, and departments.</CardDescription>
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">Company Hierarchy</CardTitle>
+          <CardDescription className="text-[13px]">Expand a company to edit its identity, colors, logo, and departments.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
           {workspace.companies.map((company) => {
@@ -2252,11 +2252,11 @@ function AccountManagement({
   }
 
   return (
-    <div className="grid gap-4">
-      <Card>
-        <CardHeader>
-          <CardTitle>{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
-          <CardDescription>
+    <div className="grid gap-3">
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
+          <CardDescription className="text-[13px]">
             {mode === "employees"
               ? "Employees, Team Leaders, and Department Managers."
               : "Payroll Admins and Company Managers. Company access uses checkboxes."}
@@ -2266,7 +2266,7 @@ function AccountManagement({
           {mode === "employees" ? (
             <div className="grid gap-3">
               <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr_0.9fr]">
-                <div className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3">
+                <div className="grid gap-2.5 rounded-xl border border-stone-200 bg-stone-50 p-3">
                   <div className="flex flex-wrap gap-1.5">
                     {roleOptions.map((option) => (
                       <button
@@ -2293,7 +2293,7 @@ function AccountManagement({
                   </div>
                 </div>
 
-                <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                   <p className="text-xs font-black uppercase tracking-wide text-stone-500">Organization</p>
                   <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={companyId} onChange={(event) => {
                     setCompanyId(event.target.value);
@@ -2321,7 +2321,7 @@ function AccountManagement({
                   </div>
                 </div>
 
-                <div className="grid gap-2 rounded-lg border border-stone-200 bg-white p-3">
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-xs font-black uppercase tracking-wide text-stone-500">Contract</p>
                     <button type="button" className="text-xs font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
@@ -2339,7 +2339,7 @@ function AccountManagement({
                 </div>
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2 rounded-lg border border-stone-200 bg-white p-2">
+              <div className="flex flex-wrap justify-end gap-2 rounded-xl border border-stone-200 bg-white p-2">
                 <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
                 <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
               </div>
@@ -2394,10 +2394,10 @@ function AccountManagement({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{mode === "employees" ? "Employees" : "Admins and Managers"}</CardTitle>
-          <CardDescription>{accounts.length} accounts in this environment.</CardDescription>
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">{mode === "employees" ? "Employees" : "Admins and Managers"}</CardTitle>
+          <CardDescription className="text-[13px]">{accounts.length} accounts in this environment.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2">
           {accounts.map((profile) => {
@@ -2622,23 +2622,23 @@ function SideSheet({
       />
       <aside
         className={cn(
-          "absolute inset-y-3 left-3 z-30 flex min-w-0 flex-col overflow-hidden rounded-[26px] border border-stone-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.14)] transition-transform duration-300",
-          wide ? "w-[min(820px,calc(100%-1.5rem))]" : "w-[min(620px,calc(100%-1.5rem))]",
+          "absolute inset-y-3 left-3 z-30 flex min-w-0 flex-col overflow-hidden rounded-[24px] border border-stone-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.14)] transition-transform duration-300",
+          wide ? "w-[min(780px,calc(100%-1.5rem))]" : "w-[min(560px,calc(100%-1.5rem))]",
           open ? "translate-x-0" : "-translate-x-[106%]"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-stone-200 bg-stone-50/80 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-stone-200 bg-stone-50/80 px-4 py-3.5">
           <div className="min-w-0">
             <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace Sheet</p>
-            <h2 className="truncate text-[26px] font-black leading-tight text-stone-950">{title}</h2>
-            <p className="mt-1 max-w-2xl text-sm text-stone-500">{description}</p>
+            <h2 className="truncate text-[22px] font-black leading-tight text-stone-950">{title}</h2>
+            <p className="mt-1 max-w-2xl text-[13px] text-stone-500">{description}</p>
           </div>
-          <Button size="sm" variant="outline" onClick={onClose}>
+          <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onClose}>
             <X className="h-4 w-4" />
             Close
           </Button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
           {children}
         </div>
       </aside>
