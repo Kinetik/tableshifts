@@ -334,8 +334,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
       <div className="grid h-full min-w-0 grid-cols-[228px_minmax(0,1fr)] gap-4 overflow-hidden">
         <aside className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
-          <div className="px-1">
-            <div className="mb-2 flex items-center gap-2.5 px-2">
+          <div>
+            <div className="mb-2 flex items-center gap-2.5 px-1">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
@@ -410,8 +410,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
           </div>
 
-          <div className="min-h-0 px-1 py-1">
-            <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
+          <div className="min-h-0 py-1">
+            <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
             <nav className="grid gap-0.5 overflow-y-auto pr-1">
               {visibleNav.map((item) => (
                 <button
@@ -430,7 +430,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </nav>
           </div>
 
-          <div className="relative px-1">
+          <div className="relative">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -449,10 +449,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", userMenuOpen && "rotate-180")} />
             </button>
             {userMenuOpen ? (
-              <div className="absolute bottom-[calc(100%+0.5rem)] left-1 right-1 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+              <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                   <div className="text-[13px] font-semibold text-white">{workspace.profile.position || ROLES[workspace.profile.role]}</div>
-                    <div className="mt-0.5 text-[11px] text-emerald-200/75">
+                  <div className="mt-0.5 text-[11px] text-emerald-200/75">
                     {[activeCompany?.name, workspace.departments.find((department) => department.id === workspace.profile.department_id)?.name].filter(Boolean).join(" / ") || "No department"}
                   </div>
                 </div>
@@ -2704,7 +2704,7 @@ function DocumentPreview({ html, onClose }: { html: string; onClose: () => void 
           <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={onClose}>Close</Button>
         </CardHeader>
         <CardContent className="p-0">
-          <iframe className="h-[360px] w-full bg-white" srcDoc={scaledDocumentPreviewHtml(html)} title="Leave request document preview" />
+          <iframe className="h-[390px] w-full bg-white" srcDoc={scaledDocumentPreviewHtml(html)} title="Leave request document preview" />
         </CardContent>
       </Card>
     </div>
@@ -2714,11 +2714,12 @@ function DocumentPreview({ html, onClose }: { html: string; onClose: () => void 
 function scaledDocumentPreviewHtml(html: string) {
   const compactStyles = `
     <style>
+      html, body { overflow: hidden !important; }
       body { padding: 14px !important; font-size: 12px !important; line-height: 1.3 !important; }
       .brand { font-size: 10px !important; letter-spacing: 0.18em !important; }
       h1 { margin: 4px 0 10px !important; font-size: 18px !important; }
       p { margin: 6px 0 !important; }
-      .box { padding: 10px !important; margin: 10px 0 !important; border-radius: 7px !important; }
+      .box { padding: 10px !important; margin: 8px 0 !important; border-radius: 7px !important; }
       .status { padding: 4px 7px !important; font-size: 11px !important; border-radius: 999px !important; }
     </style>
   `;
