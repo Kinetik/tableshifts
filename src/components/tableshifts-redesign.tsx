@@ -406,14 +406,14 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </div>
           </div>
 
-          <div className="min-h-0 py-1">
-            <div className="mb-2 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
-            <nav className="grid gap-0.5 overflow-y-auto pr-1">
+          <div className="min-h-0 px-2 py-1">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
+            <nav className="grid gap-0.5 overflow-y-auto">
               {visibleNav.map((item) => (
                 <button
                   key={item.value}
                   className={cn(
-                    "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-emerald-50/72 transition-colors hover:bg-white/7 hover:text-white",
+                    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-emerald-50/72 transition-colors hover:bg-white/7 hover:text-white",
                     activeTab === item.value && "bg-white/96 text-emerald-950 shadow-sm hover:bg-white hover:text-emerald-950"
                   )}
                   onClick={() => setActiveTab(item.value)}
