@@ -2414,8 +2414,8 @@ function AccountManagement({
         <CardContent className="grid gap-3">
           {mode === "employees" ? (
             <div className="grid gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5">
-                <div>
+              <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+                <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Role</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {roleOptions.map((option) => (
@@ -2435,20 +2435,20 @@ function AccountManagement({
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2">
+                <div className="flex flex-wrap gap-2 lg:justify-end">
                   <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={resetForm}>Reset</Button>
                   <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
                 </div>
               </div>
 
-              <div className="grid gap-3 xl:grid-cols-[1.18fr_0.82fr]">
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.35fr)_360px]">
                 <div className="grid gap-3">
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Identity</p>
                       <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{ROLES[role]}</span>
                     </div>
-                    <div className="grid gap-2 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.35fr)_220px]">
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
@@ -2457,12 +2457,8 @@ function AccountManagement({
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Email</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
                       </label>
-                      <label className="grid gap-1 min-w-0">
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">ID</span>
-                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="ID number" />
-                      </label>
                     </div>
-                    <div className="grid gap-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_160px]">
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Password</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
@@ -2470,6 +2466,10 @@ function AccountManagement({
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Position</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">ID</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="ID number" />
                       </label>
                     </div>
                   </div>
@@ -2515,7 +2515,7 @@ function AccountManagement({
                   </div>
                 </div>
 
-                <div className="grid gap-3">
+                <div className="grid w-full max-w-[360px] gap-3 xl:justify-self-start">
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Contract</p>
@@ -2675,14 +2675,14 @@ function DateInput({ label, value, onChange }: { label: string; value: string; o
       <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">{label}</span>
       <input
         className={cn(
-          "h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900",
+          "h-8 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900",
           !value && "text-transparent"
         )}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         type="date"
       />
-      {!value ? <span className="pointer-events-none absolute bottom-2 left-3 text-[13px] font-semibold text-stone-400">--/--/----</span> : null}
+      {!value ? <span className="pointer-events-none absolute bottom-[9px] left-3 text-[13px] font-semibold text-stone-400">--/--/----</span> : null}
     </label>
   );
 }
