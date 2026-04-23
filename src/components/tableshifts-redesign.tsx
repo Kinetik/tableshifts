@@ -310,9 +310,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
-      <div className="grid h-full min-w-0 grid-cols-[236px_minmax(0,1fr)] gap-4 overflow-hidden">
-        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-3 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
-          <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+      <div className="grid h-full min-w-0 grid-cols-[228px_minmax(0,1fr)] gap-4 overflow-hidden">
+        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
+          <div className="rounded-[18px] bg-white/[0.045] p-3">
             <div className="flex items-center gap-2.5">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
               <div className="min-w-0">
@@ -336,29 +336,29 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </label>
           </div>
 
-          <div className="min-h-0 rounded-[18px] border border-white/10 bg-white/5 p-2.5">
+          <div className="min-h-0 rounded-[18px] bg-white/[0.03] px-2 py-2.5">
             <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Navigation</div>
             <nav className="grid gap-0.5 overflow-y-auto pr-1">
               {visibleNav.map((item) => (
                 <button
                   key={item.value}
                   className={cn(
-                    "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-emerald-50/78 transition-colors hover:bg-white/8 hover:text-white",
-                    activeTab === item.value && "bg-white text-emerald-950 hover:bg-white hover:text-emerald-950"
+                    "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-emerald-50/72 transition-colors hover:bg-white/7 hover:text-white",
+                    activeTab === item.value && "bg-white/96 text-emerald-950 shadow-sm hover:bg-white hover:text-emerald-950"
                   )}
                   onClick={() => setActiveTab(item.value)}
                 >
                   <item.icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="truncate">{item.label}</span>
-                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-55" /> : null}
+                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-40 transition group-hover:opacity-70" /> : null}
                 </button>
               ))}
             </nav>
           </div>
 
-          <div className="rounded-[18px] border border-white/10 bg-white/5 p-3">
+          <div className="rounded-[18px] border-t border-white/10 bg-white/[0.025] p-3">
             {pendingApprovals.length ? (
-              <Button size="sm" variant="outline" className="mb-3 h-8 w-full border-white/12 bg-white/8 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => setActiveTab("leave")}>
+              <Button size="sm" variant="outline" className="mb-3 h-8 w-full border-white/10 bg-white/7 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => setActiveTab("leave")}>
                 <Bell className="h-3.5 w-3.5" /> {pendingApprovals.length} pending
               </Button>
             ) : null}
@@ -368,10 +368,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               <span className="mt-0.5 block truncate text-emerald-200/70">{workspace.profile.email}</span>
             </div>
             <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="outline" className="h-8 flex-1 border-white/12 bg-white/8 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+              <Button size="sm" variant="outline" className="h-8 flex-1 border-white/10 bg-white/7 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
                 <Download className="h-3.5 w-3.5" /> Export
               </Button>
-              <Button size="sm" variant="outline" className="h-8 border-white/12 bg-white/8 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={signOut}>
+              <Button size="sm" variant="outline" className="h-8 border-white/10 bg-white/7 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={signOut}>
                 <LogOut className="h-3.5 w-3.5" /> Logout
               </Button>
             </div>
@@ -1146,12 +1146,12 @@ function LeaveRequests({
   return (
     <div className="grid gap-4">
       {canCreate ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>New Leave Request</CardTitle>
+        <Card className="rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-xl">New Leave Request</CardTitle>
             <CardDescription>Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 lg:grid-cols-[170px_1fr_1fr_1.3fr_1.2fr_auto_auto]">
+          <CardContent className="grid gap-3 lg:grid-cols-[160px_1fr_1fr_1.2fr_1.1fr_auto_auto]">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
               <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
@@ -1188,9 +1188,9 @@ function LeaveRequests({
         </Card>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Leave Requests</CardTitle>
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-xl">Leave Requests</CardTitle>
           <CardDescription>One row per request, with approval and document actions.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3">
@@ -1199,7 +1199,7 @@ function LeaveRequests({
             const canDecide = request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
             const documentHtml = request.generated_document_html || (employee ? generatedLeaveDocumentHtml(request, employee, activeCompany) : "");
             return (
-              <div key={request.id} className="grid gap-3 rounded-lg border border-stone-200 p-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+              <div key={request.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-stone-50/55 p-3 lg:grid-cols-[1fr_auto_auto] lg:items-center">
                 <div>
                   <strong>{employee?.full_name || "Employee"}</strong>
                   <p className="text-sm text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}{request.notes ? ` - ${request.notes}` : ""}</p>
@@ -1222,7 +1222,7 @@ function LeaveRequests({
           {recordedEntries.map((entry) => {
             const employee = workspace.profiles.find((profile) => profile.id === entry.employee_user_id);
             return (
-              <div key={entry.id} className="grid gap-3 rounded-lg border border-stone-200 bg-stone-50 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div key={entry.id} className="grid gap-3 rounded-2xl border border-stone-200 bg-stone-50/55 p-3 lg:grid-cols-[1fr_auto] lg:items-center">
                 <div>
                   <strong>{employee?.full_name || "Employee"}</strong>
                   <p className="text-sm text-stone-500">{entry.work_date} - {ENTRY_LABELS[entry.type] || entry.type} recorded in Timesheet</p>
@@ -2627,11 +2627,11 @@ function SideSheet({
           open ? "translate-x-0" : "-translate-x-[106%]"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-stone-200 bg-stone-50/80 px-5 py-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Sidebar Sheet</p>
-            <h2 className="truncate text-2xl font-black text-stone-950">{title}</h2>
-            <p className="mt-1 text-sm text-stone-500">{description}</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace Sheet</p>
+            <h2 className="truncate text-[26px] font-black leading-tight text-stone-950">{title}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-stone-500">{description}</p>
           </div>
           <Button size="sm" variant="outline" onClick={onClose}>
             <X className="h-4 w-4" />
