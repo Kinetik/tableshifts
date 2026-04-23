@@ -137,6 +137,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
   const [totalsExpanded, setTotalsExpanded] = React.useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = React.useState(false);
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [companyLogoUrls, setCompanyLogoUrls] = React.useState<Record<string, string>>({});
 
   const loadWorkspace = React.useCallback(async (user: User) => {
     if (!supabase) return;
@@ -221,6 +224,25 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     if (authUser) void loadWorkspace(authUser);
   }, [authUser, loadWorkspace]);
 
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadCompanyLogos() {
+      if (!supabase || !workspace) return;
+      const entries = await Promise.all(
+        workspace.companies.map(async (company) => {
+          if (!company.logo_path) return [company.id, ""] as const;
+          const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+          return [company.id, data?.signedUrl || ""] as const;
+        })
+      );
+      if (!cancelled) setCompanyLogoUrls(Object.fromEntries(entries));
+    }
+    void loadCompanyLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace]);
+
   async function signIn(event: React.FormEvent) {
     event.preventDefault();
     if (!supabase) return;
@@ -275,7 +297,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const companies = accessibleCompanies(workspace);
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
   const setupAllowed = ["admin_account", "payroll_admin"].includes(workspace.profile.role);
-  const visibleNav = nav.filter((item) => !item.setupOnly || setupAllowed);
+  const visibleNav = nav.filter((item) => item.value !== "timesheet" && (!item.setupOnly || setupAllowed));
   const companyDepartments = workspace.departments.filter((department) => department.company_id === activeCompany?.id);
   const companyTeamLeaders = workspace.profiles.filter((profile) => (
     profile.role === "team_leader" &&
@@ -311,33 +333,85 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
       <div className="grid h-full min-w-0 grid-cols-[228px_minmax(0,1fr)] gap-4 overflow-hidden">
-        <aside className="grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2.5 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
-          <div className="rounded-[18px] bg-white/[0.045] p-3">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
+        <aside className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
+          <div className="px-1">
+            <div className="mb-2 flex items-center gap-2.5 px-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
               <div className="min-w-0">
                 <p className="truncate text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
-                <p className="truncate text-sm font-semibold text-white/92">Control Room</p>
+                <p className="truncate text-[13px] font-semibold text-white/88">Control Room</p>
               </div>
             </div>
-            <label className="mt-3 grid gap-1.5">
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/75">Company</span>
-              <select
-                className="h-9 rounded-xl border border-white/10 bg-white/8 px-3 text-sm font-semibold text-white outline-none transition focus:border-emerald-300"
-                value={activeCompany?.id || ""}
-                onChange={(event) => {
-                  setActiveCompanyId(event.target.value);
-                  setDepartmentFilter("all");
-                  setTeamFilter("all");
+            <div className="relative">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
+                onClick={() => {
+                  setCompanyMenuOpen((value) => !value);
+                  setUserMenuOpen(false);
                 }}
               >
-                {companies.map((company) => <option key={company.id} value={company.id} className="text-stone-900">{company.name}</option>)}
-              </select>
-            </label>
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white text-emerald-950">
+                  {activeCompany && companyLogoUrls[activeCompany.id]
+                    ? <img src={companyLogoUrls[activeCompany.id]} alt="" className="h-full w-full object-contain" />
+                    : <Building2 className="h-4.5 w-4.5" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold text-white">{activeCompany?.name || "Select company"}</div>
+                  <div className="truncate text-[11px] text-emerald-200/70">{activeCompany ? `${companyDepartments.length} departments` : "No company selected"}</div>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", companyMenuOpen && "rotate-180")} />
+              </button>
+              {companyMenuOpen ? (
+                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+                  <div className="mb-1 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/60">Companies</div>
+                  <div className="grid gap-1">
+                    {companies.map((company) => (
+                      <button
+                        key={company.id}
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-2 py-2 text-left text-[13px] transition",
+                          activeCompany?.id === company.id ? "bg-white text-emerald-950" : "text-white/80 hover:bg-white/[0.07] hover:text-white"
+                        )}
+                        onClick={() => {
+                          setActiveCompanyId(company.id);
+                          setDepartmentFilter("all");
+                          setTeamFilter("all");
+                          setCompanyMenuOpen(false);
+                        }}
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white">
+                          {companyLogoUrls[company.id]
+                            ? <img src={companyLogoUrls[company.id]} alt="" className="h-full w-full object-contain" />
+                            : <Building2 className="h-4 w-4 text-emerald-950" />}
+                        </div>
+                        <span className="min-w-0 flex-1 truncate font-medium">{company.name}</span>
+                      </button>
+                    ))}
+                    {setupAllowed ? (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-2 rounded-xl border border-dashed border-white/14 px-2 py-2 text-left text-[13px] font-semibold text-emerald-100/82 transition hover:bg-white/[0.07] hover:text-white"
+                        onClick={() => {
+                          setActiveTab("companies");
+                          setCompanyMenuOpen(false);
+                        }}
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
+                          <Plus className="h-4 w-4" />
+                        </div>
+                        <span>Create company</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           </div>
 
-          <div className="min-h-0 rounded-[18px] bg-white/[0.03] px-2 py-2.5">
-            <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Navigation</div>
+          <div className="min-h-0 px-1 py-1">
+            <div className="mb-2 px-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
             <nav className="grid gap-0.5 overflow-y-auto pr-1">
               {visibleNav.map((item) => (
                 <button
@@ -356,25 +430,56 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </nav>
           </div>
 
-          <div className="rounded-[18px] border-t border-white/10 bg-white/[0.025] p-3">
-            {pendingApprovals.length ? (
-              <Button size="sm" variant="outline" className="mb-3 h-8 w-full border-white/10 bg-white/7 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => setActiveTab("leave")}>
-                <Bell className="h-3.5 w-3.5" /> {pendingApprovals.length} pending
-              </Button>
+          <div className="relative px-1">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
+              onClick={() => {
+                setUserMenuOpen((value) => !value);
+                setCompanyMenuOpen(false);
+              }}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[11px] font-black text-emerald-950">
+                {workspace.profile.full_name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-white">{workspace.profile.full_name}</div>
+                <div className="truncate text-[11px] text-emerald-200/70">{workspace.profile.email}</div>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", userMenuOpen && "rotate-180")} />
+            </button>
+            {userMenuOpen ? (
+              <div className="absolute bottom-[calc(100%+0.5rem)] left-1 right-1 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                  <div className="text-[13px] font-semibold text-white">{workspace.profile.position || ROLES[workspace.profile.role]}</div>
+                    <div className="mt-0.5 text-[11px] text-emerald-200/75">
+                    {[activeCompany?.name, workspace.departments.find((department) => department.id === workspace.profile.department_id)?.name].filter(Boolean).join(" / ") || "No department"}
+                  </div>
+                </div>
+                {pendingApprovals.length ? (
+                  <button
+                    type="button"
+                    className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-medium text-white/82 transition hover:bg-white/[0.07] hover:text-white"
+                    onClick={() => {
+                      setActiveTab("leave");
+                      setUserMenuOpen(false);
+                    }}
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="flex-1">Pending approvals</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold">{pendingApprovals.length}</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-medium text-white/82 transition hover:bg-white/[0.07] hover:text-white"
+                  onClick={signOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
             ) : null}
-            <div className="text-xs">
-              <strong className="block truncate text-white">{workspace.profile.full_name}</strong>
-              <span className="block truncate text-emerald-100/85">{workspace.profile.position || ROLES[workspace.profile.role]}</span>
-              <span className="mt-0.5 block truncate text-emerald-200/70">{workspace.profile.email}</span>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <Button size="sm" variant="outline" className="h-8 flex-1 border-white/10 bg-white/7 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
-                <Download className="h-3.5 w-3.5" /> Export
-              </Button>
-              <Button size="sm" variant="outline" className="h-8 border-white/10 bg-white/7 px-2 text-xs text-white hover:bg-white/12 hover:text-white" onClick={signOut}>
-                <LogOut className="h-3.5 w-3.5" /> Logout
-              </Button>
-            </div>
           </div>
         </aside>
 
@@ -382,7 +487,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
           <div className="h-full min-w-0 overflow-hidden p-3 md:p-4">
             {message ? <p className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <p className="mr-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Timesheet</p>
               <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={month} onChange={(event) => setMonth(event.target.value)}>
                 {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </select>
@@ -401,6 +505,9 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 <option value="all">All team leaders</option>
                 {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
               </select>
+              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-xs font-semibold" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </Button>
             </div>
             <TimesheetTable
               month={month}
@@ -1177,12 +1284,12 @@ function LeaveRequests({
               <input className="h-9 rounded-md border border-stone-200 bg-white px-2 py-1 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
             </label>
             <div className="flex items-end">
-              <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
+              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
                 <Eye className="h-4 w-4" /> Preview
               </Button>
             </div>
             <div className="flex items-end">
-              <Button size="sm" className="h-9 text-xs" onClick={submitRequest}>Submit</Button>
+              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={submitRequest}>Submit</Button>
             </div>
           </CardContent>
         </Card>
@@ -1206,14 +1313,14 @@ function LeaveRequests({
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
-                  {request.attachment_path ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", request.attachment_path || "")}><Download className="h-4 w-4" />File</Button> : null}
-                  {documentHtml ? <Button size="sm" variant="outline" onClick={() => setPreviewHtml(documentHtml)}>Preview document</Button> : null}
-                  {documentHtml ? <Button size="sm" variant="outline" onClick={() => downloadHtml(documentHtml, `${employee?.full_name || "leave"}-${request.start_date}.html`)}>Download</Button> : null}
+                  {request.attachment_path ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void downloadStorageFile(supabase, "leave-documents", request.attachment_path || "")}><Download className="h-3.5 w-3.5" />File</Button> : null}
+                  {documentHtml ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setPreviewHtml(documentHtml)}>Preview</Button> : null}
+                  {documentHtml ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => downloadHtml(documentHtml, `${employee?.full_name || "leave"}-${request.start_date}.html`)}>Download</Button> : null}
                 </div>
                 {canDecide ? (
                   <div className="flex gap-2 lg:justify-end">
-                    <Button size="sm" onClick={() => void decide(request, "approved")}>Approve</Button>
-                    <Button size="sm" variant="outline" onClick={() => void decide(request, "rejected")}>Deny</Button>
+                    <Button size="sm" className="h-7 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void decide(request, "approved")}>Approve</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void decide(request, "rejected")}>Deny</Button>
                   </div>
                 ) : null}
               </div>
@@ -1230,7 +1337,7 @@ function LeaveRequests({
                 <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                   <Badge variant="secondary">Recorded</Badge>
                   {["vacation", "medical"].includes(entry.type) ? (
-                    <label className="inline-flex h-8 cursor-pointer items-center rounded-md border border-stone-200 bg-white px-3 text-xs font-semibold text-stone-800 hover:bg-stone-50">
+                    <label className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-stone-200 bg-white px-2 text-[11px] font-semibold text-stone-800 hover:bg-stone-50">
                       {entry.attachment_path ? "Replace file" : "Attach file"}
                       <input
                         className="hidden"
@@ -1239,7 +1346,7 @@ function LeaveRequests({
                       />
                     </label>
                   ) : null}
-                  {entry.attachment_path ? <Button size="sm" variant="outline" onClick={() => void downloadStorageFile(supabase, "leave-documents", entry.attachment_path || "")}><Download className="h-4 w-4" />File</Button> : null}
+                  {entry.attachment_path ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void downloadStorageFile(supabase, "leave-documents", entry.attachment_path || "")}><Download className="h-3.5 w-3.5" />File</Button> : null}
                 </div>
               </div>
             );
@@ -2588,20 +2695,35 @@ function EntityCard({ title, items }: { title: string; items: string[] }) {
 function DocumentPreview({ html, onClose }: { html: string; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
-      <Card className="w-full max-w-2xl overflow-hidden">
-        <CardHeader className="flex-row items-center justify-between border-b border-stone-200 p-4">
+      <Card className="w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_30px_80px_rgba(15,23,42,0.22)]">
+        <CardHeader className="flex-row items-center justify-between border-b border-stone-200 p-3.5">
           <div>
-            <CardTitle>Leave Request Document</CardTitle>
-            <CardDescription>Preview of the generated request form.</CardDescription>
+            <CardTitle className="text-lg">Leave Request Document</CardTitle>
+            <CardDescription className="text-[13px]">Preview of the generated request form.</CardDescription>
           </div>
-          <Button size="sm" variant="outline" onClick={onClose}>Close</Button>
+          <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={onClose}>Close</Button>
         </CardHeader>
         <CardContent className="p-0">
-          <iframe className="h-[430px] w-full bg-white" srcDoc={html} title="Leave request document preview" />
+          <iframe className="h-[360px] w-full bg-white" srcDoc={scaledDocumentPreviewHtml(html)} title="Leave request document preview" />
         </CardContent>
       </Card>
     </div>
   );
+}
+
+function scaledDocumentPreviewHtml(html: string) {
+  const compactStyles = `
+    <style>
+      body { padding: 14px !important; font-size: 12px !important; line-height: 1.3 !important; }
+      .brand { font-size: 10px !important; letter-spacing: 0.18em !important; }
+      h1 { margin: 4px 0 10px !important; font-size: 18px !important; }
+      p { margin: 6px 0 !important; }
+      .box { padding: 10px !important; margin: 10px 0 !important; border-radius: 7px !important; }
+      .status { padding: 4px 7px !important; font-size: 11px !important; border-radius: 999px !important; }
+    </style>
+  `;
+  if (html.includes("</head>")) return html.replace("</head>", `${compactStyles}</head>`);
+  return `${compactStyles}${html}`;
 }
 
 async function uploadLeaveDocument(supabase: SupabaseClient, workspace: Workspace, entityId: string, file: File) {
