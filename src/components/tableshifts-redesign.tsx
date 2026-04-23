@@ -335,14 +335,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
       <div className="grid h-full min-w-0 grid-cols-[228px_minmax(0,1fr)] gap-4 overflow-hidden">
         <aside className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
           <div>
-            <div className="mb-2 flex items-center gap-2.5 px-1">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-xs font-black text-emerald-900 shadow-sm">TS</div>
-              <div className="min-w-0">
-                <p className="truncate text-[11px] font-black uppercase tracking-[0.22em] text-emerald-200">TableShifts</p>
-                <p className="truncate text-[13px] font-semibold text-white/88">Control Room</p>
-              </div>
+            <div className="mb-3 px-2 text-center">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200">TableShifts</p>
             </div>
-            <div className="relative px-1">
+            <div className="relative px-2">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -363,7 +359,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", companyMenuOpen && "rotate-180")} />
               </button>
               {companyMenuOpen ? (
-                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+                <div className="absolute left-2 right-2 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
                   <div className="mb-1 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/60">Companies</div>
                   <div className="grid gap-1">
                     {companies.map((company) => (
@@ -430,7 +426,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </nav>
           </div>
 
-          <div className="relative px-1">
+          <div className="relative px-2">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -449,7 +445,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", userMenuOpen && "rotate-180")} />
             </button>
             {userMenuOpen ? (
-              <div className="absolute bottom-[calc(100%+0.5rem)] left-0 right-0 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+              <div className="absolute bottom-[calc(100%+0.5rem)] left-2 right-2 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
                   <div className="text-[13px] font-semibold text-white">{workspace.profile.position || ROLES[workspace.profile.role]}</div>
                   <div className="mt-0.5 text-[11px] text-emerald-200/75">
