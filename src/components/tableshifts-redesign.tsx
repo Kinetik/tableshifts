@@ -1795,9 +1795,14 @@ function CompanyDepartmentManagement({
             <CardTitle className="text-lg">Create Company</CardTitle>
             <CardDescription className="text-[13px]">Companies belong to this admin environment.</CardDescription>
           </CardHeader>
-          <CardContent className="flex gap-2">
-            <input className="h-9 flex-1 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
-            <Button size="sm" className="h-9 text-xs" onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
+          <CardContent className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <label className="grid gap-1">
+              <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Name</span>
+              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
+            </label>
+            <div className="flex items-end">
+              <Button size="sm" className="h-9 text-xs" onClick={createCompany}><Plus className="h-4 w-4" />Add</Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -1808,26 +1813,32 @@ function CompanyDepartmentManagement({
           </CardHeader>
           <CardContent className="grid gap-2">
             <div className="grid gap-2 md:grid-cols-2">
-              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
-                {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-              </select>
-              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+              <label className="grid gap-1">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company</span>
+                <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
+                  {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-1">
+                <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Department</span>
+                <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+              </label>
             </div>
             <div className="grid gap-2 md:grid-cols-3">
-              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
                 Shift length
                 <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
                   {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                 </select>
               </label>
-              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
                 Manager
                 <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
                   <option value="">No manager</option>
                   {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                 </select>
               </label>
-              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              <label className="grid gap-1 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">
                 Team Leader
                 <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
                   <option value="">No team leader</option>
@@ -1856,7 +1867,7 @@ function CompanyDepartmentManagement({
             ));
             const colors = colorDrafts[company.id] || DEFAULT_ENTRY_COLORS;
             return (
-              <div key={company.id} className="rounded-lg border border-stone-200 p-3">
+              <div key={company.id} className="rounded-[18px] border border-stone-200 bg-white p-3">
                 <button
                   type="button"
                   className="flex w-full items-center justify-between gap-3 text-left"
@@ -1867,41 +1878,50 @@ function CompanyDepartmentManagement({
                       {logoUrls[company.id] ? <img src={logoUrls[company.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
                     </div>
                     <div className="min-w-0">
-                      <strong className="block truncate">{company.name}</strong>
-                      <p className="text-sm text-stone-500">{departments.length} departments - {users.length} users</p>
+                      <strong className="block truncate text-[15px]">{company.name}</strong>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{departments.length} departments</span>
+                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{users.length} users</span>
+                      </div>
                     </div>
                   </div>
                   {isOpen ? <ChevronDown className="h-5 w-5 text-stone-500" /> : <ChevronRight className="h-5 w-5 text-stone-500" />}
                 </button>
 
                 {isOpen ? (
-                  <div className="mt-4 grid gap-4 border-t border-stone-200 pt-4">
+                  <div className="mt-4 grid gap-3 border-t border-stone-200 pt-4">
                     <div className="grid gap-3 xl:grid-cols-[1fr_auto]">
-                      <div className="grid gap-3 md:grid-cols-[1fr_auto]">
-                        <input
-                          className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold"
-                          value={editingCompanyName[company.id] || company.name}
-                          onChange={(event) => setEditingCompanyName((current) => ({ ...current, [company.id]: event.target.value }))}
-                          placeholder="Company name"
-                        />
-                        <label className="flex h-10 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold">
-                          <ImageIcon className="h-4 w-4" />Logo
-                          <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(company, event.target.files?.[0] || null)} />
+                      <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                        <label className="grid gap-1">
+                          <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company name</span>
+                          <input
+                            className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
+                            value={editingCompanyName[company.id] || company.name}
+                            onChange={(event) => setEditingCompanyName((current) => ({ ...current, [company.id]: event.target.value }))}
+                            placeholder="Company name"
+                          />
+                        </label>
+                        <label className="grid gap-1">
+                          <span className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Logo</span>
+                          <span className="flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold">
+                            <ImageIcon className="h-4 w-4" />Upload
+                            <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(company, event.target.files?.[0] || null)} />
+                          </span>
                         </label>
                       </div>
                       <div className="flex gap-2 xl:justify-end">
-                        <Button variant="outline" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
-                        <Button onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
+                        <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
+                        <Button size="sm" className="h-9 text-xs" onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
                       </div>
                     </div>
 
-                    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
-                      <p className="mb-3 flex items-center gap-2 text-xs font-black uppercase tracking-wide text-stone-500"><Palette className="h-4 w-4" />Timesheet Colors</p>
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                      <p className="mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.22em] text-stone-500"><Palette className="h-4 w-4" />Timesheet Colors</p>
                       <div className="grid gap-2 md:grid-cols-5">
                         {ENTRY_COLOR_KEYS.map(([key, label]) => (
-                          <label key={key} className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+                          <label key={key} className="grid gap-1 text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">
                             {label}
-                            <div className="flex h-9 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                            <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
                               <input
                                 className="h-5 w-7 border-0 bg-transparent p-0"
                                 type="color"
@@ -1935,7 +1955,7 @@ function CompanyDepartmentManagement({
                           days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
                         };
                         return (
-                          <div key={department.id} className="grid gap-2 rounded-md bg-stone-50 p-3 text-sm">
+                          <div key={department.id} className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm">
                             {(() => {
                               const teamLeaderOptions = workspace.profiles.filter((profile) => {
                                 const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
@@ -1944,14 +1964,14 @@ function CompanyDepartmentManagement({
                                   (!assignedDepartment || assignedDepartment.id === department.id);
                               });
                               return (
-                            <div className="grid gap-2 lg:grid-cols-[1.4fr_1fr_1fr_90px_auto]">
+                            <div className="grid gap-2 lg:grid-cols-[1.45fr_1fr_1fr_88px_auto]">
                               <input
-                                className="h-9 rounded-md border border-stone-200 px-2 font-semibold"
+                                className="h-8 rounded-md border border-stone-200 px-2 text-[13px] font-semibold"
                                 value={draft.name}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
                               />
                               <select
-                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
+                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
                                 value={draft.manager}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
                               >
@@ -1959,7 +1979,7 @@ function CompanyDepartmentManagement({
                                 {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                               </select>
                               <select
-                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
+                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
                                 value={draft.leader}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
                               >
@@ -1967,15 +1987,15 @@ function CompanyDepartmentManagement({
                                 {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
                               </select>
                               <select
-                                className="h-9 rounded-md border border-stone-200 bg-white px-2 font-semibold"
+                                className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold"
                                 value={draft.hours}
                                 onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
                               >
                                 {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                               </select>
                               <div className="flex gap-2 lg:justify-end">
-                                <Button size="sm" variant="outline" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
-                                <Button size="sm" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
+                                <Button size="sm" variant="outline" className="h-8 text-[11px]" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                                <Button size="sm" className="h-8 text-[11px]" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
                               </div>
                             </div>
                               );
@@ -1990,7 +2010,7 @@ function CompanyDepartmentManagement({
                                 ["Sat", 6],
                                 ["Sun", 0]
                               ] as const).map(([day, index]) => (
-                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-xs font-bold">
+                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[11px] font-bold">
                                   <input
                                     type="checkbox"
                                     checked={draft.days.includes(index)}
@@ -2265,8 +2285,148 @@ function AccountManagement({
         <CardContent className="grid gap-3">
           {mode === "employees" ? (
             <div className="grid gap-3">
-              <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr_0.9fr]">
-                <div className="grid gap-2.5 rounded-xl border border-stone-200 bg-stone-50 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5">
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Role</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-xs font-black transition-colors",
+                          role === option
+                            ? "border-emerald-700 bg-emerald-700 text-white"
+                            : "border-stone-200 bg-white text-stone-600 hover:border-emerald-300 hover:text-emerald-800"
+                        )}
+                        onClick={() => updateRole(option)}
+                      >
+                        {ROLES[option]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+                  <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 xl:grid-cols-[1.15fr_0.95fr]">
+                <div className="grid gap-3">
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Identity</p>
+                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{ROLES[role]}</span>
+                    </div>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Name</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Email</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Password</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Position</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+                      </label>
+                      <label className="grid gap-1 md:col-span-2">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Identification</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Identification number" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Organization</p>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Company</span>
+                        <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={companyId} onChange={(event) => {
+                          setCompanyId(event.target.value);
+                          setDepartmentId("");
+                          setReportsToId("");
+                          setTeamLeaderId("");
+                        }}>
+                          {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                        <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                          <option value="">No department</option>
+                          {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Reports to</span>
+                        <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                          <option value="">Reports to none</option>
+                          {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                        </select>
+                      </label>
+                      {role === "employee" ? (
+                        <label className="grid gap-1">
+                          <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                          <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                            <option value="">No team leader</option>
+                            {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-3">
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Contract</p>
+                      <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
+                        Use {suggestedCoDays} CO
+                      </button>
+                    </div>
+                    <div className="grid gap-2">
+                      <DateInput label="Start date" value={startDate} onChange={updateStartDate} />
+                      <DateInput label="End date" value={endDate} onChange={updateEndDate} />
+                      <label className="grid gap-1">
+                        <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Available CO days</span>
+                        <input className="h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Summary</p>
+                    <div className="mt-2 grid gap-2">
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>Company</span>
+                        <span className="text-stone-900">{workspace.companies.find((item) => item.id === companyId)?.name || "None"}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>Department</span>
+                        <span className="text-stone-900">{selectedDepartment?.name || "None"}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>CO available</span>
+                        <span className="text-stone-900">{coAvailable || "0"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="grid gap-3">
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Account</p>
                   <div className="flex flex-wrap gap-1.5">
                     {roleOptions.map((option) => (
                       <button
@@ -2284,112 +2444,53 @@ function AccountManagement({
                       </button>
                     ))}
                   </div>
-                  <div className="grid gap-2 md:grid-cols-2">
-                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
-                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
-                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
-                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
-                    <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-900 md:col-span-2" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="Identification number" />
+                  <div className="grid gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Name</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Account name" />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Email</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Password</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+                    </label>
                   </div>
-                </div>
-
-                <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
-                  <p className="text-xs font-black uppercase tracking-wide text-stone-500">Organization</p>
-                  <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={companyId} onChange={(event) => {
-                    setCompanyId(event.target.value);
-                    setDepartmentId("");
-                    setReportsToId("");
-                    setTeamLeaderId("");
-                  }}>
-                    {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-                  </select>
-                  <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
-                    <option value="">No department</option>
-                    {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
-                  </select>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
-                    <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
-                      <option value="">Reports to none</option>
-                      {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                    </select>
-                    {role === "employee" ? (
-                      <select className="h-9 rounded-md border border-stone-200 bg-stone-50 px-2 text-sm font-semibold text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
-                        <option value="">No team leader</option>
-                        {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                      </select>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-black uppercase tracking-wide text-stone-500">Contract</p>
-                    <button type="button" className="text-xs font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
-                      Use {suggestedCoDays} CO
-                    </button>
-                  </div>
-                  <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
-                    <DateInput label="Start date" value={startDate} onChange={updateStartDate} />
-                    <DateInput label="End date" value={endDate} onChange={updateEndDate} />
-                  </div>
-                  <label className="grid gap-1">
-                    <span className="text-xs font-black uppercase tracking-wide text-stone-500">Available CO Days</span>
-                    <input className="h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-sm font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
-                  </label>
                 </div>
               </div>
 
-              <div className="flex flex-wrap justify-end gap-2 rounded-xl border border-stone-200 bg-white p-2">
-                <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
-                <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+              <div className="grid gap-3">
+                <div className="rounded-xl border border-stone-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company Access</p>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{permittedCompanyIds.length} selected</span>
+                  </div>
+                  <div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">
+                    {workspace.companies.map((company) => (
+                      <label key={company.id} className="flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[13px] font-semibold text-stone-800">
+                        <input
+                          type="checkbox"
+                          checked={permittedCompanyIds.includes(company.id)}
+                          onChange={(event) => {
+                            setPermittedCompanyIds((current) => event.target.checked
+                              ? Array.from(new Set([...current, company.id]))
+                              : current.filter((id) => id !== company.id));
+                          }}
+                        />
+                        {company.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+                  <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+                </div>
               </div>
             </div>
-          ) : (
-            <>
-              <div className="grid gap-3 md:grid-cols-3">
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Role
-                  <select className="h-10 rounded-md border border-stone-200 bg-white px-2 text-sm font-semibold normal-case tracking-normal text-stone-900" value={role} onChange={(event) => updateRole(event.target.value)}>
-                    {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
-                  </select>
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Name
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Account name" />
-                </label>
-                <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                  Email
-                  <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
-                </label>
-              </div>
-              <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
-                Password
-                <input className="h-10 rounded-md border border-stone-200 px-3 text-sm font-semibold normal-case tracking-normal text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
-              </label>
-              <div className="rounded-lg border border-stone-200 p-3">
-                <p className="mb-2 text-xs font-black uppercase tracking-wide text-stone-500">Company Access</p>
-                <div className="grid max-h-40 gap-2 overflow-auto md:grid-cols-2">
-                  {workspace.companies.map((company) => (
-                    <label key={company.id} className="flex items-center gap-2 rounded-md bg-stone-50 p-2 text-sm font-semibold">
-                      <input
-                        type="checkbox"
-                        checked={permittedCompanyIds.includes(company.id)}
-                        onChange={(event) => {
-                          setPermittedCompanyIds((current) => event.target.checked
-                            ? Array.from(new Set([...current, company.id]))
-                            : current.filter((id) => id !== company.id));
-                        }}
-                      />
-                      {company.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex flex-wrap justify-between gap-2">
-                <Button variant="outline" onClick={resetForm}>Reset</Button>
-                <Button onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
-              </div>
-            </>
           )}
         </CardContent>
       </Card>
@@ -2433,17 +2534,17 @@ function companyIdsForProfile(profile: ProfileRow, workspace: Workspace) {
 function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
     <label className="relative grid gap-1">
-      <span className="text-xs font-black uppercase tracking-wide text-stone-500">{label}</span>
+      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">{label}</span>
       <input
         className={cn(
-          "h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-sm font-semibold text-stone-900",
+          "h-9 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900",
           !value && "text-transparent"
         )}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         type="date"
       />
-      {!value ? <span className="pointer-events-none absolute bottom-2 left-3 text-sm font-semibold text-stone-400">--/--/----</span> : null}
+      {!value ? <span className="pointer-events-none absolute bottom-2 left-3 text-[13px] font-semibold text-stone-400">--/--/----</span> : null}
     </label>
   );
 }
