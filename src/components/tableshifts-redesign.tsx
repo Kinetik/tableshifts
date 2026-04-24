@@ -24,9 +24,22 @@ import {
   X,
   UsersRound
 } from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Cell,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  ReferenceArea,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis
+} from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -405,7 +418,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   );
   const scopeDifference = scopeTotals.worked - scopeTotals.expected;
   const activePanel = activeTab === "timesheet" ? null : activeTab;
-  const sheetWide = ["leave", "companies", "admins", "settings"].includes(activeTab);
+  const sheetWide = ["leave", "charts", "companies", "admins", "settings"].includes(activeTab);
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
@@ -619,6 +632,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             title={tabLabel(activeTab)}
             description={sheetDescription(activeTab)}
             wide={sheetWide}
+            extraWide={activeTab === "charts"}
             onClose={() => setActiveTab("timesheet")}
           >
             {activeTab === "leave" ? (
@@ -1027,9 +1041,17 @@ function EntryCell({
     setDraftHours(String(Math.min(24, Number(digits))));
   }
 
-  function openMenu(x: number, y: number) {
+  function openMenuFromCell(target: HTMLElement) {
     if (!editable) return;
-    setMenu({ x, y });
+    const rect = target.getBoundingClientRect();
+    const menuWidth = 190;
+    const menuHeight = 280;
+    const left = Math.min(rect.left + 8, window.innerWidth - menuWidth - 12);
+    const top = Math.min(rect.bottom + 8, window.innerHeight - menuHeight - 12);
+    setMenu({
+      x: Math.max(12, left),
+      y: Math.max(12, top)
+    });
   }
 
   function clearLongPress() {
@@ -1059,7 +1081,7 @@ function EntryCell({
       style={customColor ? { backgroundColor: customColor } : undefined}
       onContextMenu={(event) => {
         event.preventDefault();
-        openMenu(event.clientX, event.clientY);
+        openMenuFromCell(event.currentTarget);
       }}
     >
       <div
@@ -1072,7 +1094,7 @@ function EntryCell({
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
-          longPressRef.current = window.setTimeout(() => openMenu(event.clientX, event.clientY), 550);
+          longPressRef.current = window.setTimeout(() => openMenuFromCell(event.currentTarget), 550);
         }}
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
@@ -1210,6 +1232,10 @@ function entryColor(company: CompanyRow | undefined, type: string) {
   if (!colors || typeof colors !== "object") return null;
   const value = colors[type];
   return typeof value === "string" && value.trim() ? value : null;
+}
+
+function chartEmployeeKey(employee: ProfileRow) {
+  return `employee_${employee.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
 }
 
 function LeaveRequests({
@@ -1478,12 +1504,112 @@ function Charts({
   ab: number;
   difference: number;
 }) {
-  const width = expected ? Math.min(100, Math.round((worked / expected) * 100)) : 0;
+  const days = daysInMonth(month);
+  const employeeKeys = employees.map((employee) => ({
+    employee,
+    key: chartEmployeeKey(employee)
+  }));
+  const employeePalette = [
+    "#047857",
+    "#0f766e",
+    "#2563eb",
+    "#7c3aed",
+    "#be123c",
+    "#b45309",
+    "#0891b2",
+    "#4d7c0f",
+    "#9333ea",
+    "#0369a1",
+    "#c2410c",
+    "#0d9488"
+  ];
+  const employeeChartConfig = employeeKeys.reduce<ChartConfig>((config, item, index) => {
+    config[item.key] = {
+      label: item.employee.full_name,
+      color: employeePalette[index % employeePalette.length]
+    };
+    return config;
+  }, {});
+  const dailyData = days.map((day) => {
+    const row: Record<string, number | string> = {
+      day: day.day,
+      iso: day.iso,
+      expected: 0,
+      worked: 0,
+      delta: 0
+    };
+    employeeKeys.forEach(({ employee, key }) => {
+      const entry = entryFor(workspace.entries, employee.id, day.iso);
+      const normal = normalHours(employee, workspace);
+      const isExpected = isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace);
+      const employeeExpected = isExpected ? normal : 0;
+      let employeeWorked = 0;
+      if (entry) {
+        if (["normal", "overtime"].includes(entry.type)) {
+          employeeWorked = Number(entry.hours || 0);
+        } else if (["vacation", "medical", "special_event"].includes(entry.type)) {
+          employeeWorked = employeeExpected;
+        }
+      }
+      row[key] = employeeWorked;
+      row.expected = Number(row.expected) + employeeExpected;
+      row.worked = Number(row.worked) + employeeWorked;
+    });
+    row.delta = Number(row.worked) - Number(row.expected);
+    row.status = Number(row.delta) < 0 ? "Under" : Number(row.delta) > 0 ? "Over" : "On norm";
+    return row;
+  });
+  const fulfillment = expected ? Math.round((worked / expected) * 100) : 0;
+  const cappedFulfillment = Math.min(140, fulfillment);
+  const workDays = dailyData.filter((day) => Number(day.expected) > 0).length;
+  const underDays = dailyData.filter((day) => Number(day.delta) < 0).length;
+  const overDays = dailyData.filter((day) => Number(day.delta) > 0).length;
+  const leaveDays = co + cm + se;
+  const exceptionHours = overtime + ab * 8;
+  const overtimeShare = worked ? Math.round((overtime / worked) * 100) : 0;
+  const leaveDensity = people && workDays ? Math.round((leaveDays / (people * workDays)) * 100) : 0;
+  const exceptionDensity = expected ? Math.round((exceptionHours / expected) * 100) : 0;
+  const peakDay = dailyData.toSorted((a, b) => Number(b.worked) - Number(a.worked))[0];
+  const weakestDay = dailyData
+    .filter((day) => Number(day.expected) > 0)
+    .toSorted((a, b) => Number(a.delta) - Number(b.delta))[0];
+  const kpis = [
+    {
+      label: "Fulfillment",
+      value: `${fulfillment}%`,
+      hint: `${formatNumber(worked)}h from ${formatNumber(expected)}h norm`,
+      tone: fulfillment >= 100 ? "good" : "bad"
+    },
+    {
+      label: "Net Difference",
+      value: `${difference > 0 ? "+" : ""}${formatNumber(difference)}h`,
+      hint: `${overDays} over days, ${underDays} under days`,
+      tone: difference >= 0 ? "good" : "bad"
+    },
+    {
+      label: "Peak Day",
+      value: peakDay ? `${formatNumber(Number(peakDay.worked))}h` : "0h",
+      hint: peakDay ? `${String(peakDay.iso)} - ${peakDay.status}` : "No data",
+      tone: "neutral"
+    },
+    {
+      label: "Leave Days",
+      value: `${leaveDays}d`,
+      hint: `${co} CO, ${cm} CM, ${se} SE`,
+      tone: leaveDays ? "warn" : "neutral"
+    }
+  ];
+  const radialItems = [
+    { name: "Fulfillment", value: Math.min(100, fulfillment), color: "#047857", detail: `${formatNumber(worked)}h` },
+    { name: "OT Share", value: Math.min(100, overtimeShare), color: "#b45309", detail: `${formatNumber(overtime)}h` },
+    { name: "Leave Density", value: Math.min(100, leaveDensity), color: "#0f766e", detail: `${leaveDays}d` },
+    { name: "Exception Load", value: Math.min(100, exceptionDensity), color: "#be123c", detail: `${formatNumber(exceptionHours)}h` }
+  ];
   const attentionRows = employees
     .map((employee) => ({ employee, totals: totalsFor(employee, month, workspace) }))
     .filter((row) => row.totals.difference < 0 || row.totals.overtime > 0 || row.totals.absenceDays > 0)
     .toSorted((a, b) => (a.totals.difference - b.totals.difference) || (b.totals.overtime - a.totals.overtime))
-    .slice(0, 8);
+    .slice(0, 10);
   const departmentRows = workspace.departments
     .filter((department) => department.company_id === activeCompany?.id)
     .map((department) => {
@@ -1500,77 +1626,221 @@ function Charts({
       return { department, employees: departmentEmployees.length, ...totals };
     })
     .filter((row) => row.employees > 0);
-  const maxDepartmentHours = Math.max(1, ...departmentRows.map((row) => Math.max(row.worked, row.expected)));
-  const exceptionMax = Math.max(1, ...departmentRows.map((row) => row.overtime + row.leave * 8 + row.absence * 8));
+  const departmentChartData = departmentRows.map((row) => ({
+    name: row.department.name,
+    worked: row.worked,
+    expected: row.expected,
+    delta: row.worked - row.expected,
+    overtime: row.overtime,
+    leave: row.leave,
+    absence: row.absence,
+    employees: row.employees
+  }));
+  const dailyChartConfig: ChartConfig = {
+    ...employeeChartConfig,
+    expected: { label: "Expected", color: "#78716c" },
+    worked: { label: "Worked", color: "#047857" }
+  };
+
   return (
     <div className="grid gap-4">
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {kpis.map((kpi) => (
+          <Card key={kpi.label} className="border-stone-200/80">
+            <CardHeader className="p-3">
+              <CardDescription className="font-black uppercase tracking-wide">{kpi.label}</CardDescription>
+              <CardTitle className={cn(
+                "text-2xl font-black",
+                kpi.tone === "good" && "text-emerald-700",
+                kpi.tone === "bad" && "text-rose-700",
+                kpi.tone === "warn" && "text-amber-700"
+              )}>
+                {kpi.value}
+              </CardTitle>
+              <p className="text-xs font-semibold text-stone-500">{kpi.hint}</p>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Daily Workload Stack</CardTitle>
+                <CardDescription>
+                  Employee-level daily contribution. Red bands are below norm; amber bands are above norm.
+                </CardDescription>
+              </div>
+              <Badge variant="secondary">{people} people - {workDays} workdays</Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={dailyChartConfig} className="h-[360px] w-full">
+              <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 16, bottom: 8 }}>
+                {dailyData
+                  .filter((day) => Number(day.delta) !== 0 && Number(day.expected) > 0)
+                  .map((day) => (
+                    <ReferenceArea
+                      key={String(day.iso)}
+                      x1={Number(day.day) - 0.48}
+                      x2={Number(day.day) + 0.48}
+                      strokeOpacity={0}
+                      fill={Number(day.delta) < 0 ? "#fecdd3" : "#fde68a"}
+                      fillOpacity={0.34}
+                    />
+                  ))}
+                <XAxis
+                  dataKey="day"
+                  type="number"
+                  domain={[1, days.length]}
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                  allowDecimals={false}
+                />
+                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={38} />
+                <RechartsTooltip
+                  cursor={{ stroke: "#a8a29e", strokeDasharray: "4 4" }}
+                  content={<ChartTooltipContent formatter={(value) => `${formatNumber(Number(value))}h`} />}
+                />
+                {employeeKeys.map(({ key }) => (
+                  <Area
+                    key={key}
+                    dataKey={key}
+                    stackId="employees"
+                    type="monotone"
+                    stroke={`var(--color-${key})`}
+                    fill={`var(--color-${key})`}
+                    fillOpacity={0.72}
+                    strokeWidth={1.25}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </AreaChart>
+            </ChartContainer>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {employeeKeys.slice(0, 14).map(({ employee, key }) => (
+                <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 px-2 py-1 text-[11px] font-bold text-stone-600">
+                  <span className="size-2 rounded-sm" style={{ backgroundColor: employeeChartConfig[key].color }} />
+                  {employee.full_name}
+                </span>
+              ))}
+              {employeeKeys.length > 14 ? (
+                <span className="rounded-full border border-stone-200 px-2 py-1 text-[11px] font-bold text-stone-500">
+                  +{employeeKeys.length - 14} more
+                </span>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="grid gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle>Month Health</CardTitle>
-              <CardDescription>{people} people in scope, {formatNumber(worked)}h worked from {formatNumber(expected)}h norm.</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle>Scope Radials</CardTitle>
+              <CardDescription>Fast read on fulfillment, OT, leave, and exception pressure.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4">
-              <div>
-                <div className="mb-2 flex items-end justify-between gap-3">
-                  <span className="text-4xl font-black">{width}%</span>
-                  <span className={cn("text-xl font-black", difference < 0 ? "text-rose-700" : "text-emerald-700")}>{difference > 0 ? "+" : ""}{formatNumber(difference)}h</span>
+            <CardContent className="grid grid-cols-2 gap-3">
+              {radialItems.map((item) => (
+                <div key={item.name} className="rounded-lg border border-stone-200 p-3">
+                  <ChartContainer config={{ value: { label: item.name, color: item.color } }} className="mx-auto h-28 w-full">
+                    <RadialBarChart data={[item]} innerRadius="72%" outerRadius="96%" startAngle={90} endAngle={90 - (360 * item.value) / 100}>
+                      <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                      <RadialBar dataKey="value" cornerRadius={8} background>
+                        <Cell fill={item.color} />
+                      </RadialBar>
+                    </RadialBarChart>
+                  </ChartContainer>
+                  <div className="text-center">
+                    <p className="text-lg font-black">{item.value}%</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">{item.name}</p>
+                    <p className="text-xs font-semibold text-stone-500">{item.detail}</p>
+                  </div>
                 </div>
-                <div className="h-3 rounded-full bg-stone-100"><div className="h-3 rounded-full bg-emerald-700" style={{ width: `${width}%` }} /></div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-sm font-semibold">
-                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">OT</span>{formatNumber(overtime)}h</div>
-                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">Leave</span>{co + cm + se}d</div>
-                <div className="rounded-md bg-stone-50 p-3"><span className="block text-xs uppercase text-stone-500">Absence</span>{ab}d</div>
-              </div>
+              ))}
             </CardContent>
           </Card>
+
           <Card>
-            <CardHeader>
-              <CardTitle>Attention List</CardTitle>
-              <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
+            <CardHeader className="pb-2">
+              <CardTitle>Variance Signals</CardTitle>
+              <CardDescription>Days worth checking before payroll close.</CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-2">
-              {attentionRows.length ? attentionRows.map(({ employee, totals }) => (
-                <div key={employee.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-md bg-stone-50 p-2 text-sm font-semibold">
-                  <span className="truncate">{employee.full_name}</span>
-                  <span className="text-right">
-                    <span className={totals.difference < 0 ? "text-rose-700" : "text-emerald-700"}>{totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h</span>
-                    {totals.overtime ? <span className="ml-2 text-amber-700">{formatNumber(totals.overtime)}h OT</span> : null}
-                    {totals.absenceDays ? <span className="ml-2 text-stone-900">{totals.absenceDays} AB</span> : null}
-                  </span>
-                </div>
-              )) : <p className="text-sm font-semibold text-stone-500">No exceptions in this scope.</p>}
+            <CardContent className="grid gap-2 text-sm font-semibold">
+              <div className="flex items-center justify-between rounded-md bg-rose-50 px-3 py-2 text-rose-800">
+                <span>Under-norm days</span>
+                <span>{underDays}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+                <span>Over-norm days</span>
+                <span>{overDays}</span>
+              </div>
+              <div className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2">
+                <span>Weakest day</span>
+                <span>{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
+              </div>
             </CardContent>
           </Card>
         </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Department Balance</CardTitle>
-            <CardDescription>Worked and norm bars, with exceptions shown under each department.</CardDescription>
+            <CardDescription>Worked versus norm, sorted by highest absolute variance.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3">
-            {departmentRows.length ? departmentRows.map((row) => (
-              <div key={row.department.id} className="grid gap-1">
-                <div className="flex items-center justify-between gap-3 text-sm font-semibold">
-                  <span>{row.department.name}</span>
-                  <span className={cn(row.worked - row.expected < 0 ? "text-rose-700" : "text-emerald-700")}>{row.worked - row.expected > 0 ? "+" : ""}{formatNumber(row.worked - row.expected)}h</span>
+          <CardContent className="grid gap-2">
+            {departmentChartData.length ? departmentChartData
+              .toSorted((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+              .map((row) => (
+                <div key={row.name} className="rounded-lg border border-stone-200 p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black">{row.name}</p>
+                      <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.worked)}h / {formatNumber(row.expected)}h</p>
+                    </div>
+                    <Badge variant={row.delta < 0 ? "warning" : "secondary"} className={row.delta < 0 ? "bg-rose-100 text-rose-800" : undefined}>
+                      {row.delta > 0 ? "+" : ""}{formatNumber(row.delta)}h
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs font-bold text-stone-500">
+                    <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                      <div
+                        className={cn("h-full rounded-full", row.delta < 0 ? "bg-rose-500" : "bg-emerald-700")}
+                        style={{ width: `${Math.min(100, row.expected ? (row.worked / row.expected) * 100 : 0)}%` }}
+                      />
+                    </div>
+                    <span>{row.expected ? Math.round((row.worked / row.expected) * 100) : 0}%</span>
+                  </div>
                 </div>
-                <div className="grid gap-1">
-                  <div className="h-2 rounded-full bg-stone-100">
-                    <div className="h-2 rounded-full bg-emerald-700" style={{ width: `${Math.min(100, (row.worked / maxDepartmentHours) * 100)}%` }} />
-                  </div>
-                  <div className="h-2 rounded-full bg-stone-100">
-                    <div className="h-2 rounded-full bg-stone-400" style={{ width: `${Math.min(100, (row.expected / maxDepartmentHours) * 100)}%` }} />
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-stone-100">
-                    <div className="h-2 bg-amber-400" style={{ width: `${Math.min(100, ((row.overtime + row.leave * 8 + row.absence * 8) / exceptionMax) * 100)}%` }} />
-                  </div>
+              )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Exception Ranking</CardTitle>
+            <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {attentionRows.length ? attentionRows.map(({ employee, totals }) => (
+              <div key={employee.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold">
+                <div className="min-w-0">
+                  <p className="truncate font-black">{employee.full_name}</p>
+                  <p className="truncate text-xs text-stone-500">{departmentFor(employee, workspace)?.name || "No department"} - {employee.position || ROLES[employee.role]}</p>
                 </div>
-                <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.overtime)}h OT - {row.leave} leave days - {row.absence} absences</p>
+                <div className="flex flex-wrap justify-end gap-1 text-xs">
+                  <Badge variant={totals.difference < 0 ? "warning" : "secondary"} className={totals.difference < 0 ? "bg-rose-100 text-rose-800" : undefined}>
+                    {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
+                  </Badge>
+                  {totals.overtime ? <Badge variant="outline">{formatNumber(totals.overtime)}h OT</Badge> : null}
+                  {totals.absenceDays ? <Badge variant="outline">{totals.absenceDays} AB</Badge> : null}
+                </div>
               </div>
-            )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+            )) : <p className="text-sm font-semibold text-stone-500">No exceptions in this scope.</p>}
           </CardContent>
         </Card>
       </div>
@@ -3653,6 +3923,7 @@ function SideSheet({
   title,
   description,
   wide,
+  extraWide,
   onClose,
   children
 }: {
@@ -3660,6 +3931,7 @@ function SideSheet({
   title: string;
   description: string;
   wide?: boolean;
+  extraWide?: boolean;
   onClose: () => void;
   children: React.ReactNode;
 }) {
@@ -3671,7 +3943,7 @@ function SideSheet({
         side="left"
         className={cn(
           "left-[calc(252px+1.5rem)] top-6 h-[calc(100vh-3rem)] rounded-[24px] border-stone-200 bg-background p-0 shadow-[0_24px_80px_rgba(15,23,42,0.14)] sm:max-w-none",
-          wide ? "w-[min(1040px,calc(100vw-300px))]" : "w-[min(540px,calc(100vw-300px))]"
+          extraWide ? "w-[min(1360px,calc(100vw-300px))]" : wide ? "w-[min(1040px,calc(100vw-300px))]" : "w-[min(540px,calc(100vw-300px))]"
         )}
       >
         <SheetHeader className="border-b border-border bg-muted/35 px-4 py-3 text-left">
