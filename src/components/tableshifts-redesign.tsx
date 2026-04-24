@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
 import {
   BarChart3,
@@ -877,12 +878,13 @@ function TimesheetTable({
     };
   }, [cellMenu]);
 
-  function openCellMenu(event: React.MouseEvent | React.PointerEvent, employee: ProfileRow, iso: string) {
+  function openCellMenu(target: HTMLElement, employee: ProfileRow, iso: string) {
     if (!canEditEmployee(workspace.profile, employee, workspace)) return;
+    const rect = target.getBoundingClientRect();
     const menuWidth = 190;
     const menuHeight = 280;
-    const x = Math.min(Number(event.clientX) + 10, window.innerWidth - menuWidth - 12);
-    const y = Math.min(Number(event.clientY) + 10, window.innerHeight - menuHeight - 12);
+    const x = Math.min(rect.left + 8, window.innerWidth - menuWidth - 12);
+    const y = Math.min(rect.bottom + 6, window.innerHeight - menuHeight - 12);
     setCellMenu({
       x: Math.max(12, x),
       y: Math.max(12, y),
@@ -1036,7 +1038,7 @@ function EntryCell({
   day: ReturnType<typeof daysInMonth>[number];
   workspace: Workspace;
   onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
-  onOpenMenu: (event: React.MouseEvent | React.PointerEvent, employee: ProfileRow, iso: string) => void;
+  onOpenMenu: (target: HTMLElement, employee: ProfileRow, iso: string) => void;
   onMove: (key: string, direction: 1 | -1) => void;
 }) {
   const entry = entryFor(workspace.entries, employee.id, day.iso);
@@ -1093,7 +1095,7 @@ function EntryCell({
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        onOpenMenu(event, employee, day.iso);
+        onOpenMenu(event.currentTarget, employee, day.iso);
       }}
     >
       <div
@@ -1106,7 +1108,8 @@ function EntryCell({
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
-          longPressRef.current = window.setTimeout(() => onOpenMenu(event, employee, day.iso), 550);
+          const target = event.currentTarget;
+          longPressRef.current = window.setTimeout(() => onOpenMenu(target, employee, day.iso), 550);
         }}
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
@@ -1164,7 +1167,7 @@ function EntryCell({
 }
 
 function TimesheetCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (type: string) => void }) {
-  return (
+  return createPortal(
     <div
       className="fixed z-[80] grid min-w-36 overflow-visible rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
       style={{ left: x, top: y }}
@@ -1206,7 +1209,8 @@ function TimesheetCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (
       >
         Clear
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1747,15 +1751,15 @@ function Charts({
         </Card>
 
         <div className="grid gap-4">
-          <Card className="h-full">
+          <Card>
             <CardHeader className="pb-2">
               <CardTitle>Scope Radials</CardTitle>
               <CardDescription>Fast read on fulfillment, OT, leave, and exception pressure.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-3">
+            <CardContent className="grid grid-cols-2 gap-2">
               {radialItems.map((item) => (
-                <div key={item.name} className="rounded-lg border border-stone-200 p-3">
-                  <ChartContainer config={{ value: { label: item.name, color: item.color } }} className="mx-auto h-28 w-full">
+                <div key={item.name} className="rounded-lg border border-stone-200 p-2">
+                  <ChartContainer config={{ value: { label: item.name, color: item.color } }} className="mx-auto h-16 w-full">
                     <RadialBarChart data={[item]} innerRadius="72%" outerRadius="96%" startAngle={90} endAngle={90 - (360 * item.value) / 100}>
                       <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
                       <RadialBar dataKey="value" cornerRadius={8} background>
@@ -1764,9 +1768,9 @@ function Charts({
                     </RadialBarChart>
                   </ChartContainer>
                   <div className="text-center">
-                    <p className="text-lg font-black">{item.value}%</p>
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-stone-500">{item.name}</p>
-                    <p className="text-xs font-semibold text-stone-500">{item.detail}</p>
+                    <p className="text-base font-black leading-tight">{item.value}%</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{item.name}</p>
+                    <p className="text-[11px] font-semibold text-stone-500">{item.detail}</p>
                   </div>
                 </div>
               ))}
