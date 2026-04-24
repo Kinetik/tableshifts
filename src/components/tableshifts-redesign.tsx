@@ -27,6 +27,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import {
   ENTRY_LABELS,
@@ -119,6 +131,41 @@ const COUNTRY_OPTIONS = [
   ["PL", "Poland"],
   ["US", "United States"]
 ] as const;
+
+function FieldShell({
+  label,
+  children,
+  className
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid min-w-0 gap-1.5", className)}>
+      <Label className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function NativeSelect({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        "h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs font-semibold text-foreground shadow-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
 
 export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const supabase = React.useMemo<SupabaseClient | null>(() => {
@@ -451,6 +498,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                 </div>
               ) : null}
             </div>
+
           </div>
 
           <div className="min-h-0 px-2 py-1">
@@ -1757,6 +1805,7 @@ function CompanyDepartmentManagement({
   const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
   const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
   const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
+  const [employeeDirectoryOpen, setEmployeeDirectoryOpen] = React.useState(false);
   const selectedCompany = activeCompany || accessibleCompanies(workspace)[0];
   const targetCompanyId = selectedCompany?.id || "";
   const scopedDepartments = workspace.departments.filter((department) => department.company_id === targetCompanyId);
@@ -2154,6 +2203,7 @@ function CompanyDepartmentManagement({
                 );
               }) : <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Use Create Department from the company header.</p>}
             </div>
+
           </div>
         </CardContent>
       </Card>
@@ -2305,6 +2355,7 @@ function ScopedCompanyManagement({
   const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
   const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
   const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
+  const [employeeDirectoryOpen, setEmployeeDirectoryOpen] = React.useState(false);
 
   const companyId = selectedCompany?.id || "";
   const departments = workspace.departments.filter((department) => department.company_id === companyId);
@@ -2493,7 +2544,7 @@ function ScopedCompanyManagement({
   const colors = colorDrafts[selectedCompany.id] || DEFAULT_ENTRY_COLORS;
 
   return (
-    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
+    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_430px]")}>
       <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
         <CardHeader className="pb-2.5">
           <CardTitle className="text-base">Company Hierarchy</CardTitle>
@@ -2653,6 +2704,47 @@ function ScopedCompanyManagement({
               }) : (
                 <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Create one from the company header.</p>
               )}
+            </div>
+
+            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50/60 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Employee directory</p>
+                  <p className="text-[12px] font-semibold text-stone-500">{companyUsers.length} users scoped to {selectedCompany.name}</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setEmployeeDirectoryOpen((value) => !value)}>
+                  {employeeDirectoryOpen ? "Hide list" : "View list"}
+                </Button>
+              </div>
+              {employeeDirectoryOpen ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="h-8 text-[11px]">Name</TableHead>
+                        <TableHead className="h-8 text-[11px]">Department</TableHead>
+                        <TableHead className="h-8 text-[11px]">Role</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {companyUsers.toSorted((a, b) => a.full_name.localeCompare(b.full_name)).map((profile) => (
+                        <TableRow key={profile.id}>
+                          <TableCell className="py-1.5">
+                            <strong className="block truncate text-[12px]">{profile.full_name}</strong>
+                            <span className="block truncate text-[11px] text-stone-500">{profile.email}</span>
+                          </TableCell>
+                          <TableCell className="py-1.5 text-[12px] font-semibold text-stone-600">
+                            {workspace.departments.find((department) => department.id === profile.department_id)?.name || "None"}
+                          </TableCell>
+                          <TableCell className="py-1.5">
+                            <Badge variant="secondary" className="text-[10px]">{ROLES[profile.role]}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
             </div>
           </div>
         </CardContent>
@@ -3001,6 +3093,106 @@ function AccountManagement({
       return;
     }
     onReload();
+  }
+
+  if (compact && mode === "employees") {
+    return (
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-background p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Account</p>
+              <h3 className="truncate text-base font-black">{editingId ? "Edit employee" : "Create employee"}</h3>
+              <p className="truncate text-xs text-muted-foreground">{workspace.companies.find((company) => company.id === companyId)?.name || "Selected company"}</p>
+            </div>
+            <Badge variant="secondary" className="shrink-0">{ROLES[role]}</Badge>
+          </div>
+
+          <Separator className="my-3" />
+
+          <div className="grid gap-3">
+            <FieldShell label="Role">
+              <NativeSelect value={role} onChange={(event) => updateRole(event.target.value)}>
+                {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
+              </NativeSelect>
+            </FieldShell>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <FieldShell label="Name">
+                <Input className="h-8 text-xs" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+              </FieldShell>
+              <FieldShell label="Email">
+                <Input className="h-8 text-xs" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+              </FieldShell>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_104px]">
+              <FieldShell label="Password">
+                <Input className="h-8 text-xs" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "Optional" : "Temporary"} type="password" />
+              </FieldShell>
+              <FieldShell label="Position">
+                <Input className="h-8 text-xs" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+              </FieldShell>
+              <FieldShell label="ID">
+                <Input className="h-8 text-xs" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="ID" />
+              </FieldShell>
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/25 p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Organization</p>
+                <span className="truncate text-[11px] font-semibold text-muted-foreground">{selectedDepartment?.name || "No department"}</span>
+              </div>
+              <div className="grid gap-2">
+                <FieldShell label="Department">
+                  <NativeSelect value={departmentId} disabled={Boolean(scopeDepartmentId)} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                    <option value="">No department</option>
+                    {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </NativeSelect>
+                </FieldShell>
+                <div className={cn("grid gap-2", role === "employee" && "sm:grid-cols-2")}>
+                  <FieldShell label="Reports to">
+                    <NativeSelect value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                      <option value="">Reports to none</option>
+                      {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </NativeSelect>
+                  </FieldShell>
+                  {role === "employee" ? (
+                    <FieldShell label="Team leader">
+                      <NativeSelect value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                        <option value="">No team leader</option>
+                        {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                      </NativeSelect>
+                    </FieldShell>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Contract</p>
+                <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
+                  Use {suggestedCoDays} CO
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_86px]">
+                <DateInput label="Start" value={startDate} onChange={updateStartDate} />
+                <DateInput label="End" value={endDate} onChange={updateEndDate} />
+                <FieldShell label="CO">
+                  <Input className="h-8 text-xs" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
+                </FieldShell>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+          <Button size="sm" onClick={saveAccount}><Save />Save Account</Button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -3472,36 +3664,25 @@ function SideSheet({
   children: React.ReactNode;
 }) {
   return (
-    <>
-      <div
+    <Sheet open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen) onClose();
+    }}>
+      <SheetContent
+        side="left"
         className={cn(
-          "absolute inset-0 z-20 bg-emerald-950/8 backdrop-blur-[1px] transition-opacity",
-          open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-        )}
-        onClick={onClose}
-      />
-      <aside
-        className={cn(
-          "absolute inset-y-3 left-3 z-30 flex min-w-0 flex-col overflow-hidden rounded-[24px] border border-stone-200 bg-white shadow-[0_24px_80px_rgba(15,23,42,0.14)] transition-transform duration-300",
-          wide ? "w-[min(780px,calc(100%-1.5rem))]" : "w-[min(560px,calc(100%-1.5rem))]",
-          open ? "translate-x-0" : "-translate-x-[106%]"
+          "left-[calc(252px+1.5rem)] top-6 h-[calc(100vh-3rem)] rounded-[24px] border-stone-200 bg-background p-0 shadow-[0_24px_80px_rgba(15,23,42,0.14)] sm:max-w-none",
+          wide ? "w-[min(1040px,calc(100vw-300px))]" : "w-[min(540px,calc(100vw-300px))]"
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-stone-200 bg-stone-50/80 px-4 py-3.5">
-          <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace Sheet</p>
-            <h2 className="truncate text-[22px] font-black leading-tight text-stone-950">{title}</h2>
-            <p className="mt-1 max-w-2xl text-[13px] text-stone-500">{description}</p>
-          </div>
-          <Button size="sm" variant="outline" className="h-8 px-2.5 text-xs" onClick={onClose}>
-            <X className="h-4 w-4" />
-            Close
-          </Button>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          {children}
-        </div>
-      </aside>
-    </>
+        <SheetHeader className="border-b border-border bg-muted/35 px-4 py-3 text-left">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace Sheet</p>
+          <SheetTitle className="truncate text-[22px] font-black leading-tight">{title}</SheetTitle>
+          <SheetDescription className="max-w-2xl text-xs">{description}</SheetDescription>
+        </SheetHeader>
+        <ScrollArea className="h-[calc(100%-92px)]">
+          <div className="p-4">{children}</div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
   );
 }
