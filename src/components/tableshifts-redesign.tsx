@@ -68,8 +68,7 @@ const nav = [
   { value: "timesheet", label: "Timesheet", icon: LayoutDashboard },
   { value: "leave", label: "Leave Requests", icon: ClipboardCheck },
   { value: "charts", label: "Charts", icon: BarChart3 },
-  { value: "companies", label: "Companies", icon: Building2, setupOnly: true },
-  { value: "employees", label: "Employees", icon: UsersRound, setupOnly: true },
+  { value: "companies", label: "Management", icon: Building2, setupOnly: true },
   { value: "admins", label: "Admins", icon: ShieldCheck, setupOnly: true },
   { value: "settings", label: "Settings", icon: Settings2, setupOnly: true }
 ];
@@ -147,6 +146,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [totalsExpanded, setTotalsExpanded] = React.useState(false);
   const [companyMenuOpen, setCompanyMenuOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [creatingCompany, setCreatingCompany] = React.useState(false);
+  const [newCompanyName, setNewCompanyName] = React.useState("");
   const [companyLogoUrls, setCompanyLogoUrls] = React.useState<Record<string, string>>({});
 
   const loadWorkspace = React.useCallback(async (user: User) => {
@@ -274,6 +275,27 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     setPassword("");
   }
 
+  async function createCompanyFromSidebar() {
+    if (!supabase || !workspace?.profile.environment_id || !newCompanyName.trim()) return;
+    const { data, error } = await supabase
+      .from("companies")
+      .insert({
+        environment_id: workspace.profile.environment_id,
+        name: newCompanyName.trim(),
+        created_by: workspace.profile.id
+      })
+      .select("*")
+      .single();
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setNewCompanyName("");
+    setCreatingCompany(false);
+    if (data?.id) setActiveCompanyId(data.id);
+    if (authUser) void loadWorkspace(authUser);
+  }
+
   if (!authUser || !workspace) {
     return (
       <main className="flex min-h-screen items-center justify-center p-5">
@@ -336,7 +358,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   );
   const scopeDifference = scopeTotals.worked - scopeTotals.expected;
   const activePanel = activeTab === "timesheet" ? null : activeTab;
-  const sheetWide = ["companies", "employees", "admins", "settings"].includes(activeTab);
+  const sheetWide = ["leave", "companies", "admins", "settings"].includes(activeTab);
 
   return (
     <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
@@ -393,13 +415,30 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
                         <span className="min-w-0 flex-1 truncate font-medium">{company.name}</span>
                       </button>
                     ))}
+                    {creatingCompany ? (
+                      <div className="mt-1 rounded-xl border border-dashed border-white/14 bg-white/[0.05] p-2">
+                        <input
+                          className="h-8 w-full rounded-lg border border-white/10 bg-white px-2 text-[13px] font-semibold text-emerald-950 outline-none"
+                          value={newCompanyName}
+                          onChange={(event) => setNewCompanyName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") void createCompanyFromSidebar();
+                            if (event.key === "Escape") {
+                              setCreatingCompany(false);
+                              setNewCompanyName("");
+                            }
+                          }}
+                          placeholder="Company name"
+                          autoFocus
+                        />
+                      </div>
+                    ) : null}
                     {setupAllowed ? (
                       <button
                         type="button"
                         className="mt-1 flex items-center gap-2 rounded-xl border border-dashed border-white/14 px-2 py-2 text-left text-[13px] font-semibold text-emerald-100/82 transition hover:bg-white/[0.07] hover:text-white"
                         onClick={() => {
-                          setActiveTab("companies");
-                          setCompanyMenuOpen(false);
+                          setCreatingCompany(true);
                         }}
                       >
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
@@ -562,7 +601,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
               />
             ) : null}
 
-            {["companies", "employees", "admins", "settings"].includes(activeTab) ? (
+            {["companies", "admins", "settings"].includes(activeTab) ? (
               <Management
                 workspace={workspace}
                 activeTab={activeTab}
@@ -1262,7 +1301,7 @@ function LeaveRequests({
             <CardTitle className="text-lg">New Leave Request</CardTitle>
             <CardDescription className="text-[13px]">Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2.5 lg:grid-cols-[140px_1fr_1fr_1.15fr_1fr_auto_auto]">
+          <CardContent className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-[140px_1fr_1fr_1.2fr]">
             <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
               Type
               <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
@@ -1283,16 +1322,14 @@ function LeaveRequests({
               Notes
               <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
             </label>
-            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500 xl:col-span-2">
               Document
               <input className="h-9 rounded-md border border-stone-200 bg-white px-2 py-1 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
             </label>
-            <div className="flex items-end">
+            <div className="flex items-end gap-2 xl:col-span-2">
               <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
                 <Eye className="h-4 w-4" /> Preview
               </Button>
-            </div>
-            <div className="flex items-end">
               <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={submitRequest}>Submit</Button>
             </div>
           </CardContent>
@@ -1511,10 +1548,7 @@ function Management({
   onMessage: (message: string) => void;
 }) {
   if (activeTab === "companies") {
-    return <CompanyDepartmentManagement workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
-  }
-  if (activeTab === "employees") {
-    return <AccountManagement mode="employees" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
+    return <ScopedCompanyManagement workspace={workspace} activeCompany={activeCompany} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
   }
   if (activeTab === "admins") {
     return <AccountManagement mode="admins" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
@@ -1697,27 +1731,36 @@ function SettingsPage({
 
 function CompanyDepartmentManagement({
   workspace,
+  activeCompany,
   supabase,
   onReload,
   onMessage
 }: {
   workspace: Workspace;
+  activeCompany?: CompanyRow;
   supabase: SupabaseClient | null;
   onReload: () => void;
   onMessage: (message: string) => void;
 }) {
-  const [companyName, setCompanyName] = React.useState("");
-  const [departmentCompanyId, setDepartmentCompanyId] = React.useState(workspace.companies[0]?.id || "");
   const [departmentName, setDepartmentName] = React.useState("");
   const [shiftHours, setShiftHours] = React.useState("8");
   const [managerId, setManagerId] = React.useState("");
   const [teamLeaderId, setTeamLeaderId] = React.useState("");
-  const [expandedCompanyId, setExpandedCompanyId] = React.useState("");
+  const [expandedDepartmentId, setExpandedDepartmentId] = React.useState("");
+  const [sidePanel, setSidePanel] = React.useState<
+    | { type: "department"; companyId: string }
+    | { type: "company"; companyId: string }
+    | { type: "employee"; companyId: string; departmentId: string }
+    | null
+  >(null);
   const [editingCompanyName, setEditingCompanyName] = React.useState<Record<string, string>>({});
   const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
   const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
   const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
-  const targetCompanyId = departmentCompanyId || workspace.companies[0]?.id || "";
+  const selectedCompany = activeCompany || accessibleCompanies(workspace)[0];
+  const targetCompanyId = selectedCompany?.id || "";
+  const scopedDepartments = workspace.departments.filter((department) => department.company_id === targetCompanyId);
+  const scopedUsers = workspace.profiles.filter((profile) => profile.company_id === targetCompanyId || companyIdsForProfile(profile, workspace).has(targetCompanyId));
   const companyManagers = workspace.profiles.filter((profile) => (
     ["department_manager", "company_manager"].includes(profile.role) &&
     (profile.company_id === targetCompanyId || profile.role === "company_manager")
@@ -1762,6 +1805,12 @@ function CompanyDepartmentManagement({
   }, [workspace.companies, workspace.departments]);
 
   React.useEffect(() => {
+    if (!selectedCompany) return;
+    setExpandedDepartmentId("");
+    setSidePanel(null);
+  }, [selectedCompany?.id]);
+
+  React.useEffect(() => {
     let cancelled = false;
     async function loadLogos() {
       if (!supabase) return;
@@ -1777,21 +1826,6 @@ function CompanyDepartmentManagement({
       cancelled = true;
     };
   }, [supabase, workspace.companies]);
-
-  async function createCompany() {
-    if (!supabase || !workspace.profile.environment_id || !companyName.trim()) return;
-    const { error } = await supabase.from("companies").insert({
-      environment_id: workspace.profile.environment_id,
-      name: companyName.trim(),
-      created_by: workspace.profile.id
-    });
-    if (error) {
-      onMessage(error.message);
-      return;
-    }
-    setCompanyName("");
-    onReload();
-  }
 
   async function updateCompany(company: CompanyRow) {
     if (!supabase) return;
@@ -1844,6 +1878,7 @@ function CompanyDepartmentManagement({
     setDepartmentName("");
     setManagerId("");
     setTeamLeaderId("");
+    setSidePanel(null);
     onReload();
   }
 
@@ -1898,121 +1933,105 @@ function CompanyDepartmentManagement({
     onReload();
   }
 
+  if (!selectedCompany) {
+    return (
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardContent className="p-5">
+          <p className="text-sm font-semibold text-stone-600">Create a company from the sidebar to start building the hierarchy.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const companyManagerOptions = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === selectedCompany.id || companyIdsForProfile(profile, workspace).has(selectedCompany.id))
+  ));
+  const colors = colorDrafts[selectedCompany.id] || DEFAULT_ENTRY_COLORS;
+
   return (
-    <div className="grid gap-3">
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)]">
-        <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">New Company</CardTitle>
-            <CardDescription className="text-xs">Create a company inside this admin environment.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <label className="grid gap-1">
-              <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
-              <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Company name" />
-            </label>
-            <div className="flex justify-center">
-              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createCompany}><Plus className="h-4 w-4" />Add company</Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">New Department</CardTitle>
-                <CardDescription className="mt-1 text-xs">Attach it to a company and set the lead structure.</CardDescription>
-              </div>
-              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={createDepartment}><Plus className="h-4 w-4" />Add</Button>
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <label className="grid gap-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company</span>
-                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={targetCompanyId} onChange={(event) => setDepartmentCompanyId(event.target.value)}>
-                  {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
-                <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
-              </label>
-            </div>
-            <div className="grid gap-3 md:grid-cols-[80px_minmax(0,1fr)_minmax(0,1fr)]">
-              <label className="grid gap-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
-                <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
-                  {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
-                <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
-                  <option value="">No manager</option>
-                  {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1 min-w-0">
-                <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
-                <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
-                  <option value="">No team leader</option>
-                  {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
-                </select>
-              </label>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
+    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_430px]")}>
       <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Company Hierarchy</CardTitle>
-          <CardDescription className="text-xs">Expand a company to edit identity, colors, logo, and departments.</CardDescription>
+          <CardDescription className="text-xs">Selected company scope: {selectedCompany.name}.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2.5">
-          {workspace.companies.map((company) => {
-            const departments = workspace.departments.filter((department) => department.company_id === company.id);
-            const users = workspace.profiles.filter((profile) => profile.company_id === company.id);
-            const isOpen = expandedCompanyId === company.id;
-            const companyManagerOptions = workspace.profiles.filter((profile) => (
-              ["department_manager", "company_manager"].includes(profile.role) &&
-              (profile.company_id === company.id || companyIdsForProfile(profile, workspace).has(company.id))
-            ));
-            const colors = colorDrafts[company.id] || DEFAULT_ENTRY_COLORS;
-            return (
-              <div key={company.id} className="min-w-0 rounded-[18px] border border-stone-200 bg-white p-3">
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between gap-3 text-left"
-                  onClick={() => setExpandedCompanyId(isOpen ? "" : company.id)}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
-                      {logoUrls[company.id] ? <img src={logoUrls[company.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
-                    </div>
-                    <div className="min-w-0">
-                      <strong className="block truncate text-[14px]">{company.name}</strong>
-                      <div className="mt-1 flex flex-wrap gap-1.5">
-                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{departments.length} departments</span>
-                        <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{users.length} users</span>
-                      </div>
-                    </div>
+          <div className="min-w-0 rounded-[18px] border border-stone-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+                  {logoUrls[selectedCompany.id] ? <img src={logoUrls[selectedCompany.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
+                </div>
+                <div className="min-w-0">
+                  <strong className="block truncate text-[14px]">{selectedCompany.name}</strong>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{scopedDepartments.length} departments</span>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{scopedUsers.length} users</span>
+                    <Button size="sm" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "department", companyId: selectedCompany.id })}><Plus className="h-3.5 w-3.5" />Create Department</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "company", companyId: selectedCompany.id })}>Edit</Button>
                   </div>
-                  {isOpen ? <ChevronDown className="h-5 w-5 text-stone-500" /> : <ChevronRight className="h-5 w-5 text-stone-500" />}
-                </button>
+                </div>
+              </div>
+            </div>
 
-                {isOpen ? (
-                  <div className="mt-3 grid min-w-0 gap-3 border-t border-stone-200 pt-3">
-                    <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-                      <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_156px]">
-                        <label className="grid gap-1 min-w-0">
+            <div className="mt-3 grid gap-2 border-t border-stone-200 pt-3">
+              {scopedDepartments.length ? scopedDepartments.map((department) => {
+                const isOpen = expandedDepartmentId === department.id;
+                const draft = departmentDrafts[department.id] || {
+                  name: department.name,
+                  manager: department.manager_user_id || "",
+                  leader: department.team_leader_user_id || "",
+                  hours: String(department.shift_hours || 8),
+                  days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+                };
+                const teamLeaderOptions = workspace.profiles.filter((profile) => {
+                  const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
+                  return profile.role === "team_leader" &&
+                    profile.company_id === selectedCompany.id &&
+                    (!assignedDepartment || assignedDepartment.id === department.id);
+                });
+                const departmentUsers = workspace.profiles.filter((profile) => profile.department_id === department.id);
+                return (
+                  <div key={department.id} className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                    <button
+                      type="button"
+                      className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
+                      onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                    >
+                      <div className="min-w-0">
+                        <strong className="block truncate text-[13px]">{department.name}</strong>
+                        <p className="text-[11px] font-semibold text-stone-500">
+                          {departmentUsers.length} users - {department.shift_hours || 8}h shift
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg px-2 text-[11px] font-semibold"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSidePanel({ type: "employee", companyId: selectedCompany.id, departmentId: department.id });
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />Create Employee
+                        </Button>
+                        {isOpen ? <ChevronDown className="h-4 w-4 text-stone-500" /> : <ChevronRight className="h-4 w-4 text-stone-500" />}
+                      </div>
+                    </button>
+
+                    {isOpen ? (
+                      <div className="mt-2 grid gap-2 border-t border-stone-200 pt-2">
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_156px]">
+                            <label className="grid gap-1 min-w-0">
                           <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
                           <input
                             className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
-                            value={editingCompanyName[company.id] || company.name}
-                            onChange={(event) => setEditingCompanyName((current) => ({ ...current, [company.id]: event.target.value }))}
+                            value={editingCompanyName[selectedCompany.id] || selectedCompany.name}
+                            onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))}
                             placeholder="Company name"
                           />
                         </label>
@@ -2020,13 +2039,13 @@ function CompanyDepartmentManagement({
                           <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
                           <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
                             <ImageIcon className="h-4 w-4" />Upload
-                            <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(company, event.target.files?.[0] || null)} />
+                            <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
                           </span>
                         </label>
                       </div>
                       <div className="flex flex-wrap gap-2 lg:justify-end">
-                        <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(company)}><Trash2 className="h-4 w-4" />Delete</Button>
-                        <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(company)}><Save className="h-4 w-4" />Save</Button>
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                        <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
                       </div>
                     </div>
 
@@ -2043,46 +2062,23 @@ function CompanyDepartmentManagement({
                                 value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
                                 onChange={(event) => setColorDrafts((current) => ({
                                   ...current,
-                                  [company.id]: { ...(current[company.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
-                                }))}
-                              />
-                              <input
-                                className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
-                                value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
-                                onChange={(event) => setColorDrafts((current) => ({
-                                  ...current,
-                                  [company.id]: { ...(current[company.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
-                                }))}
-                              />
-                            </div>
+                                [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                              }))}
+                            />
+                            <input
+                              className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
+                              value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                              onChange={(event) => setColorDrafts((current) => ({
+                                ...current,
+                                [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                              }))}
+                            />
+                          </div>
                           </label>
                         ))}
                       </div>
                     </div>
 
-                    <div className="grid gap-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Departments</p>
-                        <span className="text-[11px] font-semibold text-stone-500">{departments.length} configured</span>
-                      </div>
-                      {departments.length ? departments.map((department) => {
-                        const draft = departmentDrafts[department.id] || {
-                          name: department.name,
-                          manager: department.manager_user_id || "",
-                          leader: department.team_leader_user_id || "",
-                          hours: String(department.shift_hours || 8),
-                          days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
-                        };
-                        return (
-                          <div key={department.id} className="grid gap-1.5 rounded-xl border border-stone-200 bg-stone-50 p-2.5 text-sm">
-                            {(() => {
-                              const teamLeaderOptions = workspace.profiles.filter((profile) => {
-                                const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
-                                return profile.role === "team_leader" &&
-                                  profile.company_id === company.id &&
-                                  (!assignedDepartment || assignedDepartment.id === department.id);
-                              });
-                              return (
                             <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_88px]">
                               <label className="grid gap-1 min-w-0">
                                 <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
@@ -2122,8 +2118,6 @@ function CompanyDepartmentManagement({
                                 {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
                               </select>
                             </div>
-                              );
-                            })()}
                             <div className="flex flex-wrap gap-1.5">
                               {([
                                 ["Mon", 1],
@@ -2154,17 +2148,608 @@ function CompanyDepartmentManagement({
                               <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
                               <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
                             </div>
-                          </div>
-                        );
-                      }) : <p className="text-sm font-semibold text-stone-500">No departments yet.</p>}
-                    </div>
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
-            );
-          })}
+                );
+              }) : <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Use Create Department from the company header.</p>}
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {sidePanel ? (
+        <Card className="min-w-0 self-start rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">
+                  {sidePanel.type === "department" ? "Create Department" : sidePanel.type === "company" ? "Company Settings" : "Create Employee"}
+                </CardTitle>
+                <CardDescription className="text-xs">{selectedCompany.name}</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel(null)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {sidePanel.type === "department" ? (
+              <div className="grid gap-2">
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+                </label>
+                <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-2">
+                  <label className="grid gap-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
+                    <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                      {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
+                    <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                      <option value="">No manager</option>
+                      {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                  <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                    <option value="">No team leader</option>
+                    {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  </select>
+                </label>
+                <Button size="sm" className="h-8 rounded-lg text-[11px] font-semibold" onClick={() => void createDepartment()}><Plus className="h-4 w-4" />Create Department</Button>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "company" ? (
+              <div className="grid gap-3">
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+                  <input
+                    className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
+                    value={editingCompanyName[selectedCompany.id] || selectedCompany.name}
+                    onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))}
+                    placeholder="Company name"
+                  />
+                </label>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                  <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
+                    <ImageIcon className="h-4 w-4" />Upload logo
+                    <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
+                  </span>
+                </label>
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                  {ENTRY_COLOR_KEYS.map(([key]) => (
+                    <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                      {ENTRY_COLOR_LABELS[key]}
+                      <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                        <input
+                          className="h-5 w-7 border-0 bg-transparent p-0"
+                          type="color"
+                          value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                          onChange={(event) => setColorDrafts((current) => ({
+                            ...current,
+                            [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                          }))}
+                        />
+                        <input
+                          className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
+                          value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                          onChange={(event) => setColorDrafts((current) => ({
+                            ...current,
+                            [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                          }))}
+                        />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                  <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
+                </div>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "employee" ? (
+              <AccountManagement
+                mode="employees"
+                workspace={workspace}
+                supabase={supabase}
+                onReload={onReload}
+                onMessage={onMessage}
+                scopeCompanyId={sidePanel.companyId}
+                scopeDepartmentId={sidePanel.departmentId}
+                hideList
+                compact
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function ScopedCompanyManagement({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const selectedCompany = activeCompany || accessibleCompanies(workspace)[0];
+  const [sidePanel, setSidePanel] = React.useState<
+    | { type: "department" }
+    | { type: "company" }
+    | { type: "employee"; departmentId: string }
+    | null
+  >(null);
+  const [expandedDepartmentId, setExpandedDepartmentId] = React.useState("");
+  const [departmentName, setDepartmentName] = React.useState("");
+  const [shiftHours, setShiftHours] = React.useState("8");
+  const [managerId, setManagerId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [editingCompanyName, setEditingCompanyName] = React.useState<Record<string, string>>({});
+  const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
+  const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
+  const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
+
+  const companyId = selectedCompany?.id || "";
+  const departments = workspace.departments.filter((department) => department.company_id === companyId);
+  const companyUsers = workspace.profiles.filter((profile) => profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId));
+  const companyManagers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId))
+  ));
+  const assignedTeamLeaderIds = new Set(workspace.departments.map((department) => department.team_leader_user_id).filter(Boolean));
+  const availableTeamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === companyId &&
+    !assignedTeamLeaderIds.has(profile.id)
+  ));
+
+  React.useEffect(() => {
+    setExpandedDepartmentId("");
+    setSidePanel(null);
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+  }, [companyId]);
+
+  React.useEffect(() => {
+    setEditingCompanyName((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (next[company.id] === undefined) next[company.id] = company.name;
+      });
+      return next;
+    });
+    setColorDrafts((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (!next[company.id]) next[company.id] = { ...DEFAULT_ENTRY_COLORS, ...(company.entry_colors || {}) };
+      });
+      return next;
+    });
+    setDepartmentDrafts((current) => {
+      const next = { ...current };
+      workspace.departments.forEach((department) => {
+        if (!next[department.id]) {
+          next[department.id] = {
+            name: department.name,
+            manager: department.manager_user_id || "",
+            leader: department.team_leader_user_id || "",
+            hours: String(department.shift_hours || 8),
+            days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+          };
+        }
+      });
+      return next;
+    });
+  }, [workspace.companies, workspace.departments]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadLogos() {
+      if (!supabase) return;
+      const entries = await Promise.all(workspace.companies.map(async (company) => {
+        if (!company.logo_path) return [company.id, ""] as const;
+        const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+        return [company.id, data?.signedUrl || ""] as const;
+      }));
+      if (!cancelled) setLogoUrls(Object.fromEntries(entries));
+    }
+    void loadLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace.companies]);
+
+  async function createDepartment() {
+    if (!supabase || !workspace.profile.environment_id || !selectedCompany || !departmentName.trim()) return;
+    const { error } = await supabase.from("departments").insert({
+      environment_id: workspace.profile.environment_id,
+      company_id: selectedCompany.id,
+      name: departmentName.trim(),
+      manager_user_id: managerId || null,
+      team_leader_user_id: teamLeaderId || null,
+      shift_hours: Number(shiftHours || 8),
+      work_days: [1, 2, 3, 4, 5]
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+    setSidePanel(null);
+    onReload();
+  }
+
+  async function updateCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const { error } = await supabase.from("companies").update({
+      name: editingCompanyName[company.id]?.trim() || company.name,
+      entry_colors: colorDrafts[company.id] || company.entry_colors || {}
+    }).eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function uploadCompanyLogo(company: CompanyRow, file: File | null) {
+    if (!supabase || !workspace.profile.environment_id || !file) return;
+    const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+    const path = `${workspace.profile.environment_id}/${company.id}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("company-logos").upload(path, file, { upsert: true });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    const { error: updateError } = await supabase.from("companies").update({ logo_path: path }).eq("id", company.id);
+    if (updateError) {
+      onMessage(updateError.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function updateDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const draft = departmentDrafts[department.id];
+    if (!draft) return;
+    const { error } = await supabase.from("departments").update({
+      name: draft.name.trim() || department.name,
+      manager_user_id: draft.manager || null,
+      team_leader_user_id: draft.leader || null,
+      shift_hours: Number(draft.hours || 8),
+      work_days: draft.days.length ? draft.days : [1, 2, 3, 4, 5]
+    }).eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const hasUsers = workspace.profiles.some((profile) => profile.department_id === department.id);
+    if (hasUsers) {
+      onMessage(`Move or delete employees from ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
+    const { error } = await supabase.from("departments").delete().eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const hasDepartments = workspace.departments.some((department) => department.company_id === company.id);
+    const hasUsers = workspace.profiles.some((profile) => profile.company_id === company.id);
+    if (hasDepartments || hasUsers) {
+      onMessage(`Delete or move ${company.name}'s departments and users before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  if (!selectedCompany) {
+    return (
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardContent className="p-5">
+          <p className="text-sm font-semibold text-stone-600">Create a company from the sidebar to start building the hierarchy.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const colors = colorDrafts[selectedCompany.id] || DEFAULT_ENTRY_COLORS;
+
+  return (
+    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_360px]")}>
+      <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-base">Company Hierarchy</CardTitle>
+          <CardDescription className="text-xs">All management actions are scoped to {selectedCompany.name}.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="rounded-[18px] border border-stone-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+                  {logoUrls[selectedCompany.id] ? <img src={logoUrls[selectedCompany.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
+                </div>
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm">{selectedCompany.name}</strong>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{departments.length} departments</span>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{companyUsers.length} users</span>
+                    <Button size="sm" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "department" })}><Plus className="h-3.5 w-3.5" />Create Department</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "company" })}>Edit</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 border-t border-stone-200 pt-3">
+              {departments.length ? departments.map((department) => {
+                const draft = departmentDrafts[department.id] || {
+                  name: department.name,
+                  manager: department.manager_user_id || "",
+                  leader: department.team_leader_user_id || "",
+                  hours: String(department.shift_hours || 8),
+                  days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+                };
+                const departmentUsers = workspace.profiles.filter((profile) => profile.department_id === department.id);
+                const isOpen = expandedDepartmentId === department.id;
+                const teamLeaderOptions = workspace.profiles.filter((profile) => {
+                  const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
+                  return profile.role === "team_leader" &&
+                    profile.company_id === selectedCompany.id &&
+                    (!assignedDepartment || assignedDepartment.id === department.id);
+                });
+                return (
+                  <div key={department.id} className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                      >
+                        <strong className="block text-[13px]">{department.name}</strong>
+                        <span className="text-[11px] font-semibold text-stone-500">{departmentUsers.length} users - {department.shift_hours || 8}h shift</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg px-2 text-[11px] font-semibold"
+                          onClick={(event) => {
+                            setSidePanel({ type: "employee", departmentId: department.id });
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />Create Employee
+                        </Button>
+                        <button
+                          type="button"
+                          className="rounded-md p-1 text-stone-500 hover:bg-white"
+                          onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                          aria-label={isOpen ? "Collapse department" : "Expand department"}
+                        >
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    {isOpen ? (
+                      <div className="mt-2 grid gap-2 border-t border-stone-200 pt-2">
+                        <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_88px]">
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
+                            <input className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold" value={draft.name} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))} />
+                          </label>
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Manager</span>
+                            <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.manager} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}>
+                              <option value="">No manager</option>
+                              {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                            </select>
+                          </label>
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Team Leader</span>
+                            <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.leader} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}>
+                              <option value="">No team leader</option>
+                              {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                            </select>
+                          </label>
+                          <select className="self-end h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.hours} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}>
+                            {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([
+                            ["Mon", 1],
+                            ["Tue", 2],
+                            ["Wed", 3],
+                            ["Thu", 4],
+                            ["Fri", 5],
+                            ["Sat", 6],
+                            ["Sun", 0]
+                          ] as const).map(([day, index]) => (
+                            <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[10px] font-bold">
+                              <input
+                                type="checkbox"
+                                checked={draft.days.includes(index)}
+                                onChange={(event) => setDepartmentDrafts((current) => ({
+                                  ...current,
+                                  [department.id]: {
+                                    ...draft,
+                                    days: event.target.checked ? Array.from(new Set([...draft.days, index])).sort() : draft.days.filter((value) => value !== index)
+                                  }
+                                }))}
+                              />
+                              {day}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="rounded-lg border border-stone-200 bg-white p-2">
+                          <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Employees</p>
+                            <span className="text-[11px] font-semibold text-stone-500">{departmentUsers.length} in department</span>
+                          </div>
+                          {departmentUsers.length ? (
+                            <div className="grid gap-1">
+                              {departmentUsers
+                                .toSorted((a, b) => a.full_name.localeCompare(b.full_name))
+                                .map((profile) => (
+                                  <div key={profile.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-stone-50 px-2 py-1.5">
+                                    <div className="min-w-0">
+                                      <strong className="block truncate text-[12px]">{profile.full_name}</strong>
+                                      <span className="block truncate text-[11px] font-semibold text-stone-500">{profile.position || ROLES[profile.role]} - {profile.email}</span>
+                                    </div>
+                                    <Badge variant="secondary" className="text-[10px]">{ROLES[profile.role]}</Badge>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <p className="text-[12px] font-semibold text-stone-500">No employees in this department yet.</p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                          <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }) : (
+                <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Create one from the company header.</p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {sidePanel ? (
+        <Card className="min-w-0 self-start rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">{sidePanel.type === "department" ? "Create Department" : sidePanel.type === "company" ? "Company Settings" : "Create Employee"}</CardTitle>
+                <CardDescription className="text-xs">{selectedCompany.name}</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel(null)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {sidePanel.type === "department" ? (
+              <div className="grid gap-2">
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+                </label>
+                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                  <label className="grid gap-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
+                    <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                      {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
+                    <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                      <option value="">No manager</option>
+                      {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                  <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                    <option value="">No team leader</option>
+                    {availableTeamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  </select>
+                </label>
+                <Button size="sm" className="h-8 rounded-lg text-[11px] font-semibold" onClick={() => void createDepartment()}><Plus className="h-4 w-4" />Create Department</Button>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "company" ? (
+              <div className="grid gap-3">
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={editingCompanyName[selectedCompany.id] || selectedCompany.name} onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))} placeholder="Company name" />
+                </label>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                  <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
+                    <ImageIcon className="h-4 w-4" />Upload logo
+                    <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
+                  </span>
+                </label>
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                  {ENTRY_COLOR_KEYS.map(([key]) => (
+                    <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                      {ENTRY_COLOR_LABELS[key]}
+                      <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                        <input className="h-5 w-7 border-0 bg-transparent p-0" type="color" value={colors[key] || DEFAULT_ENTRY_COLORS[key]} onChange={(event) => setColorDrafts((current) => ({ ...current, [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value } }))} />
+                        <input className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none" value={colors[key] || DEFAULT_ENTRY_COLORS[key]} onChange={(event) => setColorDrafts((current) => ({ ...current, [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value } }))} />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                  <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
+                </div>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "employee" ? (
+              <AccountManagement
+                mode="employees"
+                workspace={workspace}
+                supabase={supabase}
+                onReload={onReload}
+                onMessage={onMessage}
+                scopeCompanyId={selectedCompany.id}
+                scopeDepartmentId={sidePanel.departmentId}
+                hideList
+                compact
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }
@@ -2174,13 +2759,21 @@ function AccountManagement({
   workspace,
   supabase,
   onReload,
-  onMessage
+  onMessage,
+  scopeCompanyId,
+  scopeDepartmentId,
+  hideList = false,
+  compact = false
 }: {
   mode: "employees" | "admins";
   workspace: Workspace;
   supabase: SupabaseClient | null;
   onReload: () => void;
   onMessage: (message: string) => void;
+  scopeCompanyId?: string;
+  scopeDepartmentId?: string;
+  hideList?: boolean;
+  compact?: boolean;
 }) {
   const roleOptions = mode === "employees"
     ? ["employee", "team_leader", "department_manager"]
@@ -2192,8 +2785,8 @@ function AccountManagement({
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [companyId, setCompanyId] = React.useState(workspace.companies[0]?.id || "");
-  const [departmentId, setDepartmentId] = React.useState("");
+  const [companyId, setCompanyId] = React.useState(scopeCompanyId || workspace.companies[0]?.id || "");
+  const [departmentId, setDepartmentId] = React.useState(scopeDepartmentId || "");
   const [position, setPosition] = React.useState("");
   const [identificationNumber, setIdentificationNumber] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
@@ -2202,10 +2795,11 @@ function AccountManagement({
   const [reportsToId, setReportsToId] = React.useState("");
   const [teamLeaderId, setTeamLeaderId] = React.useState("");
   const [permittedCompanyIds, setPermittedCompanyIds] = React.useState<string[]>(companyId ? [companyId] : []);
-  const [listOpen, setListOpen] = React.useState(mode !== "employees");
+  const [listOpen, setListOpen] = React.useState(mode !== "employees" && !hideList);
   const suggestedCoDays = startDate ? calculateCoEntitlement(startDate, endDate) : 0;
 
-  const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId);
+  const companyOptions = scopeCompanyId ? workspace.companies.filter((company) => company.id === scopeCompanyId) : workspace.companies;
+  const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId && (!scopeDepartmentId || department.id === scopeDepartmentId));
   const selectedDepartment = workspace.departments.find((department) => department.id === departmentId);
   const managers = workspace.profiles.filter((profile) => (
     ["department_manager", "company_manager"].includes(profile.role) &&
@@ -2221,7 +2815,9 @@ function AccountManagement({
     .filter((profile) => {
       if (mode === "employees") {
         return !["admin_account", "payroll_admin", "company_manager"].includes(profile.role) &&
-          (workspace.profile.role === "admin_account" || Boolean(profile.company_id && accessibleCompanyIds.has(profile.company_id)));
+          (workspace.profile.role === "admin_account" || Boolean(profile.company_id && accessibleCompanyIds.has(profile.company_id))) &&
+          (!scopeCompanyId || profile.company_id === scopeCompanyId) &&
+          (!scopeDepartmentId || profile.department_id === scopeDepartmentId);
       }
       if (workspace.profile.role === "admin_account") return ["payroll_admin", "company_manager"].includes(profile.role);
       if (profile.role !== "company_manager") return false;
@@ -2229,6 +2825,13 @@ function AccountManagement({
       return Array.from(profileCompanies).some((id) => accessibleCompanyIds.has(id));
     })
     .toSorted((a, b) => a.full_name.localeCompare(b.full_name));
+
+  React.useEffect(() => {
+    if (!scopeCompanyId || editingId) return;
+    setCompanyId(scopeCompanyId);
+    setDepartmentId(scopeDepartmentId || "");
+    if (scopeDepartmentId) applyDepartmentDefaults(scopeDepartmentId);
+  }, [scopeCompanyId, scopeDepartmentId, editingId]);
 
   React.useEffect(() => {
     if (!departmentId) return;
@@ -2276,8 +2879,8 @@ function AccountManagement({
     setName("");
     setEmail("");
     setPassword("");
-    setCompanyId(workspace.companies[0]?.id || "");
-    setDepartmentId("");
+    setCompanyId(scopeCompanyId || workspace.companies[0]?.id || "");
+    setDepartmentId(scopeDepartmentId || "");
     setPosition("");
     setIdentificationNumber("");
     setStartDate("");
@@ -2285,7 +2888,7 @@ function AccountManagement({
     setCoAvailable("0");
     setReportsToId("");
     setTeamLeaderId("");
-    setPermittedCompanyIds(workspace.companies[0]?.id ? [workspace.companies[0].id] : []);
+    setPermittedCompanyIds(scopeCompanyId ? [scopeCompanyId] : workspace.companies[0]?.id ? [workspace.companies[0].id] : []);
   }
 
   function updateStartDate(value: string) {
@@ -2402,9 +3005,9 @@ function AccountManagement({
 
   return (
     <div className="grid gap-3">
-      <Card className="rounded-[22px] border-stone-200 shadow-none">
+      <Card className={cn("border-stone-200 shadow-none", compact ? "rounded-2xl" : "rounded-[22px]")}>
         <CardHeader className="pb-2.5">
-          <CardTitle className="text-lg">{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
+          <CardTitle className={cn(compact ? "text-base" : "text-lg")}>{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
           <CardDescription className="text-[13px]">
             {mode === "employees"
               ? "Employees, Team Leaders, and Department Managers."
@@ -2414,7 +3017,10 @@ function AccountManagement({
         <CardContent className="grid gap-3">
           {mode === "employees" ? (
             <div className="grid gap-3">
-              <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+              <div className={cn(
+                "grid gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5",
+                !compact && "xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start"
+              )}>
                 <div className="min-w-0">
                   <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Role</p>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -2435,20 +3041,20 @@ function AccountManagement({
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2 xl:justify-end">
+                <div className={cn("flex flex-wrap gap-2", !compact && "xl:justify-end")}>
                   <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={resetForm}>Reset</Button>
                   <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
                 </div>
               </div>
 
-              <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px]">
+              <div className={cn("grid gap-3", !compact && "xl:grid-cols-[minmax(0,1fr)_220px]")}>
                 <div className="grid gap-3">
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Identity</p>
                       <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{ROLES[role]}</span>
                     </div>
-                    <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]")}>
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
@@ -2458,7 +3064,7 @@ function AccountManagement({
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
                       </label>
                     </div>
-                    <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_140px]">
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_140px]")}>
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Password</span>
                         <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
@@ -2476,21 +3082,21 @@ function AccountManagement({
 
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Organization</p>
-                    <div className="grid gap-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Company</span>
-                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={companyId} onChange={(event) => {
+                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={companyId} disabled={Boolean(scopeCompanyId)} onChange={(event) => {
                           setCompanyId(event.target.value);
                           setDepartmentId("");
                           setReportsToId("");
                           setTeamLeaderId("");
                         }}>
-                          {workspace.companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                          {companyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
                         </select>
                       </label>
                       <label className="grid gap-1 min-w-0">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Department</span>
-                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={departmentId} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={departmentId} disabled={Boolean(scopeDepartmentId)} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
                           <option value="">No department</option>
                           {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
                         </select>
@@ -2515,7 +3121,7 @@ function AccountManagement({
                   </div>
                 </div>
 
-                <div className="grid w-full max-w-[220px] gap-3 xl:justify-self-start">
+                <div className={cn("grid w-full gap-3", compact ? "max-w-none" : "max-w-[220px] xl:justify-self-start")}>
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Contract</p>
@@ -2533,7 +3139,7 @@ function AccountManagement({
                     </div>
                   </div>
 
-                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  {!compact ? <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
                     <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Summary</p>
                     <div className="mt-2 grid gap-2">
                       <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
@@ -2549,7 +3155,7 @@ function AccountManagement({
                         <span className="text-stone-900">{coAvailable || "0"}</span>
                       </div>
                     </div>
-                  </div>
+                  </div> : null}
                 </div>
               </div>
             </div>
@@ -2626,7 +3232,7 @@ function AccountManagement({
         </CardContent>
       </Card>
 
-      <Card className="rounded-[22px] border-stone-200 shadow-none">
+      {!hideList ? <Card className="rounded-[22px] border-stone-200 shadow-none">
         <CardHeader className="pb-2.5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -2657,7 +3263,7 @@ function AccountManagement({
             );
           })}
         </CardContent> : null}
-      </Card>
+      </Card> : null}
     </div>
   );
 }
@@ -2844,8 +3450,7 @@ function tabLabel(tab: string) {
 function sheetDescription(tab: string) {
   if (tab === "leave") return "Requests, approvals, and supporting leave documents.";
   if (tab === "charts") return "Compact analytics for the current visible scope.";
-  if (tab === "companies") return "Company setup, department hierarchy, and visual preferences.";
-  if (tab === "employees") return "Create and manage employees, team leaders, and managers.";
+  if (tab === "companies") return "Selected-company hierarchy, departments, colors, and employee creation.";
   if (tab === "admins") return "Admin-account access, payroll admins, and company managers.";
   if (tab === "settings") return "Holidays, danger actions, and deployment-safe preferences.";
   return "Workspace panel";
