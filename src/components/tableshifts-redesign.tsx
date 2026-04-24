@@ -836,6 +836,12 @@ function TimesheetTable({
   onClear: (employee: ProfileRow) => void;
 }) {
   const days = daysInMonth(month);
+  const [cellMenu, setCellMenu] = React.useState<{
+    x: number;
+    y: number;
+    employee: ProfileRow;
+    iso: string;
+  } | null>(null);
   const editableCellKeys = React.useMemo(() => {
     const keys: string[] = [];
     employees.forEach((employee) => {
@@ -853,6 +859,49 @@ function TimesheetTable({
   const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
   const fixedCompactWidth = 176 + totalsColumns.length * 68;
   const expandedMinWidth = 188 + days.length * 38 + totalsColumns.length * 74;
+
+  React.useEffect(() => {
+    if (!cellMenu) return;
+    function close() {
+      setCellMenu(null);
+    }
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close, true);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close, true);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [cellMenu]);
+
+  function openCellMenu(event: React.MouseEvent | React.PointerEvent, employee: ProfileRow, iso: string) {
+    if (!canEditEmployee(workspace.profile, employee, workspace)) return;
+    const menuWidth = 190;
+    const menuHeight = 280;
+    const x = Math.min(Number(event.clientX) + 10, window.innerWidth - menuWidth - 12);
+    const y = Math.min(Number(event.clientY) + 10, window.innerHeight - menuHeight - 12);
+    setCellMenu({
+      x: Math.max(12, x),
+      y: Math.max(12, y),
+      employee,
+      iso
+    });
+  }
+
+  function applyCellMenuType(nextType: string) {
+    if (!cellMenu) return;
+    const target = cellMenu;
+    setCellMenu(null);
+    if (nextType === "clear") {
+      onClearDay(target.employee, target.iso);
+      return;
+    }
+    onSetType(target.employee, target.iso, nextType);
+  }
+
   return (
     <Card className="max-w-full overflow-hidden">
       <div className={cn("max-h-[calc(100vh-260px)] max-w-full", totalsExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
@@ -904,8 +953,7 @@ function TimesheetTable({
                       day={day}
                       workspace={workspace}
                       onSetHours={onSetHours}
-                      onSetType={onSetType}
-                      onClearDay={onClearDay}
+                      onOpenMenu={openCellMenu}
                       onMove={(key, direction) => {
                         const currentIndex = editableCellKeys.indexOf(key);
                         if (currentIndex < 0) return;
@@ -970,6 +1018,7 @@ function TimesheetTable({
             )}
           </tbody>
         </table>
+        {cellMenu ? <TimesheetCellMenu x={cellMenu.x} y={cellMenu.y} onApply={applyCellMenuType} /> : null}
       </div>
     </Card>
   );
@@ -980,16 +1029,14 @@ function EntryCell({
   day,
   workspace,
   onSetHours,
-  onSetType,
-  onClearDay,
+  onOpenMenu,
   onMove
 }: {
   employee: ProfileRow;
   day: ReturnType<typeof daysInMonth>[number];
   workspace: Workspace;
   onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
-  onSetType: (employee: ProfileRow, iso: string, type: string) => void;
-  onClearDay: (employee: ProfileRow, iso: string) => void;
+  onOpenMenu: (event: React.MouseEvent | React.PointerEvent, employee: ProfileRow, iso: string) => void;
   onMove: (key: string, direction: 1 | -1) => void;
 }) {
   const entry = entryFor(workspace.entries, employee.id, day.iso);
@@ -1005,7 +1052,6 @@ function EntryCell({
   const numericEntry = !entry || ["normal", "overtime"].includes(entry.type);
   const initialHours = numericEntry && entry ? String(formatNumber(Number(entry.hours || 0))) : "";
   const [draftHours, setDraftHours] = React.useState(initialHours);
-  const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const longPressRef = React.useRef<number | null>(null);
   const cellKey = `${employee.id}:${day.iso}`;
@@ -1013,19 +1059,6 @@ function EntryCell({
   React.useEffect(() => {
     setDraftHours(initialHours);
   }, [initialHours]);
-
-  React.useEffect(() => {
-    if (!menu) return;
-    function close() {
-      setMenu(null);
-    }
-    window.addEventListener("click", close);
-    window.addEventListener("scroll", close, true);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [menu]);
 
   function commitHours() {
     if (!editable || !numericEntry || draftHours === initialHours) return;
@@ -1041,31 +1074,9 @@ function EntryCell({
     setDraftHours(String(Math.min(24, Number(digits))));
   }
 
-  function openMenuFromCell(target: HTMLElement) {
-    if (!editable) return;
-    const rect = target.getBoundingClientRect();
-    const menuWidth = 190;
-    const menuHeight = 280;
-    const left = Math.min(rect.left + 8, window.innerWidth - menuWidth - 12);
-    const top = Math.min(rect.bottom + 8, window.innerHeight - menuHeight - 12);
-    setMenu({
-      x: Math.max(12, left),
-      y: Math.max(12, top)
-    });
-  }
-
   function clearLongPress() {
     if (longPressRef.current) window.clearTimeout(longPressRef.current);
     longPressRef.current = null;
-  }
-
-  function applyType(nextType: string) {
-    setMenu(null);
-    if (nextType === "clear") {
-      onClearDay(employee, day.iso);
-      return;
-    }
-    onSetType(employee, day.iso, nextType);
   }
 
   function focusCellInput() {
@@ -1081,7 +1092,8 @@ function EntryCell({
       style={customColor ? { backgroundColor: customColor } : undefined}
       onContextMenu={(event) => {
         event.preventDefault();
-        openMenuFromCell(event.currentTarget);
+        event.stopPropagation();
+        onOpenMenu(event, employee, day.iso);
       }}
     >
       <div
@@ -1094,7 +1106,7 @@ function EntryCell({
         onPointerDown={(event) => {
           if (!editable) return;
           clearLongPress();
-          longPressRef.current = window.setTimeout(() => openMenuFromCell(event.currentTarget), 550);
+          longPressRef.current = window.setTimeout(() => onOpenMenu(event, employee, day.iso), 550);
         }}
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
@@ -1147,53 +1159,54 @@ function EntryCell({
           </>
         )}
       </div>
-      {menu ? (
-        <div
-          className="fixed z-[80] grid min-w-36 overflow-visible rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
-          style={{ left: menu.x, top: menu.y }}
-          onClick={(event) => event.stopPropagation()}
+    </td>
+  );
+}
+
+function TimesheetCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (type: string) => void }) {
+  return (
+    <div
+      className="fixed z-[80] grid min-w-36 overflow-visible rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
+      style={{ left: x, top: y }}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {[
+        ["normal", "Normal shift"],
+        ["vacation", "Vacation CO"],
+        ["medical", "Medical CM"],
+        ["absence", "Absence"]
+      ].map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className="rounded px-2 py-1.5 text-left hover:bg-stone-100"
+          onClick={() => onApply(value)}
         >
-          {[
-            ["normal", "Normal shift"],
-            ["vacation", "Vacation CO"],
-            ["medical", "Medical CM"],
-            ["absence", "Absence"]
-          ].map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              className={cn(
-                "rounded px-2 py-1.5 text-left hover:bg-stone-100",
-                value === "clear" && "text-rose-700 hover:bg-rose-50"
-              )}
-              onClick={() => applyType(value)}
-            >
-              {label}
+          {label}
+        </button>
+      ))}
+      <div className="group relative">
+        <button type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
+          Special Event
+          <span className="text-stone-400">›</span>
+        </button>
+        <div className="absolute left-full top-0 hidden min-w-44 rounded-md border border-stone-200 bg-white p-1 shadow-xl shadow-stone-950/15 group-hover:grid group-focus-within:grid">
+          {SPECIAL_EVENT_REASONS.map((reason) => (
+            <button key={reason} type="button" className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply("special_event")}>
+              {reason}
             </button>
           ))}
-          <div className="group relative">
-            <button type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
-              Special Event
-              <span className="text-stone-400">›</span>
-            </button>
-            <div className="absolute left-full top-0 hidden min-w-44 rounded-md border border-stone-200 bg-white p-1 shadow-xl shadow-stone-950/15 group-hover:grid group-focus-within:grid">
-              {SPECIAL_EVENT_REASONS.map((reason) => (
-                <button key={reason} type="button" className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => applyType("special_event")}>
-                  {reason}
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            type="button"
-            className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50"
-            onClick={() => applyType("clear")}
-          >
-            Clear
-          </button>
         </div>
-      ) : null}
-    </td>
+      </div>
+      <button
+        type="button"
+        className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50"
+        onClick={() => onApply("clear")}
+      >
+        Clear
+      </button>
+    </div>
   );
 }
 
@@ -1533,6 +1546,7 @@ function Charts({
   const dailyData = days.map((day) => {
     const row: Record<string, number | string> = {
       day: day.day,
+      label: String(day.day),
       iso: day.iso,
       expected: 0,
       worked: 0,
@@ -1558,9 +1572,8 @@ function Charts({
     row.delta = Number(row.worked) - Number(row.expected);
     row.status = Number(row.delta) < 0 ? "Under" : Number(row.delta) > 0 ? "Over" : "On norm";
     return row;
-  });
+  }).filter((day) => Number(day.expected) > 0);
   const fulfillment = expected ? Math.round((worked / expected) * 100) : 0;
-  const cappedFulfillment = Math.min(140, fulfillment);
   const workDays = dailyData.filter((day) => Number(day.expected) > 0).length;
   const underDays = dailyData.filter((day) => Number(day.delta) < 0).length;
   const overDays = dailyData.filter((day) => Number(day.delta) > 0).length;
@@ -1663,7 +1676,7 @@ function Charts({
         ))}
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
         <Card>
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1677,28 +1690,25 @@ function Charts({
             </div>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={dailyChartConfig} className="h-[360px] w-full">
-              <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 16, bottom: 8 }}>
+            <ChartContainer config={dailyChartConfig} className="h-[245px] w-full">
+              <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 12, bottom: 4 }}>
                 {dailyData
                   .filter((day) => Number(day.delta) !== 0 && Number(day.expected) > 0)
                   .map((day) => (
                     <ReferenceArea
                       key={String(day.iso)}
-                      x1={Number(day.day) - 0.48}
-                      x2={Number(day.day) + 0.48}
+                      x1={String(day.label)}
+                      x2={String(day.label)}
                       strokeOpacity={0}
                       fill={Number(day.delta) < 0 ? "#fecdd3" : "#fde68a"}
                       fillOpacity={0.34}
                     />
                   ))}
                 <XAxis
-                  dataKey="day"
-                  type="number"
-                  domain={[1, days.length]}
+                  dataKey="label"
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  allowDecimals={false}
                 />
                 <YAxis tickLine={false} axisLine={false} tickMargin={8} width={38} />
                 <RechartsTooltip
@@ -1737,7 +1747,7 @@ function Charts({
         </Card>
 
         <div className="grid gap-4">
-          <Card>
+          <Card className="h-full">
             <CardHeader className="pb-2">
               <CardTitle>Scope Radials</CardTitle>
               <CardDescription>Fast read on fulfillment, OT, leave, and exception pressure.</CardDescription>
@@ -1762,31 +1772,10 @@ function Charts({
               ))}
             </CardContent>
           </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>Variance Signals</CardTitle>
-              <CardDescription>Days worth checking before payroll close.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-2 text-sm font-semibold">
-              <div className="flex items-center justify-between rounded-md bg-rose-50 px-3 py-2 text-rose-800">
-                <span>Under-norm days</span>
-                <span>{underDays}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-amber-800">
-                <span>Over-norm days</span>
-                <span>{overDays}</span>
-              </div>
-              <div className="flex items-center justify-between rounded-md bg-stone-50 px-3 py-2">
-                <span>Weakest day</span>
-                <span>{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
         <Card>
           <CardHeader>
             <CardTitle>Department Balance</CardTitle>
@@ -1816,7 +1805,28 @@ function Charts({
                     <span>{row.expected ? Math.round((row.worked / row.expected) * 100) : 0}%</span>
                   </div>
                 </div>
-              )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+            )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Variance Signals</CardTitle>
+            <CardDescription>Days worth checking before payroll close.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm font-semibold">
+            <div className="flex items-center justify-between rounded-md bg-rose-50 px-3 py-2 text-rose-800">
+              <span>Under-norm days</span>
+              <span>{underDays}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+              <span>Over-norm days</span>
+              <span>{overDays}</span>
+            </div>
+            <div className="grid gap-1 rounded-md bg-stone-50 px-3 py-2">
+              <span className="text-stone-500">Weakest day</span>
+              <span>{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
+            </div>
           </CardContent>
         </Card>
 
