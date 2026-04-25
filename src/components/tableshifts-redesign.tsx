@@ -37,6 +37,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import { Toaster, toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1161,9 +1162,11 @@ function IndividualTableShifts({
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
   const totalsColumns = totalsExpanded ? ["Worked", "More", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "Fill", "Clear"] : ["Worked", "More"];
-  const totalWidth = (label: string) => ["More", "Fill", "Clear"].includes(label) ? 56 : 52;
-  const fixedWidth = employeeColumnWidth + 52 + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
-  const minWidth = totalsExpanded || metaExpanded ? employeeColumnWidth + 52 + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+  const moreColumnWidth = 56;
+  const totalWidth = (label: string) => label === "More" ? moreColumnWidth : ["Fill", "Clear"].includes(label) ? 54 : label === "Worked" ? 60 : 50;
+  const fixedWidth = employeeColumnWidth + moreColumnWidth + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
+  const minWidth = totalsExpanded || metaExpanded ? employeeColumnWidth + moreColumnWidth + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+  const headerStats = individualHeaderStats(table);
 
   function startEmployeeResize(event: React.PointerEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -1208,6 +1211,7 @@ function IndividualTableShifts({
       if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: 8 };
     });
     save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} filled with normal shifts.`);
   }
 
   function clearRow(row: IndividualRow) {
@@ -1215,6 +1219,7 @@ function IndividualTableShifts({
     const rowEntries = { ...(table.entries[row.id] || {}) };
     days.forEach((day) => delete rowEntries[day.iso]);
     save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} cleared.`);
   }
 
   async function addPublicHolidays() {
@@ -1239,6 +1244,7 @@ function IndividualTableShifts({
     holidayDraft.forEach((holiday) => merged.set(`${holiday.date}:${holiday.name}`, holiday));
     save({ ...table, holidays: Array.from(merged.values()).toSorted((a, b) => a.date.localeCompare(b.date)) });
     setHolidayDraft([]);
+    toast.success("Public holidays applied.");
   }
 
   function importCsv(file: File | null) {
@@ -1259,23 +1265,50 @@ function IndividualTableShifts({
           position: line[index("Position")] || ""
         }))
         .filter((row) => row.name.trim());
-      if (nextRows.length) save({ ...table, rows: [...table.rows, ...nextRows] });
+      if (nextRows.length) {
+        save({ ...table, rows: [...table.rows, ...nextRows] });
+        toast.success(`${nextRows.length} employees imported.`);
+      } else {
+        toast.warning("No employees found in that CSV.");
+      }
     };
     reader.readAsText(file);
   }
 
   return (
     <main className="min-h-screen bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+      <Toaster position="top-center" richColors closeButton />
       <div className="mx-auto grid max-w-[1800px] gap-4">
-        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-emerald-900/10 pb-4">
-          <div>
+        <header className="grid gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(250px,360px)_minmax(360px,1fr)_minmax(260px,330px)] lg:items-stretch">
+          <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
             <h1 className="text-4xl font-black tracking-tight">Individual TableShifts</h1>
-            <p className="mt-1 break-all text-sm font-semibold text-stone-500">{typeof window === "undefined" ? "" : window.location.href}</p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(window.location.href)}>Copy Link</Button>
+          <div className="grid min-w-0 gap-2 rounded-xl border border-emerald-900/10 bg-white/70 p-3 shadow-sm">
+            <div className="grid grid-cols-4 gap-2">
+              <IndividualMiniKpi label="People" value={String(headerStats.people)} />
+              <IndividualMiniKpi label="Worked" value={`${formatNumber(headerStats.worked)}h`} />
+              <IndividualMiniKpi label="Diff" value={`${headerStats.diff > 0 ? "+" : ""}${formatNumber(headerStats.diff)}h`} accent={headerStats.diff < 0 ? "text-rose-700" : "text-emerald-700"} />
+              <IndividualMiniKpi label="Leave" value={`${headerStats.leaveDays}d`} />
+            </div>
+            <IndividualDailyBars days={headerStats.daily} />
+          </div>
+          <div className="grid min-w-0 content-start justify-items-end gap-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(window.location.href);
+                  toast.success("Individual table link copied.");
+                }}
+              >
+                Copy Link
+              </Button>
             <Button onClick={onBack}>Back to Login</Button>
+            </div>
+            <div className="max-w-full rounded-lg border border-emerald-900/10 bg-white/70 px-3 py-2 text-right text-[10px] font-semibold text-stone-500 shadow-sm">
+              <p className="truncate">{typeof window === "undefined" ? "" : window.location.href}</p>
+            </div>
           </div>
         </header>
 
@@ -1305,7 +1338,15 @@ function IndividualTableShifts({
             </FieldShell>
             <Button variant="outline" className="h-8 px-3 text-xs" onClick={downloadIndividualTemplate}>Import Template</Button>
           </Card>
-          <Button className="h-full min-h-12 px-5" onClick={() => exportIndividualCsv(table)}>Export CSV</Button>
+          <Button
+            className="h-full min-h-12 px-5"
+            onClick={() => {
+              exportIndividualCsv(table);
+              toast.success("CSV exported.");
+            }}
+          >
+            Export CSV
+          </Button>
         </div>
         {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
 
@@ -1318,7 +1359,7 @@ function IndividualTableShifts({
               >
                 <colgroup>
                 <col style={{ width: `${employeeColumnWidth}px` }} />
-                <col style={{ width: "42px" }} />
+                <col style={{ width: `${moreColumnWidth}px` }} />
                 {metaExpanded ? (
                   <>
                     <col style={{ width: "92px" }} />
@@ -1364,7 +1405,7 @@ function IndividualTableShifts({
                       </Button>
                     </th>
                   ) : (
-                    <th key={label} className="border-l px-1 py-2 text-center font-black">{label}</th>
+                    <th key={label} className="border-l px-1 py-2 text-center align-middle font-black leading-none">{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -1451,6 +1492,76 @@ function IndividualTableShifts({
   );
 }
 
+function IndividualMiniKpi({ label, value, accent = "text-stone-950" }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="rounded-lg border border-emerald-900/10 bg-white px-2 py-1.5 shadow-sm">
+      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-stone-500">{label}</p>
+      <p className={cn("text-sm font-black leading-tight", accent)}>{value}</p>
+    </div>
+  );
+}
+
+function IndividualDailyBars({ days }: { days: Array<{ day: number; worked: number; variance: number; strength: "weak" | "strong" | "normal" }> }) {
+  const max = Math.max(1, ...days.map((day) => day.worked));
+  return (
+    <div className="flex h-9 items-end gap-1 rounded-lg border border-emerald-900/10 bg-stone-50/80 px-2 py-1.5">
+      {days.length ? days.map((day) => (
+        <Tooltip key={day.day}>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "min-h-1 flex-1 rounded-t-sm",
+                day.strength === "weak" ? "bg-rose-500" : day.strength === "strong" ? "bg-emerald-600" : "bg-emerald-200"
+              )}
+              style={{ height: `${Math.max(8, (day.worked / max) * 28)}px` }}
+            />
+          </TooltipTrigger>
+          <TooltipContent className="border border-stone-800/20 bg-stone-950/95 px-2 py-1 text-[11px] font-semibold text-white shadow-xl">
+            Day {day.day}: {formatNumber(day.worked)}h ({day.variance > 0 ? "+" : ""}{formatNumber(day.variance)}h)
+          </TooltipContent>
+        </Tooltip>
+      )) : <p className="text-[10px] font-bold text-stone-500">No workdays yet</p>}
+    </div>
+  );
+}
+
+function individualHeaderStats(table: IndividualTableData) {
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const totals = table.rows.reduce(
+    (sum, row) => {
+      const rowTotals = individualTotals(row, table);
+      sum.worked += rowTotals.worked;
+      sum.norm += rowTotals.norm;
+      sum.leaveDays += rowTotals.co + rowTotals.cm + rowTotals.se + rowTotals.ab;
+      return sum;
+    },
+    { worked: 0, norm: 0, leaveDays: 0 }
+  );
+  const daily = days
+    .filter((day) => isIndividualWorkDay(day, holidaysByDate))
+    .map((day) => {
+      const worked = table.rows.reduce((sum, row) => {
+        const entry = table.entries[row.id]?.[day.iso];
+        return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
+      }, 0);
+      const norm = table.rows.length * 8;
+      return { day: day.day, worked, variance: worked - norm, strength: "normal" as const };
+    });
+  const weakest = daily.reduce((candidate, day) => day.variance < candidate.variance ? day : candidate, { day: 0, worked: 0, variance: Infinity, strength: "normal" as const });
+  const strongest = daily.reduce((candidate, day) => day.variance > candidate.variance ? day : candidate, { day: 0, worked: 0, variance: -Infinity, strength: "normal" as const });
+  return {
+    people: table.rows.length,
+    worked: totals.worked,
+    diff: totals.worked - totals.norm,
+    leaveDays: totals.leaveDays,
+    daily: daily.map((day) => ({
+      ...day,
+      strength: day.day === weakest.day ? "weak" as const : day.day === strongest.day ? "strong" as const : "normal" as const
+    }))
+  };
+}
+
 function IndividualTextCell({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
   return (
     <td className="border-l px-1">
@@ -1533,7 +1644,9 @@ function IndividualDayCell({
             )}
           </div>
         </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
+        <TooltipContent className="border border-stone-800/20 bg-stone-950/95 px-2 py-1 text-[11px] font-semibold text-white shadow-xl">
+          {tooltip}
+        </TooltipContent>
       </Tooltip>
       <IndividualCellMenu
         open={Boolean(menu)}
@@ -1578,23 +1691,23 @@ function IndividualCellMenu({
           style={{ left, top }}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44">
-        <DropdownMenuItem onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onApply("absence")}>Absence</DropdownMenuItem>
+      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("absence")}>Absence</DropdownMenuItem>
         <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Special Event</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
+          <DropdownMenuSubTrigger className="text-xs font-bold">Special Event</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-48 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
             {SPECIAL_EVENT_REASONS.map((reason) => (
-              <DropdownMenuItem key={reason} onClick={() => onApply("special_event", reason)}>
+              <DropdownMenuItem className="text-xs font-bold" key={reason} onClick={() => onApply("special_event", reason)}>
                 {reason}
               </DropdownMenuItem>
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
