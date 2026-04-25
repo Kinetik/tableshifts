@@ -52,7 +52,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuPortal,
-  DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
@@ -453,19 +452,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     }
   }
 
-  async function signInWithProvider(provider: "google" | "apple", createAdmin = false) {
-    if (!supabase || typeof window === "undefined") return;
-    setMessage("");
-    if (createAdmin) window.localStorage.setItem("tableshifts.oauth.createAdmin", "1");
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}${window.location.pathname}`
-      }
-    });
-    if (error) setMessage(error.message);
-  }
-
   async function saveIndividualTable(nextTable: IndividualTableData) {
     setIndividualTable(nextTable);
     if (typeof window !== "undefined") {
@@ -578,7 +564,6 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
         message={message}
         onSignIn={signIn}
         onCreateAdmin={createAdminAccount}
-        onOAuth={signInWithProvider}
         onIndividual={() => void openIndividualTable()}
       />
     );
@@ -1021,7 +1006,6 @@ function LoginPanel({
   message,
   onSignIn,
   onCreateAdmin,
-  onOAuth,
   onIndividual
 }: {
   mode: "login" | "create-admin";
@@ -1042,7 +1026,6 @@ function LoginPanel({
   message: string;
   onSignIn: (event: React.FormEvent) => void;
   onCreateAdmin: (event: React.FormEvent) => void;
-  onOAuth: (provider: "google" | "apple", createAdmin?: boolean) => void;
   onIndividual: () => void;
 }) {
   return (
@@ -1052,7 +1035,7 @@ function LoginPanel({
           <div className="flex min-h-[560px] flex-col justify-between bg-[#062f23] p-8 text-white">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-200">TableShifts</p>
-              <h1 className="mt-6 max-w-sm text-5xl font-black leading-none tracking-tight">Time work, leave, and teams in one clean sheet.</h1>
+              <h1 className="mt-6 max-w-sm text-5xl font-black leading-none tracking-tight">Track work hours in a clean, familiar table as simple as a spreadsheet.</h1>
               <p className="mt-5 max-w-md text-sm font-semibold leading-6 text-emerald-100/80">
                 Sign in to a managed workspace, create your Admin Account environment, or open a standalone Individual TableShifts sheet.
               </p>
@@ -1096,7 +1079,6 @@ function LoginPanel({
                 </FieldShell>
                 {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
                 <Button className="h-10" type="submit" disabled={loading}>{loading ? "Loading..." : "Enter"}</Button>
-                <OAuthButtons onOAuth={(provider) => onOAuth(provider, false)} />
               </form>
             ) : (
               <form className="grid gap-4" onSubmit={onCreateAdmin}>
@@ -1120,33 +1102,12 @@ function LoginPanel({
                 </div>
                 {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
                 <Button className="h-10" type="submit" disabled={loading}>{loading ? "Creating..." : "Create Admin Account"}</Button>
-                <OAuthButtons onOAuth={(provider) => onOAuth(provider, true)} create />
               </form>
             )}
           </div>
         </Card>
       </div>
     </main>
-  );
-}
-
-function OAuthButtons({ onOAuth, create = false }: { onOAuth: (provider: "google" | "apple") => void; create?: boolean }) {
-  return (
-    <div className="grid gap-2">
-      <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.16em] text-stone-400">
-        <Separator className="flex-1" />
-        or
-        <Separator className="flex-1" />
-      </div>
-      <div className="grid gap-2 sm:grid-cols-2">
-        <Button type="button" variant="outline" className="h-10" onClick={() => onOAuth("google")}>
-          {create ? "Create with Google" : "Continue with Google"}
-        </Button>
-        <Button type="button" variant="outline" className="h-10" onClick={() => onOAuth("apple")}>
-          {create ? "Create with Apple" : "Continue with Apple"}
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -1332,16 +1293,16 @@ function IndividualTableShifts({
           </div>
         </header>
 
-        <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_auto_auto]">
-          <Card className="grid gap-2 p-3 sm:grid-cols-[1fr_88px]">
+        <div className="grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)_auto_auto]">
+          <Card className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_62px]">
             <FieldShell label="Month">
               <NativeSelect value={table.month} onChange={(event) => save({ ...table, month: event.target.value })}>
                 {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </NativeSelect>
             </FieldShell>
-            <FieldShell label="Normal h">
+            <FieldShell label="Shifts">
               <Input
-                className="h-8 text-xs font-semibold"
+                className="h-8 px-1 text-center text-xs font-semibold"
                 inputMode="numeric"
                 min={1}
                 max={24}
@@ -1731,7 +1692,7 @@ function IndividualCellMenu({
   onOpenChange: (open: boolean) => void;
   onApply: (type: string, reason?: string) => void;
 }) {
-  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 220));
+  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 180));
   const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 260));
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange}>
@@ -1743,7 +1704,7 @@ function IndividualCellMenu({
           style={{ left, top }}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44 overflow-visible border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-36 overflow-visible border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
@@ -1751,7 +1712,7 @@ function IndividualCellMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="text-xs font-bold">Special Event</DropdownMenuSubTrigger>
           <DropdownMenuPortal>
-            <DropdownMenuSubContent className="z-[90] min-w-48 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+            <DropdownMenuSubContent className="z-[90] min-w-40 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
               {SPECIAL_EVENT_REASONS.map((reason) => (
                 <DropdownMenuItem className="text-xs font-bold" key={reason} onClick={() => onApply("special_event", reason)}>
                   {reason}
@@ -1760,7 +1721,6 @@ function IndividualCellMenu({
             </DropdownMenuSubContent>
           </DropdownMenuPortal>
         </DropdownMenuSub>
-        <DropdownMenuSeparator />
         <DropdownMenuItem className="text-xs font-bold text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
