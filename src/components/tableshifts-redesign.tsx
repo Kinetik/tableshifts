@@ -571,10 +571,12 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             {userMenuOpen ? (
               <div className="absolute bottom-[calc(100%+0.5rem)] left-2 right-2 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
                 <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
-                  <div className="text-[13px] font-semibold text-white">{workspace.profile.position || ROLES[workspace.profile.role]}</div>
-                  <div className="mt-0.5 text-[11px] text-emerald-200/75">
-                    {[activeCompany?.name, workspace.departments.find((department) => department.id === workspace.profile.department_id)?.name].filter(Boolean).join(" / ") || "No department"}
-                  </div>
+                  <div className="text-[13px] font-semibold text-white">{ROLES[workspace.profile.role]}</div>
+                  {["employee", "team_leader", "department_manager"].includes(workspace.profile.role) ? (
+                    <div className="mt-0.5 text-[11px] text-emerald-200/75">
+                      {[activeCompany?.name, workspace.departments.find((department) => department.id === workspace.profile.department_id)?.name, workspace.profile.position].filter(Boolean).join(" / ") || "No department"}
+                    </div>
+                  ) : null}
                 </div>
                 {pendingApprovals.length ? (
                   <button
@@ -1680,28 +1682,28 @@ function Charts({
   };
 
   return (
-    <div className="grid gap-4">
+    <div className="grid h-[calc(100vh-188px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden">
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         {kpis.map((kpi) => (
           <Card key={kpi.label} className="border-stone-200/80">
-            <CardHeader className="p-3">
-              <CardDescription className="font-black uppercase tracking-wide">{kpi.label}</CardDescription>
+            <CardHeader className="p-2.5">
+              <CardDescription className="text-[10px] font-black uppercase tracking-wide">{kpi.label}</CardDescription>
               <CardTitle className={cn(
-                "text-2xl font-black",
+                "text-xl font-black",
                 kpi.tone === "good" && "text-emerald-700",
                 kpi.tone === "bad" && "text-rose-700",
                 kpi.tone === "warn" && "text-amber-700"
               )}>
                 {kpi.value}
               </CardTitle>
-              <p className="text-xs font-semibold text-stone-500">{kpi.hint}</p>
+              <p className="text-[11px] font-semibold text-stone-500">{kpi.hint}</p>
             </CardHeader>
           </Card>
         ))}
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.7fr)_360px]">
-        <Card>
+      <div className="grid min-h-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+        <Card className="flex min-h-0 flex-col">
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -1713,8 +1715,8 @@ function Charts({
               <Badge variant="secondary">{people} people - {workDays} workdays</Badge>
             </div>
           </CardHeader>
-          <CardContent>
-            <ChartContainer config={dailyChartConfig} className="h-[285px] w-full">
+          <CardContent className="flex min-h-0 flex-1 flex-col">
+            <ChartContainer config={dailyChartConfig} className="h-full min-h-0 w-full flex-1 aspect-auto">
               <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 12, bottom: 4 }}>
                 {dailyData
                   .filter((day) => Number(day.delta) !== 0 && Number(day.expected) > 0)
@@ -1754,15 +1756,15 @@ function Charts({
                 ))}
               </AreaChart>
             </ChartContainer>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-2 flex shrink-0 flex-wrap gap-1.5">
               {employeeKeys.slice(0, 14).map(({ employee, key }) => (
-                <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 px-2 py-1 text-[11px] font-bold text-stone-600">
+                <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-600">
                   <span className="size-2 rounded-sm" style={{ backgroundColor: employeeChartConfig[key].color }} />
                   {employee.full_name}
                 </span>
               ))}
               {employeeKeys.length > 14 ? (
-                <span className="rounded-full border border-stone-200 px-2 py-1 text-[11px] font-bold text-stone-500">
+                <span className="rounded-full border border-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-500">
                   +{employeeKeys.length - 14} more
                 </span>
               ) : null}
@@ -1770,15 +1772,15 @@ function Charts({
           </CardContent>
         </Card>
 
-        <div className="grid gap-4">
-          <Card>
+        <div className="grid min-h-0">
+          <Card className="flex min-h-0 flex-col">
             <CardHeader className="pb-2">
               <CardTitle>Scope Radials</CardTitle>
               <CardDescription>Fast read on fulfillment, OT, leave, and exception pressure.</CardDescription>
             </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-2">
+            <CardContent className="grid flex-1 grid-cols-2 gap-2">
               {radialItems.map((item) => (
-                <div key={item.name} className="rounded-lg border border-stone-200 p-2">
+                <div key={item.name} className="grid min-h-0 content-center rounded-lg border border-stone-200 p-2">
                   <ChartContainer config={{ value: { label: item.name, color: item.color } }} className="mx-auto h-16 w-full">
                     <RadialBarChart data={[item]} innerRadius="72%" outerRadius="96%" startAngle={90} endAngle={90 - (360 * item.value) / 100}>
                       <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
@@ -1799,17 +1801,17 @@ function Charts({
         </div>
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
         <Card className="h-fit">
-          <CardHeader>
+          <CardHeader className="p-3 pb-2">
             <CardTitle>Department Balance</CardTitle>
             <CardDescription>Worked versus norm, sorted by highest absolute variance.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2">
+          <CardContent className="grid gap-2 p-3 pt-0">
             {departmentChartData.length ? departmentChartData
               .toSorted((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
               .map((row) => (
-                <div key={row.name} className="rounded-lg border border-stone-200 p-3">
+                <div key={row.name} className="rounded-lg border border-stone-200 p-2.5">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <div>
                       <p className="font-black">{row.name}</p>
@@ -1834,11 +1836,11 @@ function Charts({
         </Card>
 
         <Card className="h-fit">
-          <CardHeader>
+          <CardHeader className="p-3 pb-2">
             <CardTitle>Variance Signals</CardTitle>
             <CardDescription>Days worth checking before payroll close.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2 text-sm font-semibold">
+          <CardContent className="grid gap-2 p-3 pt-0 text-sm font-semibold">
             <div className="flex items-center justify-between rounded-md bg-rose-50 px-3 py-2 text-rose-800">
               <span>Under-norm days</span>
               <span>{underDays}</span>
@@ -1855,11 +1857,11 @@ function Charts({
         </Card>
 
         <Card className="h-fit">
-          <CardHeader>
+          <CardHeader className="p-3 pb-2">
             <CardTitle>Exception Ranking</CardTitle>
             <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-2">
+          <CardContent className="grid max-h-[146px] gap-2 overflow-y-auto p-3 pt-0">
             {attentionRows.length ? attentionRows.map(({ employee, totals }) => (
               <div key={employee.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold">
                 <div className="min-w-0">
@@ -3193,6 +3195,7 @@ function AccountManagement({
   const [permittedCompanyIds, setPermittedCompanyIds] = React.useState<string[]>(companyId ? [companyId] : []);
   const [listOpen, setListOpen] = React.useState(mode !== "employees" && !hideList);
   const suggestedCoDays = startDate ? calculateCoEntitlement(startDate, endDate) : 0;
+  const roundedSuggestedCoDays = Math.round(suggestedCoDays);
 
   const companyOptions = scopeCompanyId ? workspace.companies.filter((company) => company.id === scopeCompanyId) : workspace.companies;
   const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId && (!scopeDepartmentId || department.id === scopeDepartmentId));
@@ -3352,7 +3355,7 @@ function AccountManagement({
         teamLeaderId: role === "employee" ? teamLeaderId : "",
         startDate: adminRole ? "" : startDate,
         endDate: adminRole ? "" : endDate,
-        coAvailable: adminRole ? 0 : Number(coAvailable || 0)
+        coAvailable: adminRole ? 0 : Math.max(0, Math.round(Number(coAvailable || 0)))
       },
       password,
       permittedCompanyIds: adminRole ? permittedCompanyIds : []
@@ -3476,15 +3479,15 @@ function AccountManagement({
             <div className="rounded-xl border border-border bg-background p-2.5">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Contract</p>
-                <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
-                  Use {suggestedCoDays} CO
+                <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700" onClick={() => setCoAvailable(String(roundedSuggestedCoDays))}>
+                  Use {roundedSuggestedCoDays} CO
                 </button>
               </div>
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_86px]">
                 <DateInput label="Start" value={startDate} onChange={updateStartDate} />
                 <DateInput label="End" value={endDate} onChange={updateEndDate} />
                 <FieldShell label="CO">
-                  <Input className="h-8 text-xs" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
+                  <Input className="h-8 text-xs" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="1" />
                 </FieldShell>
               </div>
             </div>
@@ -3621,8 +3624,8 @@ function AccountManagement({
                   <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Contract</p>
-                      <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700" onClick={() => setCoAvailable(String(suggestedCoDays))}>
-                        Use {suggestedCoDays} CO
+                      <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700" onClick={() => setCoAvailable(String(roundedSuggestedCoDays))}>
+                        Use {roundedSuggestedCoDays} CO
                       </button>
                     </div>
                     <div className="grid gap-2">
@@ -3630,7 +3633,7 @@ function AccountManagement({
                       <DateInput label="End date" value={endDate} onChange={updateEndDate} />
                       <label className="grid gap-1">
                         <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Available CO days</span>
-                        <input className="h-8 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="0.25" />
+                        <input className="h-8 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="1" />
                       </label>
                     </div>
                   </div>
@@ -3784,7 +3787,6 @@ function DateInput({ label, value, onChange }: { label: string; value: string; o
         onChange={(event) => onChange(event.target.value)}
         type="date"
       />
-      {!value ? <span className="pointer-events-none absolute bottom-[9px] left-3 text-[13px] font-semibold text-stone-400">--/--/----</span> : null}
     </label>
   );
 }
