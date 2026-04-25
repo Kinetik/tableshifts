@@ -210,6 +210,8 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [creatingCompany, setCreatingCompany] = React.useState(false);
   const [newCompanyName, setNewCompanyName] = React.useState("");
   const [companyLogoUrls, setCompanyLogoUrls] = React.useState<Record<string, string>>({});
+  const companyMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const userMenuRef = React.useRef<HTMLDivElement | null>(null);
 
   const loadWorkspace = React.useCallback(async (user: User) => {
     if (!supabase) return;
@@ -293,6 +295,19 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   React.useEffect(() => {
     if (authUser) void loadWorkspace(authUser);
   }, [authUser, loadWorkspace]);
+
+  React.useEffect(() => {
+    if (!companyMenuOpen && !userMenuOpen) return;
+    function closeOpenMenus(event: MouseEvent | PointerEvent) {
+      const target = event.target as Node;
+      if (companyMenuRef.current?.contains(target) || userMenuRef.current?.contains(target)) return;
+      setCompanyMenuOpen(false);
+      setUserMenuOpen(false);
+      setCreatingCompany(false);
+    }
+    document.addEventListener("pointerdown", closeOpenMenus);
+    return () => document.removeEventListener("pointerdown", closeOpenMenus);
+  }, [companyMenuOpen, userMenuOpen]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -429,7 +444,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             <div className="mb-3 px-2 text-center">
               <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200">TableShifts</p>
             </div>
-            <div className="relative px-2">
+            <div ref={companyMenuRef} className="relative px-2">
               <button
                 type="button"
                 className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -535,7 +550,7 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
             </nav>
           </div>
 
-          <div className="relative px-2">
+          <div ref={userMenuRef} className="relative px-2">
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
@@ -858,8 +873,13 @@ function TimesheetTable({
   const compactColumns = ["Worked", "More"];
   const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left", "More", "Fill", "Clear"];
   const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
-  const fixedCompactWidth = 176 + totalsColumns.length * 68;
-  const expandedMinWidth = 188 + days.length * 38 + totalsColumns.length * 74;
+  const totalColumnWidth = (label: string) => {
+    if (!totalsExpanded) return 68;
+    if (["More", "Fill", "Clear"].includes(label)) return 58;
+    return 52;
+  };
+  const fixedCompactWidth = 176 + totalsColumns.reduce((sum, label) => sum + totalColumnWidth(label), 0);
+  const expandedMinWidth = 188 + days.length * 38 + totalsColumns.reduce((sum, label) => sum + totalColumnWidth(label), 0);
 
   React.useEffect(() => {
     if (!cellMenu) return;
@@ -883,8 +903,8 @@ function TimesheetTable({
     const rect = target.getBoundingClientRect();
     const menuWidth = 190;
     const menuHeight = 280;
-    const x = Math.min(rect.left + 8, window.innerWidth - menuWidth - 12);
-    const y = Math.min(rect.bottom + 6, window.innerHeight - menuHeight - 12);
+    const x = Math.min(rect.left + rect.width / 2, window.innerWidth - menuWidth - 12);
+    const y = Math.min(rect.top + rect.height / 2, window.innerHeight - menuHeight - 12);
     setCellMenu({
       x: Math.max(12, x),
       y: Math.max(12, y),
@@ -920,7 +940,7 @@ function TimesheetTable({
               />
             ))}
             {totalsColumns.map((label) => (
-              <col key={label} style={{ width: totalsExpanded ? "74px" : "68px" }} />
+              <col key={label} style={{ width: `${totalColumnWidth(label)}px` }} />
             ))}
           </colgroup>
           <thead>
@@ -933,7 +953,7 @@ function TimesheetTable({
                 </th>
               ))}
               {totalsColumns.map((label) => (
-                <th key={label} className="border-l border-stone-200 px-1 py-2 text-center font-black">
+                <th key={label} className="border-l border-stone-200 px-0.5 py-2 text-center font-black">
                   {label === "More" && totalsExpanded ? "Less" : label}
                 </th>
               ))}
@@ -967,19 +987,19 @@ function TimesheetTable({
                       }}
                     />
                   ))}
-                  <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
+                  <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.worked)}h</td>
                   {totalsExpanded ? (
                     <>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.expected)}h</td>
-                      <td className={cn("border-l border-stone-200 px-1 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.expected)}h</td>
+                      <td className={cn("border-l border-stone-200 px-0.5 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
                         {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
                       </td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(totals.overtime)}h</td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.vacationDays}d</td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.medicalDays}d</td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.specialEventDays}d</td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{totals.absenceDays}d</td>
-                      <td className="border-l border-stone-200 px-1 text-center font-black">{formatNumber(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.overtime)}h</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.vacationDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.medicalDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.specialEventDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.absenceDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))}d</td>
                     </>
                   ) : null}
                   <td className="border-l border-stone-200 px-1 text-center">
@@ -1694,7 +1714,7 @@ function Charts({
             </div>
           </CardHeader>
           <CardContent>
-            <ChartContainer config={dailyChartConfig} className="h-[245px] w-full">
+            <ChartContainer config={dailyChartConfig} className="h-[285px] w-full">
               <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 12, bottom: 4 }}>
                 {dailyData
                   .filter((day) => Number(day.delta) !== 0 && Number(day.expected) > 0)
@@ -1779,8 +1799,8 @@ function Charts({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
-        <Card>
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
+        <Card className="h-fit">
           <CardHeader>
             <CardTitle>Department Balance</CardTitle>
             <CardDescription>Worked versus norm, sorted by highest absolute variance.</CardDescription>
@@ -1813,7 +1833,7 @@ function Charts({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="h-fit">
           <CardHeader>
             <CardTitle>Variance Signals</CardTitle>
             <CardDescription>Days worth checking before payroll close.</CardDescription>
@@ -1827,14 +1847,14 @@ function Charts({
               <span>Over-norm days</span>
               <span>{overDays}</span>
             </div>
-            <div className="grid gap-1 rounded-md bg-stone-50 px-3 py-2">
+            <div className="flex items-center justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
               <span className="text-stone-500">Weakest day</span>
-              <span>{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
+              <span className="whitespace-nowrap">{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="h-fit">
           <CardHeader>
             <CardTitle>Exception Ranking</CardTitle>
             <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
