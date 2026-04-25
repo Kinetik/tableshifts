@@ -37,6 +37,7 @@ import {
   XAxis,
   YAxis
 } from "recharts";
+import * as XLSX from "xlsx";
 import { Toaster, toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1252,50 +1253,60 @@ function IndividualTableShifts({
     toast.success("Public holidays applied.");
   }
 
-  function importCsv(file: File | null) {
+  function clearHolidays() {
+    if (!table.holidays.length) {
+      toast.message("No public holidays to clear.");
+      return;
+    }
+    save({ ...table, holidays: [] });
+    toast.success("Public holidays cleared.");
+  }
+
+  function importEmployeeFile(file: File | null) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
-      const rows = parseCsv(String(reader.result || ""));
-      const [header = [], ...body] = rows;
-      const normalized = header.map((item) => item.trim().toLowerCase());
-      const index = (name: string) => normalized.indexOf(name.toLowerCase());
-      const nextRows = body
-        .map((line) => ({
-          id: makeIndividualId("row"),
-          name: line[index("Employee")] || line[index("Name")] || "",
-          company: line[index("Company")] || "",
-          department: line[index("Department")] || "",
-          identificationNumber: line[index("Identification Number")] || line[index("ID")] || "",
-          position: line[index("Position")] || ""
-        }))
-        .filter((row) => row.name.trim());
-      if (nextRows.length) {
-        save({ ...table, rows: [...table.rows, ...nextRows] });
-        toast.success(`${nextRows.length} employees imported.`);
-      } else {
-        toast.warning("No employees found in that CSV.");
+      try {
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        const rows = isExcel
+          ? parseEmployeeWorkbook(reader.result as ArrayBuffer)
+          : parseCsv(String(reader.result || ""));
+        const nextRows = individualRowsFromMatrix(rows);
+        if (nextRows.length) {
+          save({ ...table, rows: [...table.rows, ...nextRows] });
+          toast.success(`${nextRows.length} employees imported.`);
+        } else {
+          toast.warning("No employees found in that file.");
+        }
+      } catch {
+        toast.error("Could not import that employee file.");
       }
     };
-    reader.readAsText(file);
+    if (/\.(xlsx|xls)$/i.test(file.name)) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
   }
 
   return (
     <TooltipProvider delayDuration={250}>
-      <main className="min-h-screen overflow-x-hidden bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+      <main className="h-screen overflow-hidden bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
         <Toaster position="top-center" richColors closeButton />
-        <div className="mx-auto grid max-w-[calc(100vw-2rem)] gap-4">
+        <div className="mx-auto grid h-full max-w-[calc(100vw-2rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-4">
         <header className="grid min-w-0 gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(240px,340px)_minmax(320px,1fr)_minmax(240px,340px)] lg:items-stretch">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
             <h1 className="text-4xl font-black tracking-tight">Individual TableShifts</h1>
           </div>
           <div className="grid min-w-0 gap-2 rounded-xl border border-emerald-900/10 bg-white/70 p-3 shadow-sm">
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
               <IndividualMiniKpi label="People" value={String(headerStats.people)} />
               <IndividualMiniKpi label="Worked" value={`${formatNumber(headerStats.worked)}h`} />
+              <IndividualMiniKpi label="Norm" value={`${formatNumber(headerStats.norm)}h`} />
               <IndividualMiniKpi label="Diff" value={`${headerStats.diff > 0 ? "+" : ""}${formatNumber(headerStats.diff)}h`} accent={headerStats.diff < 0 ? "text-rose-700" : "text-emerald-700"} />
-              <IndividualMiniKpi label="Leave" value={`${headerStats.leaveDays}d`} />
+              <IndividualMiniKpi label="OT" value={`${formatNumber(headerStats.ot)}h`} />
+              <IndividualMiniKpi label="CO" value={`${headerStats.co}d`} />
+              <IndividualMiniKpi label="CM" value={`${headerStats.cm}d`} />
+              <IndividualMiniKpi label="SE" value={`${headerStats.se}d`} />
+              <IndividualMiniKpi label="AB" value={`${headerStats.ab}d`} />
             </div>
             <IndividualDailyBars days={headerStats.daily} />
           </div>
@@ -1327,7 +1338,7 @@ function IndividualTableShifts({
               </NativeSelect>
             </FieldShell>
           </Card>
-          <Card className="grid gap-2 p-3 md:grid-cols-[auto_180px_90px_auto] md:items-end">
+          <Card className="grid gap-2 p-3 md:grid-cols-[auto_180px_90px_auto_auto] md:items-end">
             <p className="self-center text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">Public Holidays</p>
             <FieldShell label="Country">
               <NativeSelect value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
@@ -1337,13 +1348,14 @@ function IndividualTableShifts({
             <FieldShell label="Year">
               <Input className="h-8 text-xs font-semibold" value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
             </FieldShell>
-            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => void addPublicHolidays()}>Add Public Holidays</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => void addPublicHolidays()}>Add</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs text-rose-700 hover:bg-rose-50 hover:text-rose-800" onClick={clearHolidays}>Clear</Button>
           </Card>
-          <Card className="grid gap-2 p-3 md:grid-cols-[auto_auto] md:items-end">
+          <Card className="grid gap-2 p-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-end">
             <FieldShell label="Import Employees">
-              <Input className="h-8 text-xs file:mr-2 file:rounded file:border-0 file:bg-stone-100 file:px-2 file:py-1 file:text-xs file:font-bold" type="file" accept=".csv,text/csv" onChange={(event) => importCsv(event.target.files?.[0] || null)} />
+              <Input className="h-8 text-xs file:mr-2 file:rounded file:border-0 file:bg-stone-100 file:px-2 file:py-1 file:text-xs file:font-bold" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)} />
             </FieldShell>
-            <Button variant="outline" className="h-8 px-3 text-xs" onClick={downloadIndividualTemplate}>Import Template</Button>
+            <Button variant="outline" className="h-8 whitespace-nowrap px-3 text-xs" onClick={downloadIndividualTemplate}>Download Template</Button>
           </Card>
           <Button
             className="h-full min-h-12 px-5"
@@ -1357,8 +1369,8 @@ function IndividualTableShifts({
         </div>
         {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
 
-        <Card className="overflow-hidden">
-          <div className={cn("max-h-[calc(100vh-280px)]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
+        <Card className="min-h-0 overflow-hidden">
+          <div className={cn("h-full min-h-[96px]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
               <table
                 className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
                 style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
@@ -1500,15 +1512,16 @@ function IndividualTableShifts({
 
 function IndividualMiniKpi({ label, value, accent = "text-stone-950" }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="rounded-lg border border-emerald-900/10 bg-white px-2 py-1.5 shadow-sm">
-      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-stone-500">{label}</p>
-      <p className={cn("text-sm font-black leading-tight", accent)}>{value}</p>
+    <div className="min-w-0 rounded-md border border-emerald-900/10 bg-white px-1.5 py-0.5 shadow-sm">
+      <p className="truncate text-[8px] font-black uppercase tracking-[0.12em] text-stone-500">{label}</p>
+      <p className={cn("text-[13px] font-black leading-tight", accent)}>{value}</p>
     </div>
   );
 }
 
 function IndividualDailyBars({ days }: { days: Array<{ day: number; worked: number; variance: number; strength: "weak" | "strong" | "normal" }> }) {
   const max = Math.max(1, ...days.map((day) => day.worked));
+  const hasWorked = days.some((day) => day.worked > 0);
   return (
     <div className="flex h-9 items-end gap-1 rounded-lg border border-emerald-900/10 bg-stone-50/80 px-2 py-1.5">
       {days.length ? days.map((day) => (
@@ -1517,7 +1530,7 @@ function IndividualDailyBars({ days }: { days: Array<{ day: number; worked: numb
             <div
               className={cn(
                 "min-h-1 flex-1 rounded-t-sm",
-                day.strength === "weak" ? "bg-rose-500" : day.strength === "strong" ? "bg-emerald-600" : "bg-emerald-200"
+                !hasWorked ? "bg-stone-200" : day.strength === "weak" ? "bg-rose-500" : day.strength === "strong" ? "bg-emerald-600" : "bg-emerald-200"
               )}
               style={{ height: `${Math.max(8, (day.worked / max) * 28)}px` }}
             />
@@ -1539,10 +1552,14 @@ function individualHeaderStats(table: IndividualTableData) {
       const rowTotals = individualTotals(row, table);
       sum.worked += rowTotals.worked;
       sum.norm += rowTotals.norm;
-      sum.leaveDays += rowTotals.co + rowTotals.cm + rowTotals.se + rowTotals.ab;
+      sum.ot += rowTotals.ot;
+      sum.co += rowTotals.co;
+      sum.cm += rowTotals.cm;
+      sum.se += rowTotals.se;
+      sum.ab += rowTotals.ab;
       return sum;
     },
-    { worked: 0, norm: 0, leaveDays: 0 }
+    { worked: 0, norm: 0, ot: 0, co: 0, cm: 0, se: 0, ab: 0 }
   );
   const daily = days
     .filter((day) => isIndividualWorkDay(day, holidaysByDate))
@@ -1554,16 +1571,23 @@ function individualHeaderStats(table: IndividualTableData) {
       const norm = table.rows.length * 8;
       return { day: day.day, worked, variance: worked - norm, strength: "normal" as const };
     });
-  const weakest = daily.reduce((candidate, day) => day.variance < candidate.variance ? day : candidate, { day: 0, worked: 0, variance: Infinity, strength: "normal" as const });
-  const strongest = daily.reduce((candidate, day) => day.variance > candidate.variance ? day : candidate, { day: 0, worked: 0, variance: -Infinity, strength: "normal" as const });
+  const activeDays = daily.filter((day) => day.worked > 0);
+  const minWorked = activeDays.length >= 2 ? Math.min(...activeDays.map((day) => day.worked)) : null;
+  const maxWorked = activeDays.length >= 2 ? Math.max(...activeDays.map((day) => day.worked)) : null;
+  const hasSpread = minWorked !== null && maxWorked !== null && minWorked !== maxWorked;
   return {
     people: table.rows.length,
     worked: totals.worked,
+    norm: totals.norm,
     diff: totals.worked - totals.norm,
-    leaveDays: totals.leaveDays,
+    ot: totals.ot,
+    co: totals.co,
+    cm: totals.cm,
+    se: totals.se,
+    ab: totals.ab,
     daily: daily.map((day) => ({
       ...day,
-      strength: day.day === weakest.day ? "weak" as const : day.day === strongest.day ? "strong" as const : "normal" as const
+      strength: hasSpread && day.worked === minWorked ? "weak" as const : hasSpread && day.worked === maxWorked ? "strong" as const : "normal" as const
     }))
   };
 }
@@ -5004,7 +5028,7 @@ function individualCellClass(type: string) {
 }
 
 function downloadIndividualTemplate() {
-  downloadCsv("tableshifts-import-template.csv", [
+  downloadXlsx("tableshifts-import-template.xlsx", "Employees", [
     ["Employee", "Company", "Department", "Identification Number", "Position"],
     ["", "", "", "", ""]
   ]);
@@ -5051,6 +5075,52 @@ function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function downloadXlsx(filename: string, sheetName: string, rows: Array<Array<string | number>>) {
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  const output = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  const blob = new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseEmployeeWorkbook(buffer: ArrayBuffer) {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return [];
+  const sheet = workbook.Sheets[firstSheetName];
+  return XLSX.utils
+    .sheet_to_json<Array<string | number | boolean | null>>(sheet, { header: 1, defval: "" })
+    .map((row) => row.map((cell) => String(cell ?? "")));
+}
+
+function individualRowsFromMatrix(rows: string[][]) {
+  const [header = [], ...body] = rows;
+  const normalized = header.map((cell) => cell.trim().toLowerCase());
+  const columnIndex = (name: string) => normalized.indexOf(name.toLowerCase());
+  const employeeIndex = columnIndex("employee");
+  const companyIndex = columnIndex("company");
+  const departmentIndex = columnIndex("department");
+  const idIndex = columnIndex("identification number");
+  const positionIndex = columnIndex("position");
+
+  return body
+    .map((row) => ({
+      id: makeIndividualId("row"),
+      name: row[employeeIndex] || "",
+      company: companyIndex >= 0 ? row[companyIndex] || "" : "",
+      department: departmentIndex >= 0 ? row[departmentIndex] || "" : "",
+      identificationNumber: idIndex >= 0 ? row[idIndex] || "" : "",
+      position: positionIndex >= 0 ? row[positionIndex] || "" : ""
+    }))
+    .filter((row) => row.name.trim());
 }
 
 function parseCsv(text: string) {
