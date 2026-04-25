@@ -50,6 +50,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -1281,10 +1282,10 @@ function IndividualTableShifts({
 
   return (
     <TooltipProvider delayDuration={250}>
-      <main className="min-h-screen bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+      <main className="min-h-screen overflow-x-hidden bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
         <Toaster position="top-center" richColors closeButton />
-        <div className="mx-auto grid max-w-[1800px] gap-4">
-        <header className="grid gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(250px,360px)_minmax(360px,1fr)_minmax(260px,330px)] lg:items-stretch">
+        <div className="mx-auto grid max-w-[calc(100vw-2rem)] gap-4">
+        <header className="grid min-w-0 gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(240px,340px)_minmax(320px,1fr)_minmax(240px,340px)] lg:items-stretch">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
             <h1 className="text-4xl font-black tracking-tight">Individual TableShifts</h1>
@@ -1298,10 +1299,11 @@ function IndividualTableShifts({
             </div>
             <IndividualDailyBars days={headerStats.daily} />
           </div>
-          <div className="grid min-w-0 content-start justify-items-end gap-2">
-            <div className="flex gap-2">
+          <div className="grid min-w-0 content-start justify-items-stretch gap-2">
+            <div className="flex min-w-0 flex-wrap justify-end gap-2">
               <Button
                 variant="outline"
+                className="h-9 shrink-0 px-3 text-xs"
                 onClick={() => {
                   void navigator.clipboard?.writeText(window.location.href);
                   toast.success("Individual table link copied.");
@@ -1309,10 +1311,10 @@ function IndividualTableShifts({
               >
                 Copy Link
               </Button>
-            <Button onClick={onBack}>Back to Login</Button>
+            <Button className="h-9 shrink-0 px-3 text-xs" onClick={onBack}>Back to Login</Button>
             </div>
-            <div className="max-w-full rounded-lg border border-emerald-900/10 bg-white/70 px-3 py-2 text-right text-[10px] font-semibold text-stone-500 shadow-sm">
-              <p className="truncate">{typeof window === "undefined" ? "" : window.location.href}</p>
+            <div className="min-w-0 rounded-lg border border-emerald-900/10 bg-white/70 px-3 py-2 text-left text-[10px] font-semibold leading-snug text-stone-500 shadow-sm">
+              <p className="break-all">{typeof window === "undefined" ? "" : window.location.href}</p>
             </div>
           </div>
         </header>
@@ -1695,20 +1697,22 @@ function IndividualCellMenu({
           style={{ left, top }}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44 overflow-visible border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
         <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("absence")}>Absence</DropdownMenuItem>
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="text-xs font-bold">Special Event</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent className="min-w-48 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
-            {SPECIAL_EVENT_REASONS.map((reason) => (
-              <DropdownMenuItem className="text-xs font-bold" key={reason} onClick={() => onApply("special_event", reason)}>
-                {reason}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="z-[90] min-w-48 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+              {SPECIAL_EVENT_REASONS.map((reason) => (
+                <DropdownMenuItem className="text-xs font-bold" key={reason} onClick={() => onApply("special_event", reason)}>
+                  {reason}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
         </DropdownMenuSub>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="text-xs font-bold text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
