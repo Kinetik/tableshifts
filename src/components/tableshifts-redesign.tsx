@@ -46,6 +46,16 @@ import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -53,6 +63,7 @@ import {
   SheetTitle
 } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   ENTRY_LABELS,
@@ -1146,12 +1157,28 @@ function IndividualTableShifts({
   const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
   const [holidayDraft, setHolidayDraft] = React.useState<IndividualHoliday[]>([]);
   const [message, setMessage] = React.useState("");
+  const [employeeColumnWidth, setEmployeeColumnWidth] = React.useState(190);
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-  const totalsColumns = totalsExpanded ? ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "More", "Fill", "Clear"] : ["Worked", "More"];
-  const totalWidth = (label: string) => ["More", "Fill", "Clear"].includes(label) ? 58 : 54;
-  const fixedWidth = 202 + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
-  const minWidth = totalsExpanded || metaExpanded ? 230 + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+  const totalsColumns = totalsExpanded ? ["Worked", "More", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "Fill", "Clear"] : ["Worked", "More"];
+  const totalWidth = (label: string) => ["More", "Fill", "Clear"].includes(label) ? 56 : 52;
+  const fixedWidth = employeeColumnWidth + 52 + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
+  const minWidth = totalsExpanded || metaExpanded ? employeeColumnWidth + 52 + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+
+  function startEmployeeResize(event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = employeeColumnWidth;
+    function resize(moveEvent: PointerEvent) {
+      setEmployeeColumnWidth(Math.max(150, Math.min(340, startWidth + moveEvent.clientX - startX)));
+    }
+    function stopResize() {
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stopResize);
+    }
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stopResize);
+  }
 
   function save(next: IndividualTableData) {
     onSave(next);
@@ -1284,12 +1311,13 @@ function IndividualTableShifts({
 
         <Card className="overflow-hidden">
           <div className={cn("max-h-[calc(100vh-280px)]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
-            <table
-              className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
-              style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
-            >
-              <colgroup>
-                <col style={{ width: metaExpanded || totalsExpanded ? "190px" : "160px" }} />
+            <TooltipProvider delayDuration={250}>
+              <table
+                className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
+                style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
+              >
+                <colgroup>
+                <col style={{ width: `${employeeColumnWidth}px` }} />
                 <col style={{ width: "42px" }} />
                 {metaExpanded ? (
                   <>
@@ -1306,9 +1334,19 @@ function IndividualTableShifts({
               </colgroup>
               <thead>
                 <tr className="border-b bg-stone-50">
-                  <th className="px-2 py-2 text-left font-black">Employee</th>
-                  <th className="border-l px-1 py-2 text-center">
-                    <Button size="sm" className="h-7 rounded-md bg-emerald-700 px-2 text-xs" onClick={() => setMetaExpanded((value) => !value)}>
+                  <th className="sticky left-0 z-30 border-r bg-stone-50 px-2 py-2 text-left font-black shadow-[8px_0_14px_-14px_rgba(0,0,0,0.35)]">
+                    <div className="relative pr-2">
+                      Employee
+                      <button
+                        type="button"
+                        aria-label="Resize employee column"
+                        className="absolute -right-2 top-1/2 h-7 w-2 -translate-y-1/2 cursor-col-resize rounded-full bg-transparent hover:bg-emerald-700/20"
+                        onPointerDown={startEmployeeResize}
+                      />
+                    </div>
+                  </th>
+                  <th className="border-l p-1 text-center">
+                    <Button size="sm" className="h-7 w-full rounded-md px-1 text-[10px]" onClick={() => setMetaExpanded((value) => !value)}>
                       {metaExpanded ? "Less" : "More"}
                     </Button>
                   </th>
@@ -1319,8 +1357,14 @@ function IndividualTableShifts({
                       <span className="text-[10px] font-bold text-stone-500">{day.weekday.slice(0, 3)}</span>
                     </th>
                   ))}
-                  {totalsColumns.map((label) => (
-                    <th key={label} className="border-l px-1 py-2 text-center font-black">{label === "More" && totalsExpanded ? "Less" : label}</th>
+                  {totalsColumns.map((label) => label === "More" ? (
+                    <th key={label} className="border-l p-1 text-center font-black">
+                      <Button size="sm" className="h-7 w-full rounded-md px-1 text-[10px]" onClick={() => setTotalsExpanded((value) => !value)}>
+                        {totalsExpanded ? "Less" : "More"}
+                      </Button>
+                    </th>
+                  ) : (
+                    <th key={label} className="border-l px-1 py-2 text-center font-black">{label}</th>
                   ))}
                 </tr>
               </thead>
@@ -1329,7 +1373,7 @@ function IndividualTableShifts({
                   const totals = individualTotals(row, table);
                   return (
                     <tr key={row.id} className="h-11 border-b">
-                      <td className="px-2">
+                      <td className="sticky left-0 z-20 border-r bg-white px-2 shadow-[8px_0_14px_-14px_rgba(0,0,0,0.35)]">
                         <input
                           className="h-8 w-full bg-transparent text-sm font-black outline-none placeholder:text-stone-400"
                           value={row.name}
@@ -1363,6 +1407,7 @@ function IndividualTableShifts({
                       <td className="border-l px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
                       {totalsExpanded ? (
                         <>
+                          <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
                           <td className="border-l px-1 text-center font-black">{formatNumber(totals.norm)}h</td>
                           <td className={cn("border-l px-1 text-center font-black", totals.diff < 0 ? "text-rose-700" : "text-emerald-700")}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</td>
                           <td className="border-l px-1 text-center font-black">{formatNumber(totals.ot)}h</td>
@@ -1371,12 +1416,9 @@ function IndividualTableShifts({
                           <td className="border-l px-1 text-center font-black">{totals.se}d</td>
                           <td className="border-l px-1 text-center font-black">{totals.ab}d</td>
                         </>
-                      ) : null}
-                      <td className="border-l px-1 text-center">
-                        <Button size="sm" className="h-7 rounded-md bg-amber-600 px-2 text-xs hover:bg-amber-700" onClick={() => setTotalsExpanded((value) => !value)}>
-                          {totalsExpanded ? "Less" : "More"}
-                        </Button>
-                      </td>
+                      ) : (
+                        <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
+                      )}
                       {totalsExpanded ? (
                         <>
                           <td className="border-l px-1 text-center"><Button size="sm" variant="outline" className="h-7 px-2 text-xs text-emerald-700" onClick={() => fillRow(row)}>Fill</Button></td>
@@ -1387,7 +1429,8 @@ function IndividualTableShifts({
                   );
                 })}
               </tbody>
-            </table>
+              </table>
+            </TooltipProvider>
           </div>
         </Card>
 
@@ -1437,19 +1480,6 @@ function IndividualDayCell({
   const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
   const [draft, setDraft] = React.useState(value);
   React.useEffect(() => setDraft(value), [value]);
-  React.useEffect(() => {
-    if (!menu) return;
-    const close = () => setMenu(null);
-    window.addEventListener("click", close);
-    window.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [menu]);
-
   function commit(next = draft) {
     const trimmed = next.trim();
     if (!trimmed) {
@@ -1462,85 +1492,111 @@ function IndividualDayCell({
   }
 
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  const tooltip = individualTooltipText(entry, holiday, workDay);
   return (
     <td
       className={cn("border-l p-0 text-center", individualCellClass(type))}
-      title={holiday?.name || ""}
       onContextMenu={(event) => {
         event.preventDefault();
+        event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
         setMenu({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
       }}
     >
-      <div className="flex h-11 items-center justify-center">
-        {numeric ? (
-          <label className="flex items-center justify-center gap-0.5">
-            <input
-              className="w-[2ch] bg-transparent text-center text-sm font-black outline-none"
-              value={draft}
-              placeholder={holiday ? "H" : ""}
-              inputMode="numeric"
-              onChange={(event) => {
-                const digits = event.target.value.replace(/\D/g, "");
-                setDraft(digits ? String(Math.min(24, Number(digits))) : "");
-              }}
-              onBlur={() => commit()}
-              onKeyDown={(event) => {
-                if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault();
-                if (event.key === "Enter") event.currentTarget.blur();
-              }}
-            />
-            {draft ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
-          </label>
-        ) : (
-          <div className="leading-tight">
-            <span className="block text-[11px] font-black">{individualEntryCode(entry?.type || "holiday")}</span>
-            {["vacation", "medical", "special_event"].includes(entry?.type || "") ? <span className="text-[10px] text-stone-500">day</span> : null}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex h-11 items-center justify-center">
+            {numeric ? (
+              <label className="flex items-center justify-center gap-0.5">
+                <input
+                  className="w-[2ch] bg-transparent text-center text-sm font-black outline-none"
+                  value={draft}
+                  placeholder={holiday ? "H" : ""}
+                  inputMode="numeric"
+                  onChange={(event) => {
+                    const digits = event.target.value.replace(/\D/g, "");
+                    setDraft(digits ? String(Math.min(24, Number(digits))) : "");
+                  }}
+                  onBlur={() => commit()}
+                  onKeyDown={(event) => {
+                    if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault();
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+                {draft ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
+              </label>
+            ) : (
+              <div className="leading-tight">
+                <span className="block text-[11px] font-black">{individualEntryCode(entry?.type || "holiday")}</span>
+                {["vacation", "medical", "special_event"].includes(entry?.type || "") ? <span className="text-[10px] text-stone-500">day</span> : null}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-      {menu ? (
-        <IndividualCellMenu
-          x={menu.x}
-          y={menu.y}
-          onApply={(type, reason) => {
-            setMenu(null);
-            if (type === "clear") onSetEntry(row.id, day.iso, null);
-            else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: 8 });
-            else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
-          }}
-        />
-      ) : null}
+        </TooltipTrigger>
+        <TooltipContent>{tooltip}</TooltipContent>
+      </Tooltip>
+      <IndividualCellMenu
+        open={Boolean(menu)}
+        x={menu?.x || 0}
+        y={menu?.y || 0}
+        onOpenChange={(open) => {
+          if (!open) setMenu(null);
+        }}
+        onApply={(type, reason) => {
+          setMenu(null);
+          if (type === "clear") onSetEntry(row.id, day.iso, null);
+          else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: 8 });
+          else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
+        }}
+      />
     </td>
   );
 }
 
-function IndividualCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (type: string, reason?: string) => void }) {
-  return createPortal(
-    <div
-      className="fixed z-[90] grid min-w-36 rounded-md border bg-white p-1 text-xs font-semibold shadow-xl"
-      style={{ left: Math.max(8, Math.min(x, window.innerWidth - 180)), top: Math.max(8, Math.min(y, window.innerHeight - 260)) }}
-      onClick={(event) => event.stopPropagation()}
-    >
-      {[
-        ["normal", "Normal shift"],
-        ["vacation", "Vacation CO"],
-        ["medical", "Medical CM"],
-        ["absence", "Absence"]
-      ].map(([type, label]) => (
-        <button key={type} className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply(type)}>{label}</button>
-      ))}
-      <div className="group relative">
-        <button className="flex w-full justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
-          Special Event <span>›</span>
-        </button>
-        <div className="absolute left-full top-0 hidden min-w-44 rounded-md border bg-white p-1 shadow-xl group-hover:grid">
-          {SPECIAL_EVENT_REASONS.map((reason) => <button key={reason} className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply("special_event", reason)}>{reason}</button>)}
-        </div>
-      </div>
-      <button className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50" onClick={() => onApply("clear")}>Clear</button>
-    </div>,
-    document.body
+function IndividualCellMenu({
+  open,
+  x,
+  y,
+  onOpenChange,
+  onApply
+}: {
+  open: boolean;
+  x: number;
+  y: number;
+  onOpenChange: (open: boolean) => void;
+  onApply: (type: string, reason?: string) => void;
+}) {
+  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 220));
+  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 260));
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open cell actions"
+          className="fixed z-[80] size-1 opacity-0"
+          style={{ left, top }}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-44">
+        <DropdownMenuItem onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onApply("absence")}>Absence</DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Special Event</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            {SPECIAL_EVENT_REASONS.map((reason) => (
+              <DropdownMenuItem key={reason} onClick={() => onApply("special_event", reason)}>
+                {reason}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -4802,6 +4858,17 @@ function individualEntryCode(type: string) {
   if (type === "holiday") return "H";
   if (type === "overtime") return "OT";
   return "N";
+}
+
+function individualTooltipText(entry: IndividualEntry | undefined, holiday: IndividualHoliday | undefined, workDay: boolean) {
+  if (entry?.type === "normal") return `Normal shift: ${formatNumber(entry.hours)}h`;
+  if (entry?.type === "overtime") return `Overtime: ${formatNumber(Math.max(0, Number(entry.hours || 0) - 8))}h over normal shift of 8h`;
+  if (entry?.type === "vacation") return "Vacation day (CO)";
+  if (entry?.type === "medical") return "Medical leave day (CM)";
+  if (entry?.type === "special_event") return entry.reason ? `Special event: ${entry.reason}` : "Special event";
+  if (entry?.type === "absence") return "Absence";
+  if (holiday) return `Holiday: ${holiday.name}`;
+  return workDay ? "Expected working day" : "Non-working day";
 }
 
 function individualCellClass(type: string) {
