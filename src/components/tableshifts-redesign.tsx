@@ -1,0 +1,5204 @@
+"use client";
+
+import * as React from "react";
+import { createPortal } from "react-dom";
+import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import {
+  BarChart3,
+  Bell,
+  Building2,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  ClipboardCheck,
+  Download,
+  Eye,
+  Image as ImageIcon,
+  LayoutDashboard,
+  LogOut,
+  Palette,
+  Plus,
+  Save,
+  Settings2,
+  ShieldCheck,
+  Trash2,
+  X,
+  UsersRound
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Cell,
+  PolarAngleAxis,
+  RadialBar,
+  RadialBarChart,
+  ReferenceArea,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis
+} from "recharts";
+import * as XLSX from "xlsx";
+import { Toaster, toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuPortal,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from "@/components/ui/sheet";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import {
+  ENTRY_LABELS,
+  ROLES,
+  type CompanyRow,
+  type DepartmentRow,
+  type EntryRow,
+  type HolidayRow,
+  type LeaveRequestRow,
+  type PayrollAccessRow,
+  type ProfileRow,
+  type Workspace,
+  accessibleCompanies,
+  canApproveLeave,
+  canCreateLeaveRequest,
+  canEditEmployee,
+  currentMonth,
+  daysInMonth,
+  departmentFor,
+  entryFor,
+  formatNumber,
+  filteredEmployees,
+  generatedLeaveDocumentHtml,
+  holidayForEmployee,
+  isExpectedWorkDay,
+  monthOptions,
+  monthRange,
+  normalHours,
+  totalsFor,
+  visibleLeaveRequests
+} from "@/lib/tableshifts";
+
+type Props = {
+  supabaseUrl: string;
+  supabaseAnonKey: string;
+};
+
+const nav = [
+  { value: "timesheet", label: "Timesheet", icon: LayoutDashboard },
+  { value: "leave", label: "Leave Requests", icon: ClipboardCheck },
+  { value: "charts", label: "Charts", icon: BarChart3 },
+  { value: "companies", label: "Management", icon: Building2, setupOnly: true },
+  { value: "admins", label: "Admins", icon: ShieldCheck, setupOnly: true },
+  { value: "settings", label: "Settings", icon: Settings2, setupOnly: true }
+];
+
+const ENTRY_COLOR_KEYS = [
+  ["vacation", "CO"],
+  ["medical", "CM"],
+  ["overtime", "OT"],
+  ["absence", "AB"],
+  ["special_event", "SE"]
+] as const;
+
+const ENTRY_COLOR_LABELS: Record<string, string> = {
+  vacation: "Vacation",
+  medical: "Medical",
+  overtime: "Overtime",
+  absence: "Absence",
+  special_event: "Special Event"
+};
+
+const DEFAULT_ENTRY_COLORS: Record<string, string> = {
+  vacation: "#dcfce7",
+  medical: "#ffe4e6",
+  overtime: "#fef3c7",
+  absence: "#1c1917",
+  special_event: "#e7e5e4"
+};
+
+const SPECIAL_EVENT_REASONS = [
+  "Family death",
+  "Child birth",
+  "Marriage",
+  "Blood donation",
+  "Moving house",
+  "Jury duty",
+  "Civic duty",
+  "Other special event"
+];
+
+const COUNTRY_OPTIONS = [
+  ["RO", "Romania"],
+  ["AT", "Austria"],
+  ["DE", "Germany"],
+  ["FR", "France"],
+  ["GB", "United Kingdom"],
+  ["HU", "Hungary"],
+  ["IT", "Italy"],
+  ["PL", "Poland"],
+  ["US", "United States"]
+] as const;
+
+type IndividualEntry = {
+  type: string;
+  hours: number;
+  reason?: string;
+};
+
+type IndividualRow = {
+  id: string;
+  name: string;
+  company: string;
+  department: string;
+  identificationNumber: string;
+  position: string;
+};
+
+type IndividualHoliday = {
+  date: string;
+  name: string;
+  countryCode?: string;
+};
+
+type IndividualTableData = {
+  id: string;
+  month: string;
+  normalHours: number;
+  rows: IndividualRow[];
+  entries: Record<string, Record<string, IndividualEntry>>;
+  holidays: IndividualHoliday[];
+};
+
+function FieldShell({
+  label,
+  children,
+  className
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cn("grid min-w-0 gap-1.5", className)}>
+      <Label className="text-[10px] font-black uppercase tracking-[0.16em] text-muted-foreground">{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function NativeSelect({
+  className,
+  children,
+  ...props
+}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={cn(
+        "h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs font-semibold text-foreground shadow-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </select>
+  );
+}
+
+export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
+  const supabase = React.useMemo<SupabaseClient | null>(() => {
+    if (!supabaseUrl || !supabaseAnonKey) return null;
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true
+      }
+    });
+  }, [supabaseUrl, supabaseAnonKey]);
+
+  const [authUser, setAuthUser] = React.useState<User | null>(null);
+  const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
+  const [activeTab, setActiveTab] = React.useState("timesheet");
+  const [activeCompanyId, setActiveCompanyId] = React.useState("");
+  const [departmentFilter, setDepartmentFilter] = React.useState("all");
+  const [teamFilter, setTeamFilter] = React.useState("all");
+  const [month, setMonth] = React.useState(currentMonth());
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [authMode, setAuthMode] = React.useState<"login" | "create-admin">("login");
+  const [adminName, setAdminName] = React.useState("");
+  const [adminEmail, setAdminEmail] = React.useState("");
+  const [adminPassword, setAdminPassword] = React.useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = React.useState("");
+  const [individualTable, setIndividualTable] = React.useState<IndividualTableData | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [message, setMessage] = React.useState("");
+  const [totalsExpanded, setTotalsExpanded] = React.useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = React.useState(false);
+  const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const [creatingCompany, setCreatingCompany] = React.useState(false);
+  const [newCompanyName, setNewCompanyName] = React.useState("");
+  const [companyLogoUrls, setCompanyLogoUrls] = React.useState<Record<string, string>>({});
+  const companyMenuRef = React.useRef<HTMLDivElement | null>(null);
+  const userMenuRef = React.useRef<HTMLDivElement | null>(null);
+
+  async function ensureAdminEnvironment(user: User) {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const response = await fetch("/api/create-admin-environment", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Admin Account"
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not create Admin environment.");
+    return result.profile as ProfileRow | null;
+  }
+
+  const loadWorkspace = React.useCallback(async (user: User) => {
+    if (!supabase) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      let profile = await waitForProfile(supabase, user.id);
+      const wantsOauthAdmin = typeof window !== "undefined" && window.localStorage.getItem("tableshifts.oauth.createAdmin") === "1";
+      if (!profile?.environment_id && wantsOauthAdmin) {
+        profile = await ensureAdminEnvironment(user);
+        window.localStorage.removeItem("tableshifts.oauth.createAdmin");
+      }
+      if (!profile?.environment_id) {
+        setWorkspace(null);
+        setMessage("This account exists, but no TableShifts profile/environment is attached yet.");
+        return;
+      }
+
+      const environmentId = profile.environment_id;
+      const range = monthRange(month);
+      const [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult, entriesResult, leaveResult] = await Promise.all([
+        supabase.from("admin_environments").select("owner_user_id").eq("id", environmentId).maybeSingle(),
+        supabase.from("profiles").select("*").eq("environment_id", environmentId),
+        supabase.from("companies").select("*").eq("environment_id", environmentId),
+        supabase.from("departments").select("*").eq("environment_id", environmentId),
+        supabase.from("payroll_company_access").select("payroll_user_id, company_id").eq("environment_id", environmentId),
+        supabase.from("national_holidays").select("*").eq("environment_id", environmentId).gte("holiday_date", range.start).lte("holiday_date", range.end),
+        supabase.from("timesheet_entries").select("*").eq("environment_id", environmentId).gte("work_date", range.start).lte("work_date", range.end),
+        supabase.from("leave_requests").select("*").eq("environment_id", environmentId).order("created_at", { ascending: false })
+      ]);
+
+      const results = [environmentResult, profilesResult, companiesResult, departmentsResult, accessResult, holidaysResult, entriesResult, leaveResult];
+      const failed = results.find((result) => result.error);
+      if (failed?.error) throw failed.error;
+
+      const nextWorkspace: Workspace = {
+        ownerId: environmentResult.data?.owner_user_id || profile.id,
+        profile,
+        profiles: (profilesResult.data || []) as ProfileRow[],
+        companies: (companiesResult.data || []) as CompanyRow[],
+        departments: (departmentsResult.data || []) as DepartmentRow[],
+        access: (accessResult.data || []) as PayrollAccessRow[],
+        holidays: (holidaysResult.data || []) as HolidayRow[],
+        entries: (entriesResult.data || []) as EntryRow[],
+        leaveRequests: (leaveResult.data || []) as LeaveRequestRow[]
+      };
+      const companies = accessibleCompanies(nextWorkspace);
+      setWorkspace(nextWorkspace);
+      setActiveCompanyId((current) => companies.find((company) => company.id === current)?.id || companies[0]?.id || "");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load TableShifts data.");
+    } finally {
+      setLoading(false);
+    }
+  }, [month, supabase]);
+
+  React.useEffect(() => {
+    if (!supabase) {
+      setLoading(false);
+      setMessage("Supabase configuration is missing for this deployment.");
+      return;
+    }
+    let ignore = false;
+    supabase.auth.getSession().then(({ data }) => {
+      if (ignore) return;
+      const user = data.session?.user || null;
+      setAuthUser(user);
+      if (user) void loadWorkspace(user);
+      else setLoading(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      const user = session?.user || null;
+      setAuthUser(user);
+      if (user) void loadWorkspace(user);
+      else {
+        setWorkspace(null);
+        setLoading(false);
+      }
+    });
+    return () => {
+      ignore = true;
+      listener.subscription.unsubscribe();
+    };
+  }, [loadWorkspace, supabase]);
+
+  React.useEffect(() => {
+    if (authUser) void loadWorkspace(authUser);
+  }, [authUser, loadWorkspace]);
+
+  React.useEffect(() => {
+    if (!companyMenuOpen && !userMenuOpen) return;
+    function closeOpenMenus(event: MouseEvent | PointerEvent) {
+      const target = event.target as Node;
+      if (companyMenuRef.current?.contains(target) || userMenuRef.current?.contains(target)) return;
+      setCompanyMenuOpen(false);
+      setUserMenuOpen(false);
+      setCreatingCompany(false);
+    }
+    document.addEventListener("pointerdown", closeOpenMenus);
+    return () => document.removeEventListener("pointerdown", closeOpenMenus);
+  }, [companyMenuOpen, userMenuOpen]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadCompanyLogos() {
+      if (!supabase || !workspace) return;
+      const entries = await Promise.all(
+        workspace.companies.map(async (company) => {
+          if (!company.logo_path) return [company.id, ""] as const;
+          const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+          return [company.id, data?.signedUrl || ""] as const;
+        })
+      );
+      if (!cancelled) setCompanyLogoUrls(Object.fromEntries(entries));
+    }
+    void loadCompanyLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace]);
+
+  async function signIn(event: React.FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+    setLoading(true);
+    setMessage("");
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      setLoading(false);
+      setMessage(error.message);
+      return;
+    }
+    setAuthUser(data.user);
+    if (data.user) await loadWorkspace(data.user);
+  }
+
+  async function createAdminAccount(event: React.FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+    if (adminPassword !== adminPasswordConfirm) {
+      setMessage("The two passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    const { data, error } = await supabase.auth.signUp({
+      email: adminEmail,
+      password: adminPassword,
+      options: {
+        data: {
+          full_name: adminName,
+          account_type: "admin_account"
+        },
+        emailRedirectTo: typeof window === "undefined" ? undefined : `${window.location.origin}${window.location.pathname}`
+      }
+    });
+    setLoading(false);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setEmail(adminEmail);
+    setPassword("");
+    setAuthMode("login");
+    setMessage(data.session ? "Admin Account created. You can continue in TableShifts." : "Admin Account created. Confirm the email if Supabase asks, then sign in.");
+    if (data.user && data.session) {
+      setAuthUser(data.user);
+      await loadWorkspace(data.user);
+    }
+  }
+
+  async function saveIndividualTable(nextTable: IndividualTableData) {
+    setIndividualTable(nextTable);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(`tableshifts.individual.${nextTable.id}`, JSON.stringify(nextTable));
+    }
+    if (supabase) {
+      const { error } = await supabase.rpc("save_individual_table", {
+        token_value: nextTable.id,
+        data_value: nextTable
+      });
+      if (error) {
+        console.warn("Individual TableShifts Supabase save fallback:", error.message);
+      }
+    }
+  }
+
+  async function openIndividualTable(token?: string) {
+    const id = token || makeIndividualId();
+    let table: IndividualTableData | null = null;
+    if (supabase) {
+      const { data, error } = await supabase.rpc("get_individual_table", { token_value: id });
+      if (!error && data) table = migrateIndividualTable(data, id);
+      else if (error) console.warn("Individual TableShifts Supabase load fallback:", error.message);
+    }
+    if (!table && typeof window !== "undefined") {
+      table = migrateIndividualTable(window.localStorage.getItem(`tableshifts.individual.${id}`), id);
+    }
+    const nextTable = table || createIndividualTable(id);
+    setIndividualTable(nextTable);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("table", id);
+      window.history.replaceState(null, "", url.toString());
+    }
+    if (!table) await saveIndividualTable(nextTable);
+  }
+
+  React.useEffect(() => {
+    if (individualTable || typeof window === "undefined") return;
+    const token = new URLSearchParams(window.location.search).get("table");
+    if (token) void openIndividualTable(token);
+  }, [individualTable, supabase]);
+
+  function closeIndividualTable() {
+    setIndividualTable(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("table");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
+
+  async function signOut() {
+    if (!supabase) return;
+    await supabase.auth.signOut();
+    setAuthUser(null);
+    setWorkspace(null);
+    setPassword("");
+  }
+
+  async function createCompanyFromSidebar() {
+    if (!supabase || !workspace?.profile.environment_id || !newCompanyName.trim()) return;
+    const { data, error } = await supabase
+      .from("companies")
+      .insert({
+        environment_id: workspace.profile.environment_id,
+        name: newCompanyName.trim(),
+        created_by: workspace.profile.id
+      })
+      .select("*")
+      .single();
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setNewCompanyName("");
+    setCreatingCompany(false);
+    if (data?.id) setActiveCompanyId(data.id);
+    if (authUser) void loadWorkspace(authUser);
+  }
+
+  if (individualTable) {
+    return (
+      <IndividualTableShifts
+        table={individualTable}
+        onSave={saveIndividualTable}
+        onBack={closeIndividualTable}
+      />
+    );
+  }
+
+  if (!authUser || !workspace) {
+    return (
+      <LoginPanel
+        mode={authMode}
+        setMode={setAuthMode}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        adminName={adminName}
+        setAdminName={setAdminName}
+        adminEmail={adminEmail}
+        setAdminEmail={setAdminEmail}
+        adminPassword={adminPassword}
+        setAdminPassword={setAdminPassword}
+        adminPasswordConfirm={adminPasswordConfirm}
+        setAdminPasswordConfirm={setAdminPasswordConfirm}
+        loading={loading}
+        message={message}
+        onSignIn={signIn}
+        onCreateAdmin={createAdminAccount}
+        onIndividual={() => void openIndividualTable()}
+      />
+    );
+  }
+
+  const companies = accessibleCompanies(workspace);
+  const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
+  const setupAllowed = ["admin_account", "payroll_admin"].includes(workspace.profile.role);
+  const visibleNav = nav.filter((item) => item.value !== "timesheet" && (!item.setupOnly || setupAllowed));
+  const companyDepartments = workspace.departments.filter((department) => department.company_id === activeCompany?.id);
+  const companyTeamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === activeCompany?.id &&
+    (departmentFilter === "all" || profile.department_id === departmentFilter || companyDepartments.find((department) => department.id === departmentFilter)?.team_leader_user_id === profile.id)
+  ));
+  const employees = activeCompany ? filteredEmployees(workspace, activeCompany.id, departmentFilter, teamFilter) : [];
+  const accessibleCompanyIds = new Set(companies.map((company) => company.id));
+  const pendingApprovals = workspace.leaveRequests.filter((request) => {
+    const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+    return request.status === "requested" &&
+      accessibleCompanyIds.has(request.company_id) &&
+      canApproveLeave(workspace.profile, employee, workspace);
+  });
+  const scopeTotals = employees.reduce(
+    (acc, employee) => {
+      const totals = totalsFor(employee, month, workspace);
+      acc.worked += totals.worked;
+      acc.expected += totals.expected;
+      acc.overtime += totals.overtime;
+      acc.co += totals.vacationDays;
+      acc.cm += totals.medicalDays;
+      acc.se += totals.specialEventDays;
+      acc.ab += totals.absenceDays;
+      return acc;
+    },
+    { worked: 0, expected: 0, overtime: 0, co: 0, cm: 0, se: 0, ab: 0 }
+  );
+  const scopeDifference = scopeTotals.worked - scopeTotals.expected;
+  const activePanel = activeTab === "timesheet" ? null : activeTab;
+  const sheetWide = ["leave", "charts", "companies", "admins", "settings"].includes(activeTab);
+
+  return (
+    <main className="h-screen overflow-hidden p-4 text-stone-950 md:p-6">
+      <div className="grid h-full min-w-0 grid-cols-[252px_minmax(0,1fr)] gap-4 overflow-hidden">
+        <aside className="relative grid min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)_auto] gap-2 rounded-[22px] border border-emerald-900/10 bg-[#062f23] p-3 text-white shadow-[0_24px_80px_rgba(6,47,35,0.18)]">
+          <div>
+            <div className="mb-3 px-2 text-center">
+              <p className="text-[11px] font-black uppercase tracking-[0.24em] text-emerald-200">TableShifts</p>
+            </div>
+            <div ref={companyMenuRef} className="relative px-2">
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.055] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
+                onClick={() => {
+                  setCompanyMenuOpen((value) => !value);
+                  setUserMenuOpen(false);
+                }}
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white text-emerald-950">
+                  {activeCompany && companyLogoUrls[activeCompany.id]
+                    ? <img src={companyLogoUrls[activeCompany.id]} alt="" className="h-full w-full object-contain" />
+                    : <Building2 className="h-4.5 w-4.5" />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px] font-semibold text-white">{activeCompany?.name || "Select company"}</div>
+                  <div className="truncate text-[11px] text-emerald-200/70">{activeCompany ? `${companyDepartments.length} departments` : "No company selected"}</div>
+                </div>
+                <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", companyMenuOpen && "rotate-180")} />
+              </button>
+              {companyMenuOpen ? (
+                <div className="absolute left-2 right-2 top-[calc(100%+0.5rem)] z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+                  <div className="mb-1 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/60">Companies</div>
+                  <div className="grid gap-1">
+                    {companies.map((company) => (
+                      <button
+                        key={company.id}
+                        type="button"
+                        className={cn(
+                          "flex items-center gap-2 rounded-xl px-2 py-2 text-left text-[13px] transition",
+                          activeCompany?.id === company.id ? "bg-white text-emerald-950" : "text-white/80 hover:bg-white/[0.07] hover:text-white"
+                        )}
+                        onClick={() => {
+                          setActiveCompanyId(company.id);
+                          setDepartmentFilter("all");
+                          setTeamFilter("all");
+                          setCompanyMenuOpen(false);
+                        }}
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-white/10 bg-white">
+                          {companyLogoUrls[company.id]
+                            ? <img src={companyLogoUrls[company.id]} alt="" className="h-full w-full object-contain" />
+                            : <Building2 className="h-4 w-4 text-emerald-950" />}
+                        </div>
+                        <span className="min-w-0 flex-1 truncate font-medium">{company.name}</span>
+                      </button>
+                    ))}
+                    {creatingCompany ? (
+                      <div className="mt-1 rounded-xl border border-dashed border-white/14 bg-white/[0.05] p-2">
+                        <input
+                          className="h-8 w-full rounded-lg border border-white/10 bg-white px-2 text-[13px] font-semibold text-emerald-950 outline-none"
+                          value={newCompanyName}
+                          onChange={(event) => setNewCompanyName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") void createCompanyFromSidebar();
+                            if (event.key === "Escape") {
+                              setCreatingCompany(false);
+                              setNewCompanyName("");
+                            }
+                          }}
+                          placeholder="Company name"
+                          autoFocus
+                        />
+                      </div>
+                    ) : null}
+                    {setupAllowed ? (
+                      <button
+                        type="button"
+                        className="mt-1 flex items-center gap-2 rounded-xl border border-dashed border-white/14 px-2 py-2 text-left text-[13px] font-semibold text-emerald-100/82 transition hover:bg-white/[0.07] hover:text-white"
+                        onClick={() => {
+                          setCreatingCompany(true);
+                        }}
+                      >
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.06]">
+                          <Plus className="h-4 w-4" />
+                        </div>
+                        <span>Create company</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+          </div>
+
+          <div className="min-h-0 px-2 py-1">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-200/65">Workspace</div>
+            <nav className="grid gap-0.5 overflow-y-auto">
+              {visibleNav.map((item) => (
+                <button
+                  key={item.value}
+                  className={cn(
+                    "group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-medium text-emerald-50/72 transition-colors hover:bg-white/7 hover:text-white",
+                    activeTab === item.value && "bg-white/96 text-emerald-950 shadow-sm hover:bg-white hover:text-emerald-950"
+                  )}
+                  onClick={() => setActiveTab(item.value)}
+                >
+                  <item.icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                  {item.value !== "timesheet" ? <ChevronRight className="ml-auto h-3.5 w-3.5 opacity-40 transition group-hover:opacity-70" /> : null}
+                </button>
+              ))}
+            </nav>
+          </div>
+
+          <div ref={userMenuRef} className="relative px-2">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-2.5 py-2 text-left transition hover:bg-white/[0.08]"
+              onClick={() => {
+                setUserMenuOpen((value) => !value);
+                setCompanyMenuOpen(false);
+              }}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-[11px] font-black text-emerald-950">
+                {workspace.profile.full_name.split(" ").map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-semibold text-white">{workspace.profile.full_name}</div>
+                <div className="truncate text-[11px] text-emerald-200/70">{workspace.profile.email}</div>
+              </div>
+              <ChevronDown className={cn("h-4 w-4 shrink-0 text-emerald-100/70 transition-transform", userMenuOpen && "rotate-180")} />
+            </button>
+            {userMenuOpen ? (
+              <div className="absolute bottom-[calc(100%+0.5rem)] left-2 right-2 z-20 rounded-2xl border border-white/10 bg-[#0c3a2b] p-2 shadow-[0_20px_60px_rgba(6,47,35,0.45)]">
+                <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2">
+                  <div className="text-[13px] font-semibold text-white">{ROLES[workspace.profile.role]}</div>
+                  {["employee", "team_leader", "department_manager"].includes(workspace.profile.role) ? (
+                    <div className="mt-0.5 text-[11px] text-emerald-200/75">
+                      {[activeCompany?.name, workspace.departments.find((department) => department.id === workspace.profile.department_id)?.name, workspace.profile.position].filter(Boolean).join(" / ") || "No department"}
+                    </div>
+                  ) : null}
+                </div>
+                {pendingApprovals.length ? (
+                  <button
+                    type="button"
+                    className="mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-medium text-white/82 transition hover:bg-white/[0.07] hover:text-white"
+                    onClick={() => {
+                      setActiveTab("leave");
+                      setUserMenuOpen(false);
+                    }}
+                  >
+                    <Bell className="h-4 w-4" />
+                    <span className="flex-1">Pending approvals</span>
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold">{pendingApprovals.length}</span>
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-medium text-white/82 transition hover:bg-white/[0.07] hover:text-white"
+                  onClick={signOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            ) : null}
+          </div>
+        </aside>
+
+        <section className="relative min-w-0 overflow-hidden rounded-[28px] border border-stone-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.06)] backdrop-blur">
+          <div className="h-full min-w-0 overflow-hidden p-3 md:p-4">
+            {message ? <p className="mb-4 rounded-2xl bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={month} onChange={(event) => setMonth(event.target.value)}>
+                {monthOptions(month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={departmentFilter} onChange={(event) => {
+                setDepartmentFilter(event.target.value);
+                setTeamFilter("all");
+              }}>
+                <option value="all">All departments</option>
+                {companyDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+              <select className="h-8 rounded-lg border border-stone-200 bg-white px-2.5 text-xs font-semibold text-stone-900 outline-none" value={teamFilter} onChange={(event) => {
+                const leader = workspace.profiles.find((profile) => profile.id === event.target.value);
+                setTeamFilter(event.target.value);
+                if (leader?.department_id) setDepartmentFilter(leader.department_id);
+              }}>
+                <option value="all">All team leaders</option>
+                {companyTeamLeaders.map((leader) => <option key={leader.id} value={leader.id}>{leader.full_name}</option>)}
+              </select>
+              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-xs font-semibold" onClick={() => exportCsv(activeCompany?.name || "TableShifts", month, employees, workspace)}>
+                <Download className="h-3.5 w-3.5" /> Export CSV
+              </Button>
+            </div>
+            <TimesheetTable
+              month={month}
+              workspace={workspace}
+              employees={employees}
+              totalsExpanded={totalsExpanded}
+              onToggleTotals={() => setTotalsExpanded((value) => !value)}
+              onSetHours={(employee, iso, hours) => void saveCellHours(employee, iso, hours)}
+              onSetType={(employee, iso, type) => void saveCellType(employee, iso, type)}
+              onClearDay={(employee, iso) => void clearEmployeeDay(employee, iso)}
+              onFill={(employee) => void fillNormalTime(employee)}
+              onClear={(employee) => void clearEmployeeMonth(employee)}
+            />
+          </div>
+
+          <SideSheet
+            open={Boolean(activePanel)}
+            title={tabLabel(activeTab)}
+            description={sheetDescription(activeTab)}
+            wide={sheetWide}
+            extraWide={activeTab === "charts"}
+            onClose={() => setActiveTab("timesheet")}
+          >
+            {activeTab === "leave" ? (
+              <LeaveRequests
+                workspace={workspace}
+                activeCompany={activeCompany}
+                supabase={supabase}
+                onReload={() => authUser && loadWorkspace(authUser)}
+                onMessage={setMessage}
+              />
+            ) : null}
+
+            {activeTab === "charts" ? (
+              <Charts
+                workspace={workspace}
+                activeCompany={activeCompany}
+                employees={employees}
+                month={month}
+                people={employees.length}
+                worked={scopeTotals.worked}
+                expected={scopeTotals.expected}
+                overtime={scopeTotals.overtime}
+                co={scopeTotals.co}
+                cm={scopeTotals.cm}
+                se={scopeTotals.se}
+                ab={scopeTotals.ab}
+                difference={scopeDifference}
+              />
+            ) : null}
+
+            {["companies", "admins", "settings"].includes(activeTab) ? (
+              <Management
+                workspace={workspace}
+                activeTab={activeTab}
+                activeCompany={activeCompany}
+                supabase={supabase}
+                onReload={() => authUser && loadWorkspace(authUser)}
+                onSignOut={signOut}
+                onMessage={setMessage}
+              />
+            ) : null}
+          </SideSheet>
+        </section>
+      </div>
+    </main>
+  );
+
+  async function fillNormalTime(employee: ProfileRow) {
+    const currentWorkspace = workspace;
+    if (!supabase || !activeCompany || !currentWorkspace?.profile.environment_id) return;
+    const normal = normalHours(employee, currentWorkspace);
+    const rows = daysInMonth(month)
+      .filter((day) => isExpectedWorkDay(employee, day.iso, day.weekdayIndex, currentWorkspace))
+      .filter((day) => !entryFor(currentWorkspace.entries, employee.id, day.iso))
+      .map((day) => ({
+        environment_id: currentWorkspace.profile.environment_id,
+        company_id: activeCompany.id,
+        employee_user_id: employee.id,
+        department_id: employee.department_id,
+        work_date: day.iso,
+        type: "normal",
+        hours: normal,
+        created_by: currentWorkspace.profile.id,
+        updated_by: currentWorkspace.profile.id
+      }));
+    if (!rows.length) return;
+    const { error } = await supabase.from("timesheet_entries").upsert(rows, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
+  async function saveCellEntry(employee: ProfileRow, iso: string, type: string, hours: number) {
+    const currentWorkspace = workspace;
+    if (!supabase || !currentWorkspace?.profile.environment_id || !employee.company_id) return;
+    const existing = entryFor(currentWorkspace.entries, employee.id, iso);
+    const entryId = existing?.id || crypto.randomUUID();
+    const { error } = await supabase.from("timesheet_entries").upsert({
+      id: entryId,
+      environment_id: currentWorkspace.profile.environment_id,
+      company_id: employee.company_id,
+      employee_user_id: employee.id,
+      department_id: employee.department_id,
+      work_date: iso,
+      type,
+      hours,
+      attachment_path: ["vacation", "medical"].includes(type) ? existing?.attachment_path || null : null,
+      updated_by: currentWorkspace.profile.id,
+      created_by: currentWorkspace.profile.id
+    }, { onConflict: "employee_user_id,work_date" });
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
+  async function saveCellHours(employee: ProfileRow, iso: string, rawHours: string) {
+    const currentWorkspace = workspace;
+    if (!currentWorkspace) return;
+    const trimmed = rawHours.trim();
+    if (!trimmed) {
+      await clearEmployeeDay(employee, iso);
+      return;
+    }
+    const parsed = Number(trimmed.replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 24) {
+      setMessage("Enter hours between 0 and 24.");
+      return;
+    }
+    const normal = normalHours(employee, currentWorkspace);
+    await saveCellEntry(employee, iso, parsed > normal ? "overtime" : "normal", parsed);
+  }
+
+  async function saveCellType(employee: ProfileRow, iso: string, type: string) {
+    const currentWorkspace = workspace;
+    if (!currentWorkspace) return;
+    const normal = normalHours(employee, currentWorkspace);
+    const hours = type === "normal" ? normal : type === "overtime" ? normal + 2 : 0;
+    await saveCellEntry(employee, iso, type, hours);
+  }
+
+  async function clearEmployeeDay(employee: ProfileRow, iso: string) {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from("timesheet_entries")
+      .delete()
+      .eq("employee_user_id", employee.id)
+      .eq("work_date", iso);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+
+  async function clearEmployeeMonth(employee: ProfileRow) {
+    if (!supabase) return;
+    const confirmed = window.confirm(`Clear all entries for ${employee.full_name} in ${month}?`);
+    if (!confirmed) return;
+    const range = monthRange(month);
+    const { error } = await supabase
+      .from("timesheet_entries")
+      .delete()
+      .eq("employee_user_id", employee.id)
+      .gte("work_date", range.start)
+      .lte("work_date", range.end);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    if (authUser) await loadWorkspace(authUser);
+  }
+}
+
+async function waitForProfile(supabase: SupabaseClient, userId: string) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const { data, error } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    if (data) return data as ProfileRow;
+    if (error && error.code !== "PGRST116") throw error;
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  return null;
+}
+
+function LoginPanel({
+  mode,
+  setMode,
+  email,
+  setEmail,
+  password,
+  setPassword,
+  adminName,
+  setAdminName,
+  adminEmail,
+  setAdminEmail,
+  adminPassword,
+  setAdminPassword,
+  adminPasswordConfirm,
+  setAdminPasswordConfirm,
+  loading,
+  message,
+  onSignIn,
+  onCreateAdmin,
+  onIndividual
+}: {
+  mode: "login" | "create-admin";
+  setMode: (mode: "login" | "create-admin") => void;
+  email: string;
+  setEmail: (value: string) => void;
+  password: string;
+  setPassword: (value: string) => void;
+  adminName: string;
+  setAdminName: (value: string) => void;
+  adminEmail: string;
+  setAdminEmail: (value: string) => void;
+  adminPassword: string;
+  setAdminPassword: (value: string) => void;
+  adminPasswordConfirm: string;
+  setAdminPasswordConfirm: (value: string) => void;
+  loading: boolean;
+  message: string;
+  onSignIn: (event: React.FormEvent) => void;
+  onCreateAdmin: (event: React.FormEvent) => void;
+  onIndividual: () => void;
+}) {
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dff4ea,transparent_34%),linear-gradient(135deg,#f8fbf8,#eef5f1)] p-5 text-stone-950">
+      <div className="mx-auto grid min-h-[calc(100vh-40px)] w-full max-w-5xl place-items-center">
+        <Card className="grid w-full overflow-hidden rounded-[24px] border-white/70 shadow-[0_28px_90px_rgba(6,47,35,0.16)] md:grid-cols-[1.05fr_0.95fr]">
+          <div className="flex min-h-[560px] flex-col justify-between bg-[#062f23] p-8 text-white">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-200">TableShifts</p>
+              <h1 className="mt-6 max-w-sm text-5xl font-black leading-none tracking-tight">Track work hours in a clean, familiar table as simple as a spreadsheet.</h1>
+              <p className="mt-5 max-w-md text-sm font-semibold leading-6 text-emerald-100/80">
+                Sign in to a managed workspace, create your Admin Account environment, or open a standalone Individual TableShifts sheet.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-200">Standalone mode</p>
+              <p className="mt-2 text-sm text-emerald-50/80">No login required. Anyone with the generated link can keep editing that one table.</p>
+              <Button className="mt-4 w-full bg-white text-emerald-950 hover:bg-emerald-50" onClick={onIndividual}>
+                Individual TableShifts
+              </Button>
+            </div>
+          </div>
+          <div className="p-6 md:p-8">
+            <div className="mb-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
+              <button
+                type="button"
+                className={cn("rounded-lg px-3 py-2 text-sm font-black transition", mode === "login" ? "bg-white shadow-sm" : "text-stone-500")}
+                onClick={() => setMode("login")}
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                className={cn("rounded-lg px-3 py-2 text-sm font-black transition", mode === "create-admin" ? "bg-white shadow-sm" : "text-stone-500")}
+                onClick={() => setMode("create-admin")}
+              >
+                Create Account
+              </button>
+            </div>
+            {mode === "login" ? (
+              <form className="grid gap-4" onSubmit={onSignIn}>
+                <div>
+                  <h2 className="text-3xl font-black">Welcome back</h2>
+                  <p className="mt-1 text-sm font-semibold text-stone-500">Use your TableShifts email and password.</p>
+                </div>
+                <FieldShell label="Email">
+                  <Input className="h-10" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+                </FieldShell>
+                <FieldShell label="Password">
+                  <Input className="h-10" value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+                </FieldShell>
+                {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+                <Button className="h-10" type="submit" disabled={loading}>{loading ? "Loading..." : "Enter"}</Button>
+              </form>
+            ) : (
+              <form className="grid gap-4" onSubmit={onCreateAdmin}>
+                <div>
+                  <h2 className="text-3xl font-black">Create Admin Account</h2>
+                  <p className="mt-1 text-sm font-semibold text-stone-500">This creates a new isolated TableShifts environment.</p>
+                </div>
+                <FieldShell label="Name">
+                  <Input className="h-10" value={adminName} onChange={(event) => setAdminName(event.target.value)} required />
+                </FieldShell>
+                <FieldShell label="Email">
+                  <Input className="h-10" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} type="email" required />
+                </FieldShell>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FieldShell label="Password">
+                    <Input className="h-10" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} type="password" required minLength={6} />
+                  </FieldShell>
+                  <FieldShell label="Repeat password">
+                    <Input className="h-10" value={adminPasswordConfirm} onChange={(event) => setAdminPasswordConfirm(event.target.value)} type="password" required minLength={6} />
+                  </FieldShell>
+                </div>
+                {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+                <Button className="h-10" type="submit" disabled={loading}>{loading ? "Creating..." : "Create Admin Account"}</Button>
+              </form>
+            )}
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+}
+
+function IndividualTableShifts({
+  table,
+  onSave,
+  onBack
+}: {
+  table: IndividualTableData;
+  onSave: (table: IndividualTableData) => void;
+  onBack: () => void;
+}) {
+  const [metaExpanded, setMetaExpanded] = React.useState(false);
+  const [totalsExpanded, setTotalsExpanded] = React.useState(false);
+  const [holidayCountry, setHolidayCountry] = React.useState("RO");
+  const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
+  const [holidayDraft, setHolidayDraft] = React.useState<IndividualHoliday[]>([]);
+  const [message, setMessage] = React.useState("");
+  const [employeeColumnWidth, setEmployeeColumnWidth] = React.useState(190);
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const totalsColumns = totalsExpanded ? ["Worked", "More", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "Fill", "Clear"] : ["Worked", "More"];
+  const moreColumnWidth = 56;
+  const totalWidth = (label: string) => label === "More" ? moreColumnWidth : ["Fill", "Clear"].includes(label) ? 54 : label === "Worked" ? 60 : 50;
+  const fixedWidth = employeeColumnWidth + moreColumnWidth + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
+  const minWidth = totalsExpanded || metaExpanded ? employeeColumnWidth + moreColumnWidth + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+  const headerStats = individualHeaderStats(table);
+
+  function startEmployeeResize(event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = employeeColumnWidth;
+    function resize(moveEvent: PointerEvent) {
+      setEmployeeColumnWidth(Math.max(150, Math.min(340, startWidth + moveEvent.clientX - startX)));
+    }
+    function stopResize() {
+      window.removeEventListener("pointermove", resize);
+      window.removeEventListener("pointerup", stopResize);
+    }
+    window.addEventListener("pointermove", resize);
+    window.addEventListener("pointerup", stopResize);
+  }
+
+  function save(next: IndividualTableData) {
+    onSave(next);
+  }
+
+  function updateRow(rowId: string, patch: Partial<IndividualRow>) {
+    const rows = table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row);
+    save({ ...table, rows });
+  }
+
+  function deleteRow(rowId: string) {
+    const entries = { ...table.entries };
+    delete entries[rowId];
+    save({ ...table, rows: table.rows.filter((row) => row.id !== rowId), entries });
+  }
+
+  function setEntry(rowId: string, iso: string, entry: IndividualEntry | null) {
+    const entries = { ...table.entries, [rowId]: { ...(table.entries[rowId] || {}) } };
+    if (entry) entries[rowId][iso] = entry;
+    else delete entries[rowId][iso];
+    save({ ...table, entries });
+  }
+
+  function fillRow(row: IndividualRow) {
+    const normal = individualNormalHours(table);
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => {
+      if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: normal };
+    });
+    save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} filled with normal shifts.`);
+  }
+
+  function clearRow(row: IndividualRow) {
+    if (!window.confirm(`Clear ${row.name || "this row"} for ${table.month}?`)) return;
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => delete rowEntries[day.iso]);
+    save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} cleared.`);
+  }
+
+  async function addPublicHolidays() {
+    setMessage("");
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${holidayYear}/${holidayCountry}`);
+      if (!response.ok) throw new Error("Could not load public holidays.");
+      const data = await response.json();
+      const nextHolidays = (Array.isArray(data) ? data : []).map((item) => ({
+        date: item.date,
+        name: item.localName || item.name || "Public holiday",
+        countryCode: holidayCountry
+      }));
+      setHolidayDraft(nextHolidays);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load public holidays.");
+    }
+  }
+
+  function applyHolidayDraft() {
+    const merged = new Map(table.holidays.map((holiday) => [`${holiday.date}:${holiday.name}`, holiday]));
+    holidayDraft.forEach((holiday) => merged.set(`${holiday.date}:${holiday.name}`, holiday));
+    save({ ...table, holidays: Array.from(merged.values()).toSorted((a, b) => a.date.localeCompare(b.date)) });
+    setHolidayDraft([]);
+    toast.success("Public holidays applied.");
+  }
+
+  function clearHolidays() {
+    if (!table.holidays.length) {
+      toast.message("No public holidays to clear.");
+      return;
+    }
+    save({ ...table, holidays: [] });
+    toast.success("Public holidays cleared.");
+  }
+
+  function importEmployeeFile(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        const rows = isExcel
+          ? parseEmployeeWorkbook(reader.result as ArrayBuffer)
+          : parseCsv(String(reader.result || ""));
+        const nextRows = individualRowsFromMatrix(rows);
+        if (nextRows.length) {
+          save({ ...table, rows: [...table.rows, ...nextRows] });
+          toast.success(`${nextRows.length} employees imported.`);
+        } else {
+          toast.warning("No employees found in that file.");
+        }
+      } catch {
+        toast.error("Could not import that employee file.");
+      }
+    };
+    if (/\.(xlsx|xls)$/i.test(file.name)) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+  }
+
+  return (
+    <TooltipProvider delayDuration={250}>
+      <main className="h-screen overflow-hidden bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+        <Toaster position="top-center" richColors closeButton />
+        <div className="mx-auto grid h-full max-w-[calc(100vw-2rem)] grid-rows-[auto_auto_minmax(0,1fr)_auto] gap-4">
+        <header className="grid min-w-0 gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(240px,340px)_minmax(320px,1fr)_minmax(240px,340px)] lg:items-stretch">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
+            <h1 className="text-4xl font-black tracking-tight">Individual TableShifts</h1>
+          </div>
+          <div className="grid min-w-0 gap-2 rounded-xl border border-emerald-900/10 bg-white/70 p-3 shadow-sm">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 lg:grid-cols-9">
+              <IndividualMiniKpi label="People" value={String(headerStats.people)} />
+              <IndividualMiniKpi label="Worked" value={`${formatNumber(headerStats.worked)}h`} />
+              <IndividualMiniKpi label="Norm" value={`${formatNumber(headerStats.norm)}h`} />
+              <IndividualMiniKpi label="Diff" value={`${headerStats.diff > 0 ? "+" : ""}${formatNumber(headerStats.diff)}h`} accent={headerStats.diff < 0 ? "text-rose-700" : "text-emerald-700"} />
+              <IndividualMiniKpi label="OT" value={`${formatNumber(headerStats.ot)}h`} />
+              <IndividualMiniKpi label="CO" value={`${headerStats.co}d`} />
+              <IndividualMiniKpi label="CM" value={`${headerStats.cm}d`} />
+              <IndividualMiniKpi label="SE" value={`${headerStats.se}d`} />
+              <IndividualMiniKpi label="AB" value={`${headerStats.ab}d`} />
+            </div>
+            <IndividualDailyBars days={headerStats.daily} />
+          </div>
+          <div className="grid min-w-0 content-start justify-items-stretch gap-2">
+            <div className="flex min-w-0 flex-wrap justify-end gap-2">
+              <Button
+                variant="outline"
+                className="h-9 shrink-0 px-3 text-xs"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(window.location.href);
+                  toast.success("Individual table link copied.");
+                }}
+              >
+                Copy Link
+              </Button>
+            <Button className="h-9 shrink-0 px-3 text-xs" onClick={onBack}>Back to Login</Button>
+            </div>
+            <div className="min-w-0 rounded-lg border border-emerald-900/10 bg-white/70 px-3 py-2 text-left text-[10px] font-semibold leading-snug text-stone-500 shadow-sm">
+              <p className="break-all">{typeof window === "undefined" ? "" : window.location.href}</p>
+            </div>
+          </div>
+        </header>
+
+        <div className="grid gap-3 lg:grid-cols-[250px_minmax(0,1fr)_auto_auto]">
+          <Card className="grid gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_62px]">
+            <FieldShell label="Month">
+              <NativeSelect value={table.month} onChange={(event) => save({ ...table, month: event.target.value })}>
+                {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </NativeSelect>
+            </FieldShell>
+            <FieldShell label="Shifts">
+              <Input
+                className="h-8 px-1 text-center text-xs font-semibold"
+                inputMode="numeric"
+                min={1}
+                max={24}
+                type="number"
+                value={individualNormalHours(table)}
+                onChange={(event) => {
+                  const hours = Math.max(1, Math.min(24, Number(event.target.value) || 8));
+                  save({ ...table, normalHours: hours });
+                }}
+              />
+            </FieldShell>
+          </Card>
+          <Card className="grid gap-2 p-3 md:grid-cols-[auto_180px_90px_auto_auto] md:items-end">
+            <p className="self-center text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">Public Holidays</p>
+            <FieldShell label="Country">
+              <NativeSelect value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
+                {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
+              </NativeSelect>
+            </FieldShell>
+            <FieldShell label="Year">
+              <Input className="h-8 text-xs font-semibold" value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </FieldShell>
+            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => void addPublicHolidays()}>Add</Button>
+            <Button variant="outline" className="h-8 px-3 text-xs text-rose-700 hover:bg-rose-50 hover:text-rose-800" onClick={clearHolidays}>Clear</Button>
+          </Card>
+          <Card className="grid gap-2 p-3 md:grid-cols-[minmax(220px,1fr)_auto] md:items-end">
+            <FieldShell label="Import Employees">
+              <Input className="h-8 text-xs file:mr-2 file:rounded file:border-0 file:bg-stone-100 file:px-2 file:py-1 file:text-xs file:font-bold" type="file" accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)} />
+            </FieldShell>
+            <Button variant="outline" className="h-8 whitespace-nowrap px-3 text-xs" onClick={downloadIndividualTemplate}>Download Template</Button>
+          </Card>
+          <Button
+            className="h-full min-h-12 px-5"
+            onClick={() => {
+              exportIndividualCsv(table);
+              toast.success("CSV exported.");
+            }}
+          >
+            Export CSV
+          </Button>
+        </div>
+        {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+
+        <Card className="min-h-0 overflow-hidden">
+          <div className={cn("h-full min-h-[96px]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
+              <table
+                className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
+                style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
+              >
+                <colgroup>
+                <col style={{ width: `${employeeColumnWidth}px` }} />
+                <col style={{ width: `${moreColumnWidth}px` }} />
+                {metaExpanded ? (
+                  <>
+                    <col style={{ width: "92px" }} />
+                    <col style={{ width: "92px" }} />
+                    <col style={{ width: "76px" }} />
+                    <col style={{ width: "90px" }} />
+                  </>
+                ) : null}
+                {days.map((day) => (
+                  <col key={day.iso} style={totalsExpanded || metaExpanded ? { width: "42px" } : { width: `calc((100% - ${fixedWidth}px) / ${days.length})` }} />
+                ))}
+                {totalsColumns.map((label) => <col key={label} style={{ width: `${totalWidth(label)}px` }} />)}
+              </colgroup>
+              <thead>
+                <tr className="border-b bg-stone-50">
+                  <th className="sticky left-0 z-30 border-r bg-stone-50 px-2 py-2 text-left font-black shadow-[8px_0_14px_-14px_rgba(0,0,0,0.35)]">
+                    <div className="relative pr-2">
+                      Employee
+                      <button
+                        type="button"
+                        aria-label="Resize employee column"
+                        className="absolute -right-2 top-1/2 h-7 w-2 -translate-y-1/2 cursor-col-resize rounded-full bg-transparent hover:bg-emerald-700/20"
+                        onPointerDown={startEmployeeResize}
+                      />
+                    </div>
+                  </th>
+                  <th className="border-l p-1 text-center">
+                    <Button size="sm" className="h-7 w-full rounded-md px-1 text-[10px]" onClick={() => setMetaExpanded((value) => !value)}>
+                      {metaExpanded ? "Less" : "More"}
+                    </Button>
+                  </th>
+                  {metaExpanded ? ["Company", "Department", "ID", "Position"].map((label) => <th key={label} className="border-l px-1 py-2 text-center font-black">{label}</th>) : null}
+                  {days.map((day) => (
+                    <th key={day.iso} className="border-l px-0.5 py-1 text-center">
+                      <span className="block text-sm font-black leading-tight">{day.day}</span>
+                      <span className="text-[10px] font-bold text-stone-500">{day.weekday.slice(0, 3)}</span>
+                    </th>
+                  ))}
+                  {totalsColumns.map((label) => label === "More" ? (
+                    <th key={label} className="border-l p-1 text-center font-black">
+                      <Button size="sm" className="h-7 w-full rounded-md px-1 text-[10px]" onClick={() => setTotalsExpanded((value) => !value)}>
+                        {totalsExpanded ? "Less" : "More"}
+                      </Button>
+                    </th>
+                  ) : (
+                    <th key={label} className="border-l px-1 py-2 text-center align-middle font-black leading-none">{label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((row) => {
+                  const totals = individualTotals(row, table);
+                  return (
+                    <tr key={row.id} className="h-11 border-b">
+                      <td className="sticky left-0 z-20 border-r bg-white px-2 shadow-[8px_0_14px_-14px_rgba(0,0,0,0.35)]">
+                        <input
+                          className="h-8 w-full bg-transparent text-sm font-black outline-none placeholder:text-stone-400"
+                          value={row.name}
+                          placeholder="Employee name"
+                          onChange={(event) => updateRow(row.id, { name: event.target.value })}
+                          onBlur={() => {
+                            if (!row.name.trim() && window.confirm("Delete this empty row?")) deleteRow(row.id);
+                          }}
+                        />
+                      </td>
+                      <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
+                      {metaExpanded ? (
+                        <>
+                          <IndividualTextCell value={row.company} onChange={(value) => updateRow(row.id, { company: value })} placeholder="Company" />
+                          <IndividualTextCell value={row.department} onChange={(value) => updateRow(row.id, { department: value })} placeholder="Department" />
+                          <IndividualTextCell value={row.identificationNumber} onChange={(value) => updateRow(row.id, { identificationNumber: value })} placeholder="ID" />
+                          <IndividualTextCell value={row.position} onChange={(value) => updateRow(row.id, { position: value })} placeholder="Position" />
+                        </>
+                      ) : null}
+                      {days.map((day) => (
+                        <IndividualDayCell
+                          key={day.iso}
+                          row={row}
+                          day={day}
+                          table={table}
+                          holiday={holidaysByDate.get(day.iso)}
+                          entry={table.entries[row.id]?.[day.iso]}
+                          onSetEntry={setEntry}
+                        />
+                      ))}
+                      <td className="border-l px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
+                      {totalsExpanded ? (
+                        <>
+                          <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
+                          <td className="border-l px-1 text-center font-black">{formatNumber(totals.norm)}h</td>
+                          <td className={cn("border-l px-1 text-center font-black", totals.diff < 0 ? "text-rose-700" : "text-emerald-700")}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</td>
+                          <td className="border-l px-1 text-center font-black">{formatNumber(totals.ot)}h</td>
+                          <td className="border-l px-1 text-center font-black">{totals.co}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.cm}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.se}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.ab}d</td>
+                        </>
+                      ) : (
+                        <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
+                      )}
+                      {totalsExpanded ? (
+                        <>
+                          <td className="border-l px-1 text-center"><Button size="sm" variant="outline" className="h-7 px-2 text-xs text-emerald-700" onClick={() => fillRow(row)}>Fill</Button></td>
+                          <td className="border-l px-1 text-center"><Button size="sm" variant="outline" className="h-7 px-2 text-xs text-rose-700" onClick={() => clearRow(row)}>Clear</Button></td>
+                        </>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+              </table>
+          </div>
+        </Card>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => save({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>New row</Button>
+          <p className="text-sm font-semibold text-stone-500">Anyone with this link can edit this individual table. It is separate from the company app.</p>
+        </div>
+        </div>
+        {holidayDraft.length ? (
+          <IndividualHolidayPreview
+            holidays={holidayDraft}
+            setHolidays={setHolidayDraft}
+            onApply={applyHolidayDraft}
+            onClose={() => setHolidayDraft([])}
+          />
+        ) : null}
+      </main>
+    </TooltipProvider>
+  );
+}
+
+function IndividualMiniKpi({ label, value, accent = "text-stone-950" }: { label: string; value: string; accent?: string }) {
+  return (
+    <div className="min-w-0 rounded-md border border-emerald-900/10 bg-white px-1.5 py-0.5 shadow-sm">
+      <p className="truncate text-[8px] font-black uppercase tracking-[0.12em] text-stone-500">{label}</p>
+      <p className={cn("text-[13px] font-black leading-tight", accent)}>{value}</p>
+    </div>
+  );
+}
+
+function IndividualDailyBars({ days }: { days: Array<{ day: number; worked: number; variance: number; strength: "weak" | "strong" | "normal" }> }) {
+  const max = Math.max(1, ...days.map((day) => day.worked));
+  const hasWorked = days.some((day) => day.worked > 0);
+  return (
+    <div className="flex h-9 items-end gap-1 rounded-lg border border-emerald-900/10 bg-stone-50/80 px-2 py-1.5">
+      {days.length ? days.map((day) => (
+        <Tooltip key={day.day}>
+          <TooltipTrigger asChild>
+            <div
+              className={cn(
+                "min-h-1 flex-1 rounded-t-sm",
+                !hasWorked ? "bg-stone-200" : day.strength === "weak" ? "bg-rose-500" : day.strength === "strong" ? "bg-emerald-600" : "bg-emerald-200"
+              )}
+              style={{ height: `${Math.max(8, (day.worked / max) * 28)}px` }}
+            />
+          </TooltipTrigger>
+          <TooltipContent className="border border-stone-800/20 bg-stone-950/95 px-2 py-1 text-[11px] font-semibold text-white shadow-xl">
+            Day {day.day}: {formatNumber(day.worked)}h ({day.variance > 0 ? "+" : ""}{formatNumber(day.variance)}h)
+          </TooltipContent>
+        </Tooltip>
+      )) : <p className="text-[10px] font-bold text-stone-500">No workdays yet</p>}
+    </div>
+  );
+}
+
+function individualHeaderStats(table: IndividualTableData) {
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const normal = individualNormalHours(table);
+  const totals = table.rows.reduce(
+    (sum, row) => {
+      const rowTotals = individualTotals(row, table);
+      sum.worked += rowTotals.worked;
+      sum.norm += rowTotals.norm;
+      sum.ot += rowTotals.ot;
+      sum.co += rowTotals.co;
+      sum.cm += rowTotals.cm;
+      sum.se += rowTotals.se;
+      sum.ab += rowTotals.ab;
+      return sum;
+    },
+    { worked: 0, norm: 0, ot: 0, co: 0, cm: 0, se: 0, ab: 0 }
+  );
+  const daily = days
+    .filter((day) => isIndividualWorkDay(day, holidaysByDate))
+    .map((day) => {
+      const worked = table.rows.reduce((sum, row) => {
+        const entry = table.entries[row.id]?.[day.iso];
+        return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
+      }, 0);
+      const norm = table.rows.length * normal;
+      return { day: day.day, worked, norm, variance: worked - norm, strength: "normal" as const };
+    });
+  const underNormDays = daily.filter((day) => day.worked > 0 && day.worked < day.norm);
+  const overNormDays = daily.filter((day) => day.worked > day.norm);
+  const weakestVariance = underNormDays.length ? Math.min(...underNormDays.map((day) => day.variance)) : null;
+  const strongestVariance = overNormDays.length ? Math.max(...overNormDays.map((day) => day.variance)) : null;
+  return {
+    people: table.rows.length,
+    worked: totals.worked,
+    norm: totals.norm,
+    diff: totals.worked - totals.norm,
+    ot: totals.ot,
+    co: totals.co,
+    cm: totals.cm,
+    se: totals.se,
+    ab: totals.ab,
+    daily: daily.map((day) => ({
+      ...day,
+      strength: weakestVariance !== null && day.variance === weakestVariance
+        ? "weak" as const
+        : strongestVariance !== null && day.variance === strongestVariance
+          ? "strong" as const
+          : "normal" as const
+    }))
+  };
+}
+
+function IndividualTextCell({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <td className="border-l px-1">
+      <input className="h-8 w-full bg-transparent text-center font-semibold outline-none placeholder:text-stone-400" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </td>
+  );
+}
+
+function IndividualDayCell({
+  row,
+  day,
+  table,
+  holiday,
+  entry,
+  onSetEntry
+}: {
+  row: IndividualRow;
+  day: ReturnType<typeof daysInMonth>[number];
+  table: IndividualTableData;
+  holiday?: IndividualHoliday;
+  entry?: IndividualEntry;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+}) {
+  const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const normalHours = individualNormalHours(table);
+  const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
+  const numeric = !entry || ["normal", "overtime"].includes(entry.type);
+  const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
+  const [draft, setDraft] = React.useState(value);
+  React.useEffect(() => setDraft(value), [value]);
+  function commit(next = draft) {
+    const trimmed = next.trim();
+    if (!trimmed) {
+      onSetEntry(row.id, day.iso, null);
+      return;
+    }
+    const hours = Math.min(24, Number(trimmed.replace(/\D/g, "")));
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    onSetEntry(row.id, day.iso, { type: hours > normalHours ? "overtime" : "normal", hours });
+  }
+
+  const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  const tooltip = individualTooltipText(entry, holiday, workDay, normalHours);
+  return (
+    <td
+      className={cn("border-l p-0 text-center", individualCellClass(type))}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = event.currentTarget.getBoundingClientRect();
+        setMenu({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      }}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="flex h-11 items-center justify-center">
+            {numeric ? (
+              <label className="flex items-center justify-center gap-0.5">
+                <input
+                  className="w-[2ch] bg-transparent text-center text-sm font-black outline-none"
+                  value={draft}
+                  placeholder={holiday ? "H" : ""}
+                  inputMode="numeric"
+                  onChange={(event) => {
+                    const digits = event.target.value.replace(/\D/g, "");
+                    setDraft(digits ? String(Math.min(24, Number(digits))) : "");
+                  }}
+                  onBlur={() => commit()}
+                  onKeyDown={(event) => {
+                    if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault();
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+                {draft ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
+              </label>
+            ) : (
+              <div className="leading-tight">
+                <span className="block text-[11px] font-black">{individualEntryCode(entry?.type || "holiday")}</span>
+                {["vacation", "medical", "special_event"].includes(entry?.type || "") ? <span className="text-[10px] text-stone-500">day</span> : null}
+              </div>
+            )}
+          </div>
+        </TooltipTrigger>
+        <TooltipContent className="border border-stone-800/20 bg-stone-950/95 px-2 py-1 text-[11px] font-semibold text-white shadow-xl">
+          {tooltip}
+        </TooltipContent>
+      </Tooltip>
+      <IndividualCellMenu
+        open={Boolean(menu)}
+        x={menu?.x || 0}
+        y={menu?.y || 0}
+        onOpenChange={(open) => {
+          if (!open) setMenu(null);
+        }}
+        onApply={(type, reason) => {
+          setMenu(null);
+          if (type === "clear") onSetEntry(row.id, day.iso, null);
+          else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
+          else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
+        }}
+      />
+    </td>
+  );
+}
+
+function IndividualCellMenu({
+  open,
+  x,
+  y,
+  onOpenChange,
+  onApply
+}: {
+  open: boolean;
+  x: number;
+  y: number;
+  onOpenChange: (open: boolean) => void;
+  onApply: (type: string, reason?: string) => void;
+}) {
+  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 180));
+  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 260));
+  return (
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Open cell actions"
+          className="fixed z-[80] size-1 opacity-0"
+          style={{ left, top }}
+        />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="right" align="start" sideOffset={8} className="min-w-36 overflow-visible border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("normal")}>Normal shift</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("vacation")}>Vacation CO</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("medical")}>Medical CM</DropdownMenuItem>
+        <DropdownMenuItem className="text-xs font-bold" onClick={() => onApply("absence")}>Absence</DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="text-xs font-bold">Special Event</DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="z-[90] min-w-40 border border-emerald-900/10 bg-white/95 p-1 text-stone-950 shadow-2xl shadow-stone-950/15 backdrop-blur">
+              {SPECIAL_EVENT_REASONS.map((reason) => (
+                <DropdownMenuItem className="text-xs font-bold" key={reason} onClick={() => onApply("special_event", reason)}>
+                  {reason}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+        <DropdownMenuItem className="text-xs font-bold text-rose-700 focus:text-rose-700" onClick={() => onApply("clear")}>Clear</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function IndividualHolidayPreview({
+  holidays,
+  setHolidays,
+  onApply,
+  onClose
+}: {
+  holidays: IndividualHoliday[];
+  setHolidays: (holidays: IndividualHoliday[]) => void;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/40 p-4">
+      <Card className="max-h-[80vh] w-full max-w-2xl overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Public Holidays</CardTitle>
+            <CardDescription>Review, remove, or add holidays before applying.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={onClose}><X className="h-4 w-4" />Close</Button>
+        </CardHeader>
+        <CardContent className="grid max-h-[58vh] gap-2 overflow-auto">
+          {holidays.map((holiday, index) => (
+            <div key={`${holiday.date}-${index}`} className="grid grid-cols-[130px_1fr_auto] gap-2">
+              <Input className="h-8 text-xs" value={holiday.date} onChange={(event) => setHolidays(holidays.map((item, itemIndex) => itemIndex === index ? { ...item, date: event.target.value } : item))} />
+              <Input className="h-8 text-xs" value={holiday.name} onChange={(event) => setHolidays(holidays.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
+              <Button variant="outline" size="sm" onClick={() => setHolidays(holidays.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
+            </div>
+          ))}
+          <Button variant="outline" onClick={() => setHolidays([...holidays, { date: "", name: "Custom holiday" }])}>Add another</Button>
+        </CardContent>
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={onApply}>Apply Holidays</Button>
+        </div>
+      </Card>
+    </div>,
+    document.body
+  );
+}
+
+function SummaryCard({ label, value, hint, accent }: { label: string; value: string; hint: string; accent?: "good" | "bad" }) {
+  return (
+    <Card>
+      <CardHeader className="p-4">
+        <CardDescription className="font-bold uppercase tracking-wide">{label}</CardDescription>
+        <CardTitle className={cn("text-2xl", accent === "good" && "text-emerald-700", accent === "bad" && "text-rose-700")}>{value}</CardTitle>
+        <p className="text-xs text-stone-500">{hint}</p>
+      </CardHeader>
+    </Card>
+  );
+}
+
+function TimesheetTable({
+  month,
+  workspace,
+  employees,
+  totalsExpanded,
+  onToggleTotals,
+  onSetHours,
+  onSetType,
+  onClearDay,
+  onFill,
+  onClear
+}: {
+  month: string;
+  workspace: Workspace;
+  employees: ProfileRow[];
+  totalsExpanded: boolean;
+  onToggleTotals: () => void;
+  onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
+  onSetType: (employee: ProfileRow, iso: string, type: string) => void;
+  onClearDay: (employee: ProfileRow, iso: string) => void;
+  onFill: (employee: ProfileRow) => void;
+  onClear: (employee: ProfileRow) => void;
+}) {
+  const days = daysInMonth(month);
+  const [cellMenu, setCellMenu] = React.useState<{
+    x: number;
+    y: number;
+    employee: ProfileRow;
+    iso: string;
+  } | null>(null);
+  const editableCellKeys = React.useMemo(() => {
+    const keys: string[] = [];
+    employees.forEach((employee) => {
+      if (!canEditEmployee(workspace.profile, employee, workspace)) return;
+      days.forEach((day) => {
+        if (isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace)) {
+          keys.push(`${employee.id}:${day.iso}`);
+        }
+      });
+    });
+    return keys;
+  }, [employees, month, workspace]);
+  const compactColumns = ["Worked", "More"];
+  const expandedColumns = ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left", "More", "Fill", "Clear"];
+  const totalsColumns = totalsExpanded ? expandedColumns : compactColumns;
+  const totalColumnWidth = (label: string) => {
+    if (!totalsExpanded) return 68;
+    if (["More", "Fill", "Clear"].includes(label)) return 58;
+    return 52;
+  };
+  const fixedCompactWidth = 176 + totalsColumns.reduce((sum, label) => sum + totalColumnWidth(label), 0);
+  const expandedMinWidth = 188 + days.length * 38 + totalsColumns.reduce((sum, label) => sum + totalColumnWidth(label), 0);
+
+  React.useEffect(() => {
+    if (!cellMenu) return;
+    function close() {
+      setCellMenu(null);
+    }
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close, true);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close, true);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [cellMenu]);
+
+  function openCellMenu(target: HTMLElement, employee: ProfileRow, iso: string) {
+    if (!canEditEmployee(workspace.profile, employee, workspace)) return;
+    const rect = target.getBoundingClientRect();
+    const menuWidth = 190;
+    const menuHeight = 280;
+    const x = Math.min(rect.left + rect.width / 2, window.innerWidth - menuWidth - 12);
+    const y = Math.min(rect.top + rect.height / 2, window.innerHeight - menuHeight - 12);
+    setCellMenu({
+      x: Math.max(12, x),
+      y: Math.max(12, y),
+      employee,
+      iso
+    });
+  }
+
+  function applyCellMenuType(nextType: string) {
+    if (!cellMenu) return;
+    const target = cellMenu;
+    setCellMenu(null);
+    if (nextType === "clear") {
+      onClearDay(target.employee, target.iso);
+      return;
+    }
+    onSetType(target.employee, target.iso, nextType);
+  }
+
+  return (
+    <Card className="max-w-full overflow-hidden">
+      <div className={cn("max-h-[calc(100vh-260px)] max-w-full", totalsExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
+        <table
+          className={cn("w-full table-fixed border-collapse text-xs", totalsExpanded && "min-w-max")}
+          style={totalsExpanded ? { minWidth: `${expandedMinWidth}px` } : undefined}
+        >
+          <colgroup>
+            <col style={{ width: totalsExpanded ? "188px" : "176px" }} />
+            {days.map((day) => (
+              <col
+                key={day.iso}
+                style={totalsExpanded ? { width: "38px" } : { width: `calc((100% - ${fixedCompactWidth}px) / ${days.length})` }}
+              />
+            ))}
+            {totalsColumns.map((label) => (
+              <col key={label} style={{ width: `${totalColumnWidth(label)}px` }} />
+            ))}
+          </colgroup>
+          <thead>
+            <tr className="border-b border-stone-200 bg-stone-50">
+              <th className="sticky left-0 z-10 bg-stone-50 px-3 py-2 text-left font-black">Employee</th>
+              {days.map((day) => (
+                <th key={day.iso} className="border-l border-stone-200 px-0.5 py-1.5 text-center">
+                  <span className="block text-sm font-black leading-tight">{day.day}</span>
+                  <span className="text-[10px] font-bold leading-tight text-stone-500">{day.weekday.slice(0, 3)}</span>
+                </th>
+              ))}
+              {totalsColumns.map((label) => (
+                <th key={label} className="border-l border-stone-200 px-0.5 py-2 text-center font-black">
+                  {label === "More" && totalsExpanded ? "Less" : label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {employees.length ? employees.map((employee) => {
+              const totals = totalsFor(employee, month, workspace);
+              return (
+                <tr key={employee.id} className="h-12 border-b border-stone-200 hover:bg-stone-50/60">
+                  <td className="sticky left-0 z-10 bg-white px-3 py-1">
+                    <strong className="block truncate text-sm">{employee.full_name}</strong>
+                    <span className="block truncate text-[11px] font-semibold text-stone-500">{employee.position || ROLES[employee.role]}</span>
+                  </td>
+                  {days.map((day) => (
+                    <EntryCell
+                      key={day.iso}
+                      employee={employee}
+                      day={day}
+                      workspace={workspace}
+                      onSetHours={onSetHours}
+                      onOpenMenu={openCellMenu}
+                      onMove={(key, direction) => {
+                        const currentIndex = editableCellKeys.indexOf(key);
+                        if (currentIndex < 0) return;
+                        const nextKey = editableCellKeys[currentIndex + direction];
+                        if (!nextKey) return;
+                        const nextInput = document.querySelector<HTMLInputElement>(`[data-cell-key="${nextKey}"] input`);
+                        nextInput?.focus();
+                        nextInput?.select();
+                      }}
+                    />
+                  ))}
+                  <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.worked)}h</td>
+                  {totalsExpanded ? (
+                    <>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.expected)}h</td>
+                      <td className={cn("border-l border-stone-200 px-0.5 text-center font-black", totals.difference < 0 ? "text-rose-700" : "text-emerald-700")}>
+                        {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
+                      </td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(totals.overtime)}h</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.vacationDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.medicalDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.specialEventDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{totals.absenceDays}d</td>
+                      <td className="border-l border-stone-200 px-0.5 text-center font-black">{formatNumber(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))}d</td>
+                    </>
+                  ) : null}
+                  <td className="border-l border-stone-200 px-1 text-center">
+                    <Button size="sm" className="bg-amber-600 text-white hover:bg-amber-700" onClick={onToggleTotals}>{totalsExpanded ? "Less" : "More"}</Button>
+                  </td>
+                  {totalsExpanded ? (
+                    <>
+                      <td className="border-l border-stone-200 px-2 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-emerald-700 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                          onClick={() => onFill(employee)}
+                          disabled={!canEditEmployee(workspace.profile, employee, workspace)}
+                        >
+                          Fill
+                        </Button>
+                      </td>
+                      <td className="border-l border-stone-200 px-2 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-rose-700 text-rose-700 hover:bg-rose-50 hover:text-rose-800"
+                          onClick={() => onClear(employee)}
+                          disabled={!canEditEmployee(workspace.profile, employee, workspace)}
+                        >
+                          Clear
+                        </Button>
+                      </td>
+                    </>
+                  ) : null}
+                </tr>
+              );
+            }) : (
+              <tr>
+                <td className="px-4 py-8 text-sm font-semibold text-stone-500" colSpan={days.length + 8}>No employees visible for this account and company.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+        {cellMenu ? <TimesheetCellMenu x={cellMenu.x} y={cellMenu.y} onApply={applyCellMenuType} /> : null}
+      </div>
+    </Card>
+  );
+}
+
+function EntryCell({
+  employee,
+  day,
+  workspace,
+  onSetHours,
+  onOpenMenu,
+  onMove
+}: {
+  employee: ProfileRow;
+  day: ReturnType<typeof daysInMonth>[number];
+  workspace: Workspace;
+  onSetHours: (employee: ProfileRow, iso: string, hours: string) => void;
+  onOpenMenu: (target: HTMLElement, employee: ProfileRow, iso: string) => void;
+  onMove: (key: string, direction: 1 | -1) => void;
+}) {
+  const entry = entryFor(workspace.entries, employee.id, day.iso);
+  const holiday = holidayForEmployee(employee, day.iso, workspace);
+  const expected = isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace);
+  const normal = normalHours(employee, workspace);
+  const code = entry ? ENTRY_LABELS[entry.type] || entry.type : holiday ? "H" : "";
+  const detail = entry ? entryDetail(entry, normal) : "";
+  const tooltip = entry ? entryTooltip(entry, normal) : holiday?.name || (expected ? "Expected working day" : "Non-working day");
+  const editable = canEditEmployee(workspace.profile, employee, workspace);
+  const company = workspace.companies.find((item) => item.id === employee.company_id);
+  const customColor = entry?.type ? entryColor(company, entry.type) : null;
+  const numericEntry = !entry || ["normal", "overtime"].includes(entry.type);
+  const initialHours = numericEntry && entry ? String(formatNumber(Number(entry.hours || 0))) : "";
+  const [draftHours, setDraftHours] = React.useState(initialHours);
+  const inputRef = React.useRef<HTMLInputElement | null>(null);
+  const longPressRef = React.useRef<number | null>(null);
+  const cellKey = `${employee.id}:${day.iso}`;
+
+  React.useEffect(() => {
+    setDraftHours(initialHours);
+  }, [initialHours]);
+
+  function commitHours() {
+    if (!editable || !numericEntry || draftHours === initialHours) return;
+    onSetHours(employee, day.iso, draftHours);
+  }
+
+  function updateDraftHours(value: string) {
+    const digits = value.replace(/\D/g, "");
+    if (!digits) {
+      setDraftHours("");
+      return;
+    }
+    setDraftHours(String(Math.min(24, Number(digits))));
+  }
+
+  function clearLongPress() {
+    if (longPressRef.current) window.clearTimeout(longPressRef.current);
+    longPressRef.current = null;
+  }
+
+  function focusCellInput() {
+    if (!editable || !numericEntry) return;
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }
+
+  return (
+    <td
+      title={tooltip}
+      className={cn("border-l border-stone-200 p-0 text-center", cellClass(entry?.type, Boolean(holiday), expected, Boolean(customColor)))}
+      style={customColor ? { backgroundColor: customColor } : undefined}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onOpenMenu(event.currentTarget, employee, day.iso);
+      }}
+    >
+      <div
+        data-cell-key={cellKey}
+        className={cn(
+          "relative flex h-12 w-full flex-col items-center justify-center px-0.5 py-0.5 text-center leading-tight focus-within:z-20 focus-within:shadow-[inset_0_0_0_2px_#047857]",
+          editable && numericEntry ? "cursor-text hover:bg-white/25" : "cursor-default"
+        )}
+        onClick={focusCellInput}
+        onPointerDown={(event) => {
+          if (!editable) return;
+          clearLongPress();
+          const target = event.currentTarget;
+          longPressRef.current = window.setTimeout(() => onOpenMenu(target, employee, day.iso), 550);
+        }}
+        onPointerUp={clearLongPress}
+        onPointerLeave={clearLongPress}
+      >
+        {numericEntry ? (
+          <>
+            {entry?.type === "overtime" ? <span className="block text-[10px] font-black text-amber-900">OT</span> : null}
+            <span className="mx-auto flex h-5 max-w-full items-center justify-center gap-0.5 leading-none">
+              <input
+                ref={inputRef}
+                aria-label={`${employee.full_name} ${day.iso} hours`}
+                className={cn(
+                  "min-w-0 bg-transparent p-0 text-center text-[11px] font-black leading-none outline-none",
+                  draftHours ? "w-auto" : "w-full",
+                  editable ? "text-stone-950" : "text-stone-500"
+                )}
+                style={draftHours ? { width: `${Math.max(1, draftHours.length)}ch` } : undefined}
+                value={draftHours}
+                placeholder={holiday ? "H" : ""}
+                disabled={!editable}
+                inputMode="numeric"
+                pattern="[0-9]*"
+                onChange={(event) => updateDraftHours(event.target.value)}
+                onBlur={commitHours}
+                onKeyDown={(event) => {
+                  if (event.key.length === 1 && !/\d/.test(event.key)) {
+                    event.preventDefault();
+                  }
+                  if (event.key === "Enter") {
+                    event.currentTarget.blur();
+                  }
+                  if (event.key === "Tab") {
+                    event.preventDefault();
+                    commitHours();
+                    onMove(cellKey, event.shiftKey ? -1 : 1);
+                  }
+                  if (event.key === "Escape") {
+                    setDraftHours(initialHours);
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+              {draftHours ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
+            </span>
+          </>
+        ) : (
+          <>
+            <span className="block text-[11px] font-black">{code}</span>
+            <span className="text-[10px] text-stone-500">{detail}</span>
+          </>
+        )}
+      </div>
+    </td>
+  );
+}
+
+function TimesheetCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (type: string) => void }) {
+  return createPortal(
+    <div
+      className="fixed z-[80] grid min-w-36 overflow-visible rounded-md border border-stone-200 bg-white p-1 text-left text-xs font-semibold shadow-xl shadow-stone-950/15"
+      style={{ left: x, top: y }}
+      onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {[
+        ["normal", "Normal shift"],
+        ["vacation", "Vacation CO"],
+        ["medical", "Medical CM"],
+        ["absence", "Absence"]
+      ].map(([value, label]) => (
+        <button
+          key={value}
+          type="button"
+          className="rounded px-2 py-1.5 text-left hover:bg-stone-100"
+          onClick={() => onApply(value)}
+        >
+          {label}
+        </button>
+      ))}
+      <div className="group relative">
+        <button type="button" className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
+          Special Event
+          <span className="text-stone-400">›</span>
+        </button>
+        <div className="absolute left-full top-0 hidden min-w-44 rounded-md border border-stone-200 bg-white p-1 shadow-xl shadow-stone-950/15 group-hover:grid group-focus-within:grid">
+          {SPECIAL_EVENT_REASONS.map((reason) => (
+            <button key={reason} type="button" className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply("special_event")}>
+              {reason}
+            </button>
+          ))}
+        </div>
+      </div>
+      <button
+        type="button"
+        className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50"
+        onClick={() => onApply("clear")}
+      >
+        Clear
+      </button>
+    </div>,
+    document.body
+  );
+}
+
+function entryDetail(entry: EntryRow, normal: number) {
+  const hours = Number(entry.hours || 0);
+  if (entry.type === "overtime") return `${formatNumber(normal)}h+${formatNumber(Math.max(0, hours - normal))}h`;
+  if (["vacation", "medical", "special_event"].includes(entry.type)) return "day";
+  if (entry.type === "absence") return "";
+  return hours ? `${formatNumber(hours)}h` : "";
+}
+
+function entryTooltip(entry: EntryRow, normal: number) {
+  const hours = Number(entry.hours || 0);
+  if (entry.type === "overtime") return `Overtime of ${formatNumber(Math.max(0, hours - normal))}h over normal shift of ${formatNumber(normal)}h`;
+  if (entry.type === "vacation") return "Vacation day";
+  if (entry.type === "medical") return "Medical leave day";
+  if (entry.type === "special_event") return "Special event day";
+  if (entry.type === "absence") return "Absence";
+  return `${entry.type} ${formatNumber(hours)}h`;
+}
+
+function cellClass(type: string | undefined, holiday: boolean, expected: boolean, hasCustomColor = false) {
+  if (hasCustomColor) return "text-stone-950";
+  if (type === "vacation") return "bg-emerald-100 text-emerald-900";
+  if (type === "medical") return "bg-rose-100 text-rose-900";
+  if (type === "absence") return "bg-stone-900 text-white";
+  if (type === "overtime") return "bg-amber-100 text-amber-950";
+  if (type === "special_event") return "bg-stone-200 text-stone-800";
+  if (holiday) return "bg-yellow-50 text-yellow-900";
+  if (!expected) return "bg-sky-50";
+  return "bg-white";
+}
+
+function entryColor(company: CompanyRow | undefined, type: string) {
+  const colors = company?.entry_colors;
+  if (!colors || typeof colors !== "object") return null;
+  const value = colors[type];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function chartEmployeeKey(employee: ProfileRow) {
+  return `employee_${employee.id.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+}
+
+function LeaveRequests({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const [type, setType] = React.useState("vacation");
+  const [startDate, setStartDate] = React.useState(currentMonth() + "-01");
+  const [endDate, setEndDate] = React.useState(currentMonth() + "-01");
+  const [notes, setNotes] = React.useState("");
+  const [file, setFile] = React.useState<File | null>(null);
+  const [previewHtml, setPreviewHtml] = React.useState<string | null>(null);
+  const requests = visibleLeaveRequests(workspace, activeCompany?.id || "");
+  const canCreate = canCreateLeaveRequest(workspace.profile);
+  const visibleEmployeeIds = new Set(filteredEmployees(workspace, activeCompany?.id || "", "all", "all").map((employee) => employee.id));
+  const recordedEntries = workspace.entries
+    .filter((entry) => entry.company_id === activeCompany?.id && ["vacation", "medical", "special_event"].includes(entry.type) && !entry.leave_request_id && visibleEmployeeIds.has(entry.employee_user_id))
+    .toSorted((a, b) => b.work_date.localeCompare(a.work_date));
+
+  async function submitRequest() {
+    if (!supabase || !workspace.profile.environment_id || !activeCompany || !canCreate) return;
+    const requestId = crypto.randomUUID();
+    const documentHtml = generatedLeaveDocumentHtml(
+      { type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null },
+      workspace.profile,
+      activeCompany
+    );
+    let attachmentPath: string | null = null;
+    try {
+      attachmentPath = file ? await uploadLeaveDocument(supabase, workspace, requestId, file) : null;
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
+      return;
+    }
+    const { error } = await supabase.from("leave_requests").insert({
+      id: requestId,
+      environment_id: workspace.profile.environment_id,
+      company_id: activeCompany.id,
+      employee_user_id: workspace.profile.id,
+      type,
+      start_date: startDate,
+      end_date: endDate,
+      notes: notes || null,
+      status: "requested",
+      attachment_path: attachmentPath,
+      generated_document_html: documentHtml
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setNotes("");
+    setFile(null);
+    setPreviewHtml(null);
+    onReload();
+  }
+
+  async function decide(request: LeaveRequestRow, status: "approved" | "rejected") {
+    if (!supabase) return;
+    const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+    if (!canApproveLeave(workspace.profile, employee, workspace)) return;
+    const documentHtml = employee
+      ? generatedLeaveDocumentHtml({ ...request, status, decided_at: new Date().toISOString() }, employee, activeCompany, workspace.profile)
+      : request.generated_document_html;
+    const { error } = await supabase
+      .from("leave_requests")
+      .update({
+        status,
+        decided_by: workspace.profile.id,
+        decided_at: new Date().toISOString(),
+        generated_document_html: documentHtml
+      })
+      .eq("id", request.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    if (status === "approved" && employee && activeCompany && workspace.profile.environment_id) {
+      const rows = datesBetween(request.start_date, request.end_date)
+        .filter((day) => isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace))
+        .map((day) => ({
+          environment_id: workspace.profile.environment_id,
+          company_id: activeCompany.id,
+          employee_user_id: employee.id,
+          department_id: employee.department_id,
+          work_date: day.iso,
+          type: request.type,
+          hours: 0,
+          leave_request_id: request.id,
+          attachment_path: request.attachment_path,
+          created_by: workspace.profile.id,
+          updated_by: workspace.profile.id
+        }));
+      if (rows.length) {
+        const { error: entryError } = await supabase.from("timesheet_entries").upsert(rows, { onConflict: "employee_user_id,work_date" });
+        if (entryError) {
+          onMessage(entryError.message);
+          return;
+        }
+      }
+    }
+    onReload();
+  }
+
+  async function attachRecordedEntryFile(entry: EntryRow, file: File | null) {
+    if (!supabase || !file) return;
+    try {
+      const path = await uploadLeaveDocument(supabase, workspace, entry.id, file);
+      const { error } = await supabase
+        .from("timesheet_entries")
+        .update({ attachment_path: path })
+        .eq("id", entry.id);
+      if (error) {
+        onMessage(error.message);
+        return;
+      }
+      onReload();
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "Could not upload leave document.");
+    }
+  }
+
+  return (
+    <div className="grid gap-3">
+      {canCreate ? (
+        <Card className="rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">New Leave Request</CardTitle>
+            <CardDescription className="text-[13px]">Request CO, CM, or Special Event days. Generated documents can be previewed before submit.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-[140px_1fr_1fr_1.2fr]">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Type
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={type} onChange={(event) => setType(event.target.value)}>
+                <option value="vacation">Vacation CO</option>
+                <option value="medical">Medical CM</option>
+                <option value="special_event">Special Events</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Start
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              End
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Notes
+              <input className="h-9 rounded-md border border-stone-200 px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Optional reason" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500 xl:col-span-2">
+              Document
+              <input className="h-9 rounded-md border border-stone-200 bg-white px-2 py-1 text-[13px] font-semibold normal-case tracking-normal text-stone-900" type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
+            </label>
+            <div className="flex items-end gap-2 xl:col-span-2">
+              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setPreviewHtml(generatedLeaveDocumentHtml({ type, start_date: startDate, end_date: endDate, notes, status: "requested", decided_at: null }, workspace.profile, activeCompany))}>
+                <Eye className="h-4 w-4" /> Preview
+              </Button>
+              <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={submitRequest}>Submit</Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">Leave Requests</CardTitle>
+          <CardDescription className="text-[13px]">One row per request, with approval and document actions.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2.5">
+          {requests.length ? requests.map((request) => {
+            const employee = workspace.profiles.find((profile) => profile.id === request.employee_user_id);
+            const canDecide = request.status === "requested" && canApproveLeave(workspace.profile, employee, workspace);
+            const documentHtml = request.generated_document_html || (employee ? generatedLeaveDocumentHtml(request, employee, activeCompany) : "");
+            return (
+              <div key={request.id} className="grid gap-2.5 rounded-2xl border border-stone-200 bg-stone-50/55 p-2.5 lg:grid-cols-[1fr_auto_auto] lg:items-center">
+                <div>
+                  <strong>{employee?.full_name || "Employee"}</strong>
+                  <p className="text-[13px] text-stone-500">{request.start_date} to {request.end_date} - {ENTRY_LABELS[request.type] || request.type}{request.notes ? ` - ${request.notes}` : ""}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={request.status === "approved" ? "success" : request.status === "requested" ? "warning" : "secondary"}>{request.status}</Badge>
+                  {request.attachment_path ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void downloadStorageFile(supabase, "leave-documents", request.attachment_path || "")}><Download className="h-3.5 w-3.5" />File</Button> : null}
+                  {documentHtml ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setPreviewHtml(documentHtml)}>Preview</Button> : null}
+                  {documentHtml ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => downloadHtml(documentHtml, `${employee?.full_name || "leave"}-${request.start_date}.html`)}>Download</Button> : null}
+                </div>
+                {canDecide ? (
+                  <div className="flex gap-2 lg:justify-end">
+                    <Button size="sm" className="h-7 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void decide(request, "approved")}>Approve</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void decide(request, "rejected")}>Deny</Button>
+                  </div>
+                ) : null}
+              </div>
+            );
+          }) : null}
+          {recordedEntries.map((entry) => {
+            const employee = workspace.profiles.find((profile) => profile.id === entry.employee_user_id);
+            return (
+              <div key={entry.id} className="grid gap-2.5 rounded-2xl border border-stone-200 bg-stone-50/55 p-2.5 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <strong>{employee?.full_name || "Employee"}</strong>
+                  <p className="text-[13px] text-stone-500">{entry.work_date} - {ENTRY_LABELS[entry.type] || entry.type} recorded in Timesheet</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                  <Badge variant="secondary">Recorded</Badge>
+                  {["vacation", "medical"].includes(entry.type) ? (
+                    <label className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-stone-200 bg-white px-2 text-[11px] font-semibold text-stone-800 hover:bg-stone-50">
+                      {entry.attachment_path ? "Replace file" : "Attach file"}
+                      <input
+                        className="hidden"
+                        type="file"
+                        onChange={(event) => void attachRecordedEntryFile(entry, event.target.files?.[0] || null)}
+                      />
+                    </label>
+                  ) : null}
+                  {entry.attachment_path ? <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void downloadStorageFile(supabase, "leave-documents", entry.attachment_path || "")}><Download className="h-3.5 w-3.5" />File</Button> : null}
+                </div>
+              </div>
+            );
+          })}
+          {!requests.length && !recordedEntries.length ? <p className="text-sm font-semibold text-stone-500">No leave requests found.</p> : null}
+        </CardContent>
+      </Card>
+
+      {previewHtml ? <DocumentPreview html={previewHtml} onClose={() => setPreviewHtml(null)} /> : null}
+    </div>
+  );
+}
+
+function Charts({
+  workspace,
+  activeCompany,
+  employees,
+  month,
+  people,
+  worked,
+  expected,
+  overtime,
+  co,
+  cm,
+  se,
+  ab,
+  difference
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  employees: ProfileRow[];
+  month: string;
+  people: number;
+  worked: number;
+  expected: number;
+  overtime: number;
+  co: number;
+  cm: number;
+  se: number;
+  ab: number;
+  difference: number;
+}) {
+  const days = daysInMonth(month);
+  const employeeKeys = employees.map((employee) => ({
+    employee,
+    key: chartEmployeeKey(employee)
+  }));
+  const employeePalette = [
+    "#047857",
+    "#0f766e",
+    "#2563eb",
+    "#7c3aed",
+    "#be123c",
+    "#b45309",
+    "#0891b2",
+    "#4d7c0f",
+    "#9333ea",
+    "#0369a1",
+    "#c2410c",
+    "#0d9488"
+  ];
+  const employeeChartConfig = employeeKeys.reduce<ChartConfig>((config, item, index) => {
+    config[item.key] = {
+      label: item.employee.full_name,
+      color: employeePalette[index % employeePalette.length]
+    };
+    return config;
+  }, {});
+  const dailyData = days.map((day) => {
+    const row: Record<string, number | string> = {
+      day: day.day,
+      label: String(day.day),
+      iso: day.iso,
+      expected: 0,
+      worked: 0,
+      delta: 0
+    };
+    employeeKeys.forEach(({ employee, key }) => {
+      const entry = entryFor(workspace.entries, employee.id, day.iso);
+      const normal = normalHours(employee, workspace);
+      const isExpected = isExpectedWorkDay(employee, day.iso, day.weekdayIndex, workspace);
+      const employeeExpected = isExpected ? normal : 0;
+      let employeeWorked = 0;
+      if (entry) {
+        if (["normal", "overtime"].includes(entry.type)) {
+          employeeWorked = Number(entry.hours || 0);
+        } else if (["vacation", "medical", "special_event"].includes(entry.type)) {
+          employeeWorked = employeeExpected;
+        }
+      }
+      row[key] = employeeWorked;
+      row.expected = Number(row.expected) + employeeExpected;
+      row.worked = Number(row.worked) + employeeWorked;
+    });
+    row.delta = Number(row.worked) - Number(row.expected);
+    row.status = Number(row.delta) < 0 ? "Under" : Number(row.delta) > 0 ? "Over" : "On norm";
+    return row;
+  }).filter((day) => Number(day.expected) > 0);
+  const fulfillment = expected ? Math.round((worked / expected) * 100) : 0;
+  const workDays = dailyData.filter((day) => Number(day.expected) > 0).length;
+  const underDays = dailyData.filter((day) => Number(day.delta) < 0).length;
+  const overDays = dailyData.filter((day) => Number(day.delta) > 0).length;
+  const leaveDays = co + cm + se;
+  const exceptionHours = overtime + ab * 8;
+  const overtimeShare = worked ? Math.round((overtime / worked) * 100) : 0;
+  const leaveDensity = people && workDays ? Math.round((leaveDays / (people * workDays)) * 100) : 0;
+  const exceptionDensity = expected ? Math.round((exceptionHours / expected) * 100) : 0;
+  const peakDay = dailyData.toSorted((a, b) => Number(b.worked) - Number(a.worked))[0];
+  const weakestDay = dailyData
+    .filter((day) => Number(day.expected) > 0)
+    .toSorted((a, b) => Number(a.delta) - Number(b.delta))[0];
+  const kpis = [
+    {
+      label: "Fulfillment",
+      value: `${fulfillment}%`,
+      hint: `${formatNumber(worked)}h from ${formatNumber(expected)}h norm`,
+      tone: fulfillment >= 100 ? "good" : "bad"
+    },
+    {
+      label: "Net Difference",
+      value: `${difference > 0 ? "+" : ""}${formatNumber(difference)}h`,
+      hint: `${overDays} over days, ${underDays} under days`,
+      tone: difference >= 0 ? "good" : "bad"
+    },
+    {
+      label: "Peak Day",
+      value: peakDay ? `${formatNumber(Number(peakDay.worked))}h` : "0h",
+      hint: peakDay ? `${String(peakDay.iso)} - ${peakDay.status}` : "No data",
+      tone: "neutral"
+    },
+    {
+      label: "Leave Days",
+      value: `${leaveDays}d`,
+      hint: `${co} CO, ${cm} CM, ${se} SE`,
+      tone: leaveDays ? "warn" : "neutral"
+    }
+  ];
+  const radialItems = [
+    { name: "Fulfillment", value: Math.min(100, fulfillment), color: "#047857", detail: `${formatNumber(worked)}h` },
+    { name: "OT Share", value: Math.min(100, overtimeShare), color: "#b45309", detail: `${formatNumber(overtime)}h` },
+    { name: "Leave Density", value: Math.min(100, leaveDensity), color: "#0f766e", detail: `${leaveDays}d` },
+    { name: "Exception Load", value: Math.min(100, exceptionDensity), color: "#be123c", detail: `${formatNumber(exceptionHours)}h` }
+  ];
+  const attentionRows = employees
+    .map((employee) => ({ employee, totals: totalsFor(employee, month, workspace) }))
+    .filter((row) => row.totals.difference < 0 || row.totals.overtime > 0 || row.totals.absenceDays > 0)
+    .toSorted((a, b) => (a.totals.difference - b.totals.difference) || (b.totals.overtime - a.totals.overtime))
+    .slice(0, 10);
+  const departmentRows = workspace.departments
+    .filter((department) => department.company_id === activeCompany?.id)
+    .map((department) => {
+      const departmentEmployees = employees.filter((employee) => employee.department_id === department.id);
+      const totals = departmentEmployees.reduce((acc, employee) => {
+        const row = totalsFor(employee, month, workspace);
+        acc.worked += row.worked;
+        acc.expected += row.expected;
+        acc.overtime += row.overtime;
+        acc.leave += row.vacationDays + row.medicalDays + row.specialEventDays;
+        acc.absence += row.absenceDays;
+        return acc;
+      }, { worked: 0, expected: 0, overtime: 0, leave: 0, absence: 0 });
+      return { department, employees: departmentEmployees.length, ...totals };
+    })
+    .filter((row) => row.employees > 0);
+  const departmentChartData = departmentRows.map((row) => ({
+    name: row.department.name,
+    worked: row.worked,
+    expected: row.expected,
+    delta: row.worked - row.expected,
+    overtime: row.overtime,
+    leave: row.leave,
+    absence: row.absence,
+    employees: row.employees
+  }));
+  const dailyChartConfig: ChartConfig = {
+    ...employeeChartConfig,
+    expected: { label: "Expected", color: "#78716c" },
+    worked: { label: "Worked", color: "#047857" }
+  };
+
+  return (
+    <div className="grid h-[calc(100vh-188px)] grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {kpis.map((kpi) => (
+          <Card key={kpi.label} className="border-stone-200/80">
+            <CardHeader className="p-2.5">
+              <CardDescription className="text-[10px] font-black uppercase tracking-wide">{kpi.label}</CardDescription>
+              <CardTitle className={cn(
+                "text-xl font-black",
+                kpi.tone === "good" && "text-emerald-700",
+                kpi.tone === "bad" && "text-rose-700",
+                kpi.tone === "warn" && "text-amber-700"
+              )}>
+                {kpi.value}
+              </CardTitle>
+              <p className="text-[11px] font-semibold text-stone-500">{kpi.hint}</p>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid min-h-0 items-stretch gap-3 xl:grid-cols-[minmax(0,1.7fr)_360px]">
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader className="pb-2">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <CardTitle>Daily Workload Stack</CardTitle>
+                <CardDescription>
+                  Employee-level daily contribution. Red bands are below norm; amber bands are above norm.
+                </CardDescription>
+              </div>
+              <Badge variant="secondary">{people} people - {workDays} workdays</Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col">
+            <ChartContainer config={dailyChartConfig} className="h-full min-h-0 w-full flex-1 aspect-auto">
+              <AreaChart data={dailyData} margin={{ left: 8, right: 16, top: 12, bottom: 4 }}>
+                {dailyData
+                  .filter((day) => Number(day.delta) !== 0 && Number(day.expected) > 0)
+                  .map((day) => (
+                    <ReferenceArea
+                      key={String(day.iso)}
+                      x1={String(day.label)}
+                      x2={String(day.label)}
+                      strokeOpacity={0}
+                      fill={Number(day.delta) < 0 ? "#fecdd3" : "#fde68a"}
+                      fillOpacity={0.34}
+                    />
+                  ))}
+                <XAxis
+                  dataKey="label"
+                  tickLine={false}
+                  axisLine={false}
+                  tickMargin={8}
+                />
+                <YAxis tickLine={false} axisLine={false} tickMargin={8} width={38} />
+                <RechartsTooltip
+                  cursor={{ stroke: "#a8a29e", strokeDasharray: "4 4" }}
+                  content={<ChartTooltipContent formatter={(value) => `${formatNumber(Number(value))}h`} />}
+                />
+                {employeeKeys.map(({ key }) => (
+                  <Area
+                    key={key}
+                    dataKey={key}
+                    stackId="employees"
+                    type="monotone"
+                    stroke={`var(--color-${key})`}
+                    fill={`var(--color-${key})`}
+                    fillOpacity={0.72}
+                    strokeWidth={1.25}
+                    isAnimationActive={false}
+                  />
+                ))}
+              </AreaChart>
+            </ChartContainer>
+            <div className="mt-2 flex shrink-0 flex-wrap gap-1.5">
+              {employeeKeys.slice(0, 14).map(({ employee, key }) => (
+                <span key={key} className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-600">
+                  <span className="size-2 rounded-sm" style={{ backgroundColor: employeeChartConfig[key].color }} />
+                  {employee.full_name}
+                </span>
+              ))}
+              {employeeKeys.length > 14 ? (
+                <span className="rounded-full border border-stone-200 px-2 py-0.5 text-[10px] font-bold text-stone-500">
+                  +{employeeKeys.length - 14} more
+                </span>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="grid min-h-0">
+          <Card className="flex min-h-0 flex-col">
+            <CardHeader className="pb-2">
+              <CardTitle>Scope Radials</CardTitle>
+              <CardDescription>Fast read on fulfillment, OT, leave, and exception pressure.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid flex-1 grid-cols-2 gap-2">
+              {radialItems.map((item) => (
+                <div key={item.name} className="grid min-h-0 content-center rounded-lg border border-stone-200 p-2">
+                  <ChartContainer config={{ value: { label: item.name, color: item.color } }} className="mx-auto h-16 w-full">
+                    <RadialBarChart data={[item]} innerRadius="72%" outerRadius="96%" startAngle={90} endAngle={90 - (360 * item.value) / 100}>
+                      <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
+                      <RadialBar dataKey="value" cornerRadius={8} background>
+                        <Cell fill={item.color} />
+                      </RadialBar>
+                    </RadialBarChart>
+                  </ChartContainer>
+                  <div className="text-center">
+                    <p className="text-base font-black leading-tight">{item.value}%</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-stone-500">{item.name}</p>
+                    <p className="text-[11px] font-semibold text-stone-500">{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_340px_minmax(0,1fr)]">
+        <Card className="h-fit">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle>Department Balance</CardTitle>
+            <CardDescription>Worked versus norm, sorted by highest absolute variance.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 p-3 pt-0">
+            {departmentChartData.length ? departmentChartData
+              .toSorted((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+              .map((row) => (
+                <div key={row.name} className="rounded-lg border border-stone-200 p-2.5">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-black">{row.name}</p>
+                      <p className="text-xs font-semibold text-stone-500">{row.employees} people - {formatNumber(row.worked)}h / {formatNumber(row.expected)}h</p>
+                    </div>
+                    <Badge variant={row.delta < 0 ? "warning" : "secondary"} className={row.delta < 0 ? "bg-rose-100 text-rose-800" : undefined}>
+                      {row.delta > 0 ? "+" : ""}{formatNumber(row.delta)}h
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-[1fr_auto] items-center gap-2 text-xs font-bold text-stone-500">
+                    <div className="h-2 overflow-hidden rounded-full bg-stone-100">
+                      <div
+                        className={cn("h-full rounded-full", row.delta < 0 ? "bg-rose-500" : "bg-emerald-700")}
+                        style={{ width: `${Math.min(100, row.expected ? (row.worked / row.expected) * 100 : 0)}%` }}
+                      />
+                    </div>
+                    <span>{row.expected ? Math.round((row.worked / row.expected) * 100) : 0}%</span>
+                  </div>
+                </div>
+            )) : <p className="text-sm font-semibold text-stone-500">No department data in this scope.</p>}
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle>Variance Signals</CardTitle>
+            <CardDescription>Days worth checking before payroll close.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-2 p-3 pt-0 text-sm font-semibold">
+            <div className="flex items-center justify-between rounded-md bg-rose-50 px-3 py-2 text-rose-800">
+              <span>Under-norm days</span>
+              <span>{underDays}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-md bg-amber-50 px-3 py-2 text-amber-800">
+              <span>Over-norm days</span>
+              <span>{overDays}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-md bg-stone-50 px-3 py-2">
+              <span className="text-stone-500">Weakest day</span>
+              <span className="whitespace-nowrap">{weakestDay ? `${weakestDay.iso}: ${formatNumber(Number(weakestDay.delta))}h` : "None"}</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="h-fit">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle>Exception Ranking</CardTitle>
+            <CardDescription>People with missing hours, overtime, or absences.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid max-h-[146px] gap-2 overflow-y-auto p-3 pt-0">
+            {attentionRows.length ? attentionRows.map(({ employee, totals }) => (
+              <div key={employee.id} className="grid grid-cols-[1fr_auto] items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold">
+                <div className="min-w-0">
+                  <p className="truncate font-black">{employee.full_name}</p>
+                  <p className="truncate text-xs text-stone-500">{departmentFor(employee, workspace)?.name || "No department"} - {employee.position || ROLES[employee.role]}</p>
+                </div>
+                <div className="flex flex-wrap justify-end gap-1 text-xs">
+                  <Badge variant={totals.difference < 0 ? "warning" : "secondary"} className={totals.difference < 0 ? "bg-rose-100 text-rose-800" : undefined}>
+                    {totals.difference > 0 ? "+" : ""}{formatNumber(totals.difference)}h
+                  </Badge>
+                  {totals.overtime ? <Badge variant="outline">{formatNumber(totals.overtime)}h OT</Badge> : null}
+                  {totals.absenceDays ? <Badge variant="outline">{totals.absenceDays} AB</Badge> : null}
+                </div>
+              </div>
+            )) : <p className="text-sm font-semibold text-stone-500">No exceptions in this scope.</p>}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Management({
+  workspace,
+  activeTab,
+  activeCompany,
+  supabase,
+  onReload,
+  onSignOut,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeTab: string;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onSignOut: () => Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  if (activeTab === "companies") {
+    return <ScopedCompanyManagement workspace={workspace} activeCompany={activeCompany} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
+  }
+  if (activeTab === "admins") {
+    return <AccountManagement mode="admins" workspace={workspace} supabase={supabase} onReload={onReload} onMessage={onMessage} />;
+  }
+  return <SettingsPage workspace={workspace} activeCompany={activeCompany} supabase={supabase} onReload={onReload} onSignOut={onSignOut} onMessage={onMessage} />;
+}
+
+type HolidayDraft = {
+  date: string;
+  name: string;
+  countryCode: string;
+};
+
+function SettingsPage({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onSignOut,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onSignOut: () => Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  const [countryCode, setCountryCode] = React.useState("RO");
+  const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
+  const [holidayCompanyId, setHolidayCompanyId] = React.useState(activeCompany?.id || "all");
+  const [holidayDepartmentId, setHolidayDepartmentId] = React.useState("all");
+  const [preview, setPreview] = React.useState<HolidayDraft[]>([]);
+  const [manualDate, setManualDate] = React.useState("");
+  const [manualName, setManualName] = React.useState("");
+  const setupAllowed = ["admin_account", "payroll_admin"].includes(workspace.profile.role);
+  const scopedDepartments = workspace.departments.filter((department) => holidayCompanyId !== "all" && department.company_id === holidayCompanyId);
+
+  async function loadPublicHolidays() {
+    const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${holidayYear}/${countryCode}`);
+    if (!response.ok) {
+      onMessage("Could not load public holidays for that country/year.");
+      return;
+    }
+    const data = await response.json() as Array<{ date: string; localName?: string; name?: string; countryCode?: string }>;
+    setPreview(data.map((holiday) => ({
+      date: holiday.date,
+      name: holiday.localName || holiday.name || "Holiday",
+      countryCode: holiday.countryCode || countryCode
+    })));
+  }
+
+  function addManualHoliday() {
+    if (!manualDate || !manualName.trim()) return;
+    setPreview((current) => [...current, { date: manualDate, name: manualName.trim(), countryCode }].toSorted((a, b) => a.date.localeCompare(b.date)));
+    setManualDate("");
+    setManualName("");
+  }
+
+  async function applyHolidays() {
+    if (!supabase || !workspace.profile.environment_id || !setupAllowed || !preview.length) return;
+    const rows = preview.map((holiday) => ({
+      environment_id: workspace.profile.environment_id,
+      company_id: holidayCompanyId === "all" ? null : holidayCompanyId,
+      department_id: holidayDepartmentId === "all" ? null : holidayDepartmentId,
+      country_code: holiday.countryCode,
+      holiday_date: holiday.date,
+      name: holiday.name,
+      created_by: workspace.profile.id
+    }));
+    const { error } = await supabase.from("national_holidays").upsert(rows, { onConflict: "environment_id,company_id,department_id,country_code,holiday_date,name" });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onMessage(`${rows.length} holidays saved.`);
+    setPreview([]);
+    onReload();
+  }
+
+  async function deleteAdminAccount() {
+    if (!supabase || workspace.profile.role !== "admin_account") return;
+    const typed = window.prompt("This deletes your Admin Account, all companies, users, timesheets, leave requests, documents, and logs. Type DELETE TABLESHIFTS to continue.");
+    if (typed !== "DELETE TABLESHIFTS") return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const response = await fetch("/api/delete-admin-environment", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ confirm: "DELETE TABLESHIFTS" })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not delete Admin Account.");
+      return;
+    }
+    await onSignOut();
+  }
+
+  return (
+    <div className="grid gap-3">
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-lg">National Holidays</CardTitle>
+          <CardDescription className="text-[13px]">Load public holidays, adjust the list, and apply them to all companies or one scope.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-2.5 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Country
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={countryCode} onChange={(event) => setCountryCode(event.target.value)}>
+                {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Year
+              <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayYear} onChange={(event) => setHolidayYear(event.target.value)} type="number" min="2020" max="2100" />
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Company
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayCompanyId} onChange={(event) => {
+                setHolidayCompanyId(event.target.value);
+                setHolidayDepartmentId("all");
+              }}>
+                <option value="all">All companies</option>
+                {accessibleCompanies(workspace).map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1 text-xs font-black uppercase tracking-wide text-stone-500">
+              Department
+              <select className="h-9 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold normal-case tracking-normal text-stone-900" value={holidayDepartmentId} onChange={(event) => setHolidayDepartmentId(event.target.value)} disabled={holidayCompanyId === "all"}>
+                <option value="all">All departments</option>
+                {scopedDepartments.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+              </select>
+            </label>
+            <div className="flex items-end">
+              <Button size="sm" className="h-9 w-full text-xs" onClick={() => void loadPublicHolidays()} disabled={!setupAllowed}><CalendarDays className="h-4 w-4" />Load</Button>
+            </div>
+          </div>
+          <div className="grid gap-2.5 md:grid-cols-[1fr_1.5fr_auto]">
+            <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} />
+            <input className="h-9 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="Manual holiday name" />
+            <Button size="sm" variant="outline" className="h-9 text-xs" onClick={addManualHoliday}>Add manual</Button>
+          </div>
+          <div className="grid max-h-72 gap-2 overflow-auto">
+            {preview.length ? preview.map((holiday) => (
+              <div key={`${holiday.date}-${holiday.name}`} className="flex items-center justify-between gap-3 rounded-md bg-stone-50 p-2 text-[13px] font-semibold">
+                <span>{holiday.date} - {holiday.name}</span>
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setPreview((current) => current.filter((item) => item !== holiday))}><X className="h-4 w-4" />Remove</Button>
+              </div>
+            )) : <p className="text-sm font-semibold text-stone-500">Load holidays or add them manually before applying.</p>}
+          </div>
+          <div className="flex justify-end">
+            <Button size="sm" className="h-9 text-xs" onClick={() => void applyHolidays()} disabled={!setupAllowed || !preview.length}>Apply holidays</Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {workspace.profile.role === "admin_account" ? (
+        <Card className="rounded-[22px] border-rose-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <CardTitle className="text-lg">Admin Account Danger Area</CardTitle>
+            <CardDescription className="text-[13px]">Delete this Admin Account and all associated company data.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button size="sm" className="h-9 bg-rose-700 text-xs text-white hover:bg-rose-800" onClick={() => void deleteAdminAccount()}><Trash2 className="h-4 w-4" />Delete Admin Account</Button>
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function CompanyDepartmentManagement({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const [departmentName, setDepartmentName] = React.useState("");
+  const [shiftHours, setShiftHours] = React.useState("8");
+  const [managerId, setManagerId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [expandedDepartmentId, setExpandedDepartmentId] = React.useState("");
+  const [sidePanel, setSidePanel] = React.useState<
+    | { type: "department"; companyId: string }
+    | { type: "company"; companyId: string }
+    | { type: "employee"; companyId: string; departmentId: string }
+    | null
+  >(null);
+  const [editingCompanyName, setEditingCompanyName] = React.useState<Record<string, string>>({});
+  const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
+  const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
+  const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
+  const [employeeDirectoryOpen, setEmployeeDirectoryOpen] = React.useState(false);
+  const selectedCompany = activeCompany || accessibleCompanies(workspace)[0];
+  const targetCompanyId = selectedCompany?.id || "";
+  const scopedDepartments = workspace.departments.filter((department) => department.company_id === targetCompanyId);
+  const scopedUsers = workspace.profiles.filter((profile) => profile.company_id === targetCompanyId || companyIdsForProfile(profile, workspace).has(targetCompanyId));
+  const companyManagers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === targetCompanyId || profile.role === "company_manager")
+  ));
+  const assignedTeamLeaderIds = new Set(workspace.departments.map((department) => department.team_leader_user_id).filter(Boolean));
+  const teamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === targetCompanyId &&
+    !assignedTeamLeaderIds.has(profile.id)
+  ));
+
+  React.useEffect(() => {
+    setEditingCompanyName((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (next[company.id] === undefined) next[company.id] = company.name;
+      });
+      return next;
+    });
+    setColorDrafts((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (!next[company.id]) next[company.id] = { ...DEFAULT_ENTRY_COLORS, ...(company.entry_colors || {}) };
+      });
+      return next;
+    });
+    setDepartmentDrafts((current) => {
+      const next = { ...current };
+      workspace.departments.forEach((department) => {
+        if (!next[department.id]) {
+          next[department.id] = {
+            name: department.name,
+            manager: department.manager_user_id || "",
+            leader: department.team_leader_user_id || "",
+            hours: String(department.shift_hours || 8),
+            days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+          };
+        }
+      });
+      return next;
+    });
+  }, [workspace.companies, workspace.departments]);
+
+  React.useEffect(() => {
+    if (!selectedCompany) return;
+    setExpandedDepartmentId("");
+    setSidePanel(null);
+  }, [selectedCompany?.id]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadLogos() {
+      if (!supabase) return;
+      const entries = await Promise.all(workspace.companies.map(async (company) => {
+        if (!company.logo_path) return [company.id, ""] as const;
+        const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+        return [company.id, data?.signedUrl || ""] as const;
+      }));
+      if (!cancelled) setLogoUrls(Object.fromEntries(entries));
+    }
+    void loadLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace.companies]);
+
+  async function updateCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const { error } = await supabase
+      .from("companies")
+      .update({
+        name: editingCompanyName[company.id]?.trim() || company.name,
+        entry_colors: colorDrafts[company.id] || company.entry_colors || {}
+      })
+      .eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function uploadCompanyLogo(company: CompanyRow, file: File | null) {
+    if (!supabase || !workspace.profile.environment_id || !file) return;
+    const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+    const path = `${workspace.profile.environment_id}/${company.id}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("company-logos").upload(path, file, { upsert: true });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    const { error: updateError } = await supabase.from("companies").update({ logo_path: path }).eq("id", company.id);
+    if (updateError) {
+      onMessage(updateError.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function createDepartment() {
+    if (!supabase || !workspace.profile.environment_id || !targetCompanyId || !departmentName.trim()) return;
+    const { error } = await supabase.from("departments").insert({
+      environment_id: workspace.profile.environment_id,
+      company_id: targetCompanyId,
+      name: departmentName.trim(),
+      manager_user_id: managerId || null,
+      team_leader_user_id: teamLeaderId || null,
+      shift_hours: Number(shiftHours || 8),
+      work_days: [1, 2, 3, 4, 5]
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+    setSidePanel(null);
+    onReload();
+  }
+
+  async function updateDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const draft = departmentDrafts[department.id];
+    if (!draft) return;
+    const { error } = await supabase.from("departments").update({
+      name: draft.name.trim() || department.name,
+      manager_user_id: draft.manager || null,
+      team_leader_user_id: draft.leader || null,
+      shift_hours: Number(draft.hours || 8),
+      work_days: draft.days.length ? draft.days : [1, 2, 3, 4, 5]
+    }).eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const hasDepartments = workspace.departments.some((department) => department.company_id === company.id);
+    const hasUsers = workspace.profiles.some((profile) => profile.company_id === company.id);
+    if (hasDepartments || hasUsers) {
+      onMessage(`Delete or move ${company.name}'s departments and users before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const hasUsers = workspace.profiles.some((profile) => profile.department_id === department.id);
+    if (hasUsers) {
+      onMessage(`Move or delete employees from ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
+    const { error } = await supabase.from("departments").delete().eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  if (!selectedCompany) {
+    return (
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardContent className="p-5">
+          <p className="text-sm font-semibold text-stone-600">Create a company from the sidebar to start building the hierarchy.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const companyManagerOptions = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === selectedCompany.id || companyIdsForProfile(profile, workspace).has(selectedCompany.id))
+  ));
+  const colors = colorDrafts[selectedCompany.id] || DEFAULT_ENTRY_COLORS;
+
+  return (
+    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_430px]")}>
+      <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Company Hierarchy</CardTitle>
+          <CardDescription className="text-xs">Selected company scope: {selectedCompany.name}.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-2.5">
+          <div className="min-w-0 rounded-[18px] border border-stone-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+                  {logoUrls[selectedCompany.id] ? <img src={logoUrls[selectedCompany.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
+                </div>
+                <div className="min-w-0">
+                  <strong className="block truncate text-[14px]">{selectedCompany.name}</strong>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{scopedDepartments.length} departments</span>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{scopedUsers.length} users</span>
+                    <Button size="sm" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "department", companyId: selectedCompany.id })}><Plus className="h-3.5 w-3.5" />Create Department</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "company", companyId: selectedCompany.id })}>Edit</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 border-t border-stone-200 pt-3">
+              {scopedDepartments.length ? scopedDepartments.map((department) => {
+                const isOpen = expandedDepartmentId === department.id;
+                const draft = departmentDrafts[department.id] || {
+                  name: department.name,
+                  manager: department.manager_user_id || "",
+                  leader: department.team_leader_user_id || "",
+                  hours: String(department.shift_hours || 8),
+                  days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+                };
+                const teamLeaderOptions = workspace.profiles.filter((profile) => {
+                  const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
+                  return profile.role === "team_leader" &&
+                    profile.company_id === selectedCompany.id &&
+                    (!assignedDepartment || assignedDepartment.id === department.id);
+                });
+                const departmentUsers = workspace.profiles.filter((profile) => profile.department_id === department.id);
+                return (
+                  <div key={department.id} className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                    <button
+                      type="button"
+                      className="flex w-full flex-wrap items-center justify-between gap-2 text-left"
+                      onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                    >
+                      <div className="min-w-0">
+                        <strong className="block truncate text-[13px]">{department.name}</strong>
+                        <p className="text-[11px] font-semibold text-stone-500">
+                          {departmentUsers.length} users - {department.shift_hours || 8}h shift
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg px-2 text-[11px] font-semibold"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSidePanel({ type: "employee", companyId: selectedCompany.id, departmentId: department.id });
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />Create Employee
+                        </Button>
+                        {isOpen ? <ChevronDown className="h-4 w-4 text-stone-500" /> : <ChevronRight className="h-4 w-4 text-stone-500" />}
+                      </div>
+                    </button>
+
+                    {isOpen ? (
+                      <div className="mt-2 grid gap-2 border-t border-stone-200 pt-2">
+                        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+                          <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_156px]">
+                            <label className="grid gap-1 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+                          <input
+                            className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
+                            value={editingCompanyName[selectedCompany.id] || selectedCompany.name}
+                            onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))}
+                            placeholder="Company name"
+                          />
+                        </label>
+                        <label className="grid gap-1 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                          <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
+                            <ImageIcon className="h-4 w-4" />Upload
+                            <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
+                          </span>
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-2 lg:justify-end">
+                        <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                        <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                      <p className="mb-2 flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                        {ENTRY_COLOR_KEYS.map(([key]) => (
+                          <label key={key} className="grid justify-items-center gap-1 text-center text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                            {ENTRY_COLOR_LABELS[key]}
+                            <div className="flex h-8 w-full min-w-0 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                              <input
+                                className="h-5 w-7 border-0 bg-transparent p-0"
+                                type="color"
+                                value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                                onChange={(event) => setColorDrafts((current) => ({
+                                  ...current,
+                                [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                              }))}
+                            />
+                            <input
+                              className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
+                              value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                              onChange={(event) => setColorDrafts((current) => ({
+                                ...current,
+                                [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                              }))}
+                            />
+                          </div>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                            <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_88px]">
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
+                                <input
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold"
+                                  value={draft.name}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))}
+                                />
+                              </label>
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Manager</span>
+                                <select
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                  value={draft.manager}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}
+                                >
+                                  <option value="">No manager</option>
+                                  {companyManagerOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                                </select>
+                              </label>
+                              <label className="grid gap-1 min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Team Leader</span>
+                                <select
+                                  className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                  value={draft.leader}
+                                  onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}
+                                >
+                                  <option value="">No team leader</option>
+                                  {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                                </select>
+                              </label>
+                              <select
+                                className="self-end h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold"
+                                value={draft.hours}
+                                onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}
+                              >
+                                {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                              </select>
+                            </div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {([
+                                ["Mon", 1],
+                                ["Tue", 2],
+                                ["Wed", 3],
+                                ["Thu", 4],
+                                ["Fri", 5],
+                                ["Sat", 6],
+                                ["Sun", 0]
+                              ] as const).map(([day, index]) => (
+                                <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[10px] font-bold">
+                                  <input
+                                    type="checkbox"
+                                    checked={draft.days.includes(index)}
+                                    onChange={(event) => setDepartmentDrafts((current) => ({
+                                      ...current,
+                                      [department.id]: {
+                                        ...draft,
+                                        days: event.target.checked ? Array.from(new Set([...draft.days, index])).sort() : draft.days.filter((value) => value !== index)
+                                      }
+                                    }))}
+                                  />
+                                  {day}
+                                </label>
+                              ))}
+                            </div>
+                            <div className="flex flex-wrap justify-end gap-2 pt-0.5">
+                              <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                              <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
+                            </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }) : <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Use Create Department from the company header.</p>}
+            </div>
+
+          </div>
+        </CardContent>
+      </Card>
+
+      {sidePanel ? (
+        <Card className="min-w-0 self-start rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">
+                  {sidePanel.type === "department" ? "Create Department" : sidePanel.type === "company" ? "Company Settings" : "Create Employee"}
+                </CardTitle>
+                <CardDescription className="text-xs">{selectedCompany.name}</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel(null)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {sidePanel.type === "department" ? (
+              <div className="grid gap-2">
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+                </label>
+                <div className="grid grid-cols-[80px_minmax(0,1fr)] gap-2">
+                  <label className="grid gap-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
+                    <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                      {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
+                    <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                      <option value="">No manager</option>
+                      {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                  <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                    <option value="">No team leader</option>
+                    {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  </select>
+                </label>
+                <Button size="sm" className="h-8 rounded-lg text-[11px] font-semibold" onClick={() => void createDepartment()}><Plus className="h-4 w-4" />Create Department</Button>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "company" ? (
+              <div className="grid gap-3">
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+                  <input
+                    className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold"
+                    value={editingCompanyName[selectedCompany.id] || selectedCompany.name}
+                    onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))}
+                    placeholder="Company name"
+                  />
+                </label>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                  <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
+                    <ImageIcon className="h-4 w-4" />Upload logo
+                    <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
+                  </span>
+                </label>
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                  {ENTRY_COLOR_KEYS.map(([key]) => (
+                    <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                      {ENTRY_COLOR_LABELS[key]}
+                      <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                        <input
+                          className="h-5 w-7 border-0 bg-transparent p-0"
+                          type="color"
+                          value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                          onChange={(event) => setColorDrafts((current) => ({
+                            ...current,
+                            [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                          }))}
+                        />
+                        <input
+                          className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none"
+                          value={colors[key] || DEFAULT_ENTRY_COLORS[key]}
+                          onChange={(event) => setColorDrafts((current) => ({
+                            ...current,
+                            [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value }
+                          }))}
+                        />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                  <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
+                </div>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "employee" ? (
+              <AccountManagement
+                mode="employees"
+                workspace={workspace}
+                supabase={supabase}
+                onReload={onReload}
+                onMessage={onMessage}
+                scopeCompanyId={sidePanel.companyId}
+                scopeDepartmentId={sidePanel.departmentId}
+                hideList
+                compact
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function ScopedCompanyManagement({
+  workspace,
+  activeCompany,
+  supabase,
+  onReload,
+  onMessage
+}: {
+  workspace: Workspace;
+  activeCompany?: CompanyRow;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+}) {
+  const selectedCompany = activeCompany || accessibleCompanies(workspace)[0];
+  const [sidePanel, setSidePanel] = React.useState<
+    | { type: "department" }
+    | { type: "company" }
+    | { type: "employee"; departmentId: string }
+    | null
+  >(null);
+  const [expandedDepartmentId, setExpandedDepartmentId] = React.useState("");
+  const [departmentName, setDepartmentName] = React.useState("");
+  const [shiftHours, setShiftHours] = React.useState("8");
+  const [managerId, setManagerId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [editingCompanyName, setEditingCompanyName] = React.useState<Record<string, string>>({});
+  const [colorDrafts, setColorDrafts] = React.useState<Record<string, Record<string, string>>>({});
+  const [logoUrls, setLogoUrls] = React.useState<Record<string, string>>({});
+  const [departmentDrafts, setDepartmentDrafts] = React.useState<Record<string, { name: string; manager: string; leader: string; hours: string; days: number[] }>>({});
+  const [employeeDirectoryOpen, setEmployeeDirectoryOpen] = React.useState(false);
+
+  const companyId = selectedCompany?.id || "";
+  const departments = workspace.departments.filter((department) => department.company_id === companyId);
+  const companyUsers = workspace.profiles.filter((profile) => profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId));
+  const companyManagers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId))
+  ));
+  const assignedTeamLeaderIds = new Set(workspace.departments.map((department) => department.team_leader_user_id).filter(Boolean));
+  const availableTeamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === companyId &&
+    !assignedTeamLeaderIds.has(profile.id)
+  ));
+
+  React.useEffect(() => {
+    setExpandedDepartmentId("");
+    setSidePanel(null);
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+  }, [companyId]);
+
+  React.useEffect(() => {
+    setEditingCompanyName((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (next[company.id] === undefined) next[company.id] = company.name;
+      });
+      return next;
+    });
+    setColorDrafts((current) => {
+      const next = { ...current };
+      workspace.companies.forEach((company) => {
+        if (!next[company.id]) next[company.id] = { ...DEFAULT_ENTRY_COLORS, ...(company.entry_colors || {}) };
+      });
+      return next;
+    });
+    setDepartmentDrafts((current) => {
+      const next = { ...current };
+      workspace.departments.forEach((department) => {
+        if (!next[department.id]) {
+          next[department.id] = {
+            name: department.name,
+            manager: department.manager_user_id || "",
+            leader: department.team_leader_user_id || "",
+            hours: String(department.shift_hours || 8),
+            days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+          };
+        }
+      });
+      return next;
+    });
+  }, [workspace.companies, workspace.departments]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadLogos() {
+      if (!supabase) return;
+      const entries = await Promise.all(workspace.companies.map(async (company) => {
+        if (!company.logo_path) return [company.id, ""] as const;
+        const { data } = await supabase.storage.from("company-logos").createSignedUrl(company.logo_path, 60 * 20);
+        return [company.id, data?.signedUrl || ""] as const;
+      }));
+      if (!cancelled) setLogoUrls(Object.fromEntries(entries));
+    }
+    void loadLogos();
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, workspace.companies]);
+
+  async function createDepartment() {
+    if (!supabase || !workspace.profile.environment_id || !selectedCompany || !departmentName.trim()) return;
+    const { error } = await supabase.from("departments").insert({
+      environment_id: workspace.profile.environment_id,
+      company_id: selectedCompany.id,
+      name: departmentName.trim(),
+      manager_user_id: managerId || null,
+      team_leader_user_id: teamLeaderId || null,
+      shift_hours: Number(shiftHours || 8),
+      work_days: [1, 2, 3, 4, 5]
+    });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    setDepartmentName("");
+    setManagerId("");
+    setTeamLeaderId("");
+    setSidePanel(null);
+    onReload();
+  }
+
+  async function updateCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const { error } = await supabase.from("companies").update({
+      name: editingCompanyName[company.id]?.trim() || company.name,
+      entry_colors: colorDrafts[company.id] || company.entry_colors || {}
+    }).eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function uploadCompanyLogo(company: CompanyRow, file: File | null) {
+    if (!supabase || !workspace.profile.environment_id || !file) return;
+    const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+    const path = `${workspace.profile.environment_id}/${company.id}/${Date.now()}-${safeName}`;
+    const { error } = await supabase.storage.from("company-logos").upload(path, file, { upsert: true });
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    const { error: updateError } = await supabase.from("companies").update({ logo_path: path }).eq("id", company.id);
+    if (updateError) {
+      onMessage(updateError.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function updateDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const draft = departmentDrafts[department.id];
+    if (!draft) return;
+    const { error } = await supabase.from("departments").update({
+      name: draft.name.trim() || department.name,
+      manager_user_id: draft.manager || null,
+      team_leader_user_id: draft.leader || null,
+      shift_hours: Number(draft.hours || 8),
+      work_days: draft.days.length ? draft.days : [1, 2, 3, 4, 5]
+    }).eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteDepartment(department: DepartmentRow) {
+    if (!supabase) return;
+    const hasUsers = workspace.profiles.some((profile) => profile.department_id === department.id);
+    if (hasUsers) {
+      onMessage(`Move or delete employees from ${department.name} before deleting the department.`);
+      return;
+    }
+    if (!window.confirm(`Delete department ${department.name}?`)) return;
+    const { error } = await supabase.from("departments").delete().eq("id", department.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  async function deleteCompany(company: CompanyRow) {
+    if (!supabase) return;
+    const hasDepartments = workspace.departments.some((department) => department.company_id === company.id);
+    const hasUsers = workspace.profiles.some((profile) => profile.company_id === company.id);
+    if (hasDepartments || hasUsers) {
+      onMessage(`Delete or move ${company.name}'s departments and users before deleting the company.`);
+      return;
+    }
+    if (!window.confirm(`Delete company ${company.name}?`)) return;
+    const { error } = await supabase.from("companies").delete().eq("id", company.id);
+    if (error) {
+      onMessage(error.message);
+      return;
+    }
+    onReload();
+  }
+
+  if (!selectedCompany) {
+    return (
+      <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardContent className="p-5">
+          <p className="text-sm font-semibold text-stone-600">Create a company from the sidebar to start building the hierarchy.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const colors = colorDrafts[selectedCompany.id] || DEFAULT_ENTRY_COLORS;
+
+  return (
+    <div className={cn("grid gap-3", sidePanel && "xl:grid-cols-[minmax(0,1fr)_430px]")}>
+      <Card className="min-w-0 rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <CardTitle className="text-base">Company Hierarchy</CardTitle>
+          <CardDescription className="text-xs">All management actions are scoped to {selectedCompany.name}.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="rounded-[18px] border border-stone-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-md border border-stone-200 bg-stone-50">
+                  {logoUrls[selectedCompany.id] ? <img src={logoUrls[selectedCompany.id]} alt="" className="h-full w-full object-contain" /> : <Building2 className="h-5 w-5 text-stone-500" />}
+                </div>
+                <div className="min-w-0">
+                  <strong className="block truncate text-sm">{selectedCompany.name}</strong>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{departments.length} departments</span>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{companyUsers.length} users</span>
+                    <Button size="sm" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "department" })}><Plus className="h-3.5 w-3.5" />Create Department</Button>
+                    <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel({ type: "company" })}>Edit</Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 border-t border-stone-200 pt-3">
+              {departments.length ? departments.map((department) => {
+                const draft = departmentDrafts[department.id] || {
+                  name: department.name,
+                  manager: department.manager_user_id || "",
+                  leader: department.team_leader_user_id || "",
+                  hours: String(department.shift_hours || 8),
+                  days: department.work_days?.length ? department.work_days : [1, 2, 3, 4, 5]
+                };
+                const departmentUsers = workspace.profiles.filter((profile) => profile.department_id === department.id);
+                const isOpen = expandedDepartmentId === department.id;
+                const teamLeaderOptions = workspace.profiles.filter((profile) => {
+                  const assignedDepartment = workspace.departments.find((item) => item.team_leader_user_id === profile.id);
+                  return profile.role === "team_leader" &&
+                    profile.company_id === selectedCompany.id &&
+                    (!assignedDepartment || assignedDepartment.id === department.id);
+                });
+                return (
+                  <div key={department.id} className="rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                    <div className="flex w-full flex-wrap items-center justify-between gap-2">
+                      <button
+                        type="button"
+                        className="min-w-0 flex-1 text-left"
+                        onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                      >
+                        <strong className="block text-[13px]">{department.name}</strong>
+                        <span className="text-[11px] font-semibold text-stone-500">{departmentUsers.length} users - {department.shift_hours || 8}h shift</span>
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 rounded-lg px-2 text-[11px] font-semibold"
+                          onClick={(event) => {
+                            setSidePanel({ type: "employee", departmentId: department.id });
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5" />Create Employee
+                        </Button>
+                        <button
+                          type="button"
+                          className="rounded-md p-1 text-stone-500 hover:bg-white"
+                          onClick={() => setExpandedDepartmentId(isOpen ? "" : department.id)}
+                          aria-label={isOpen ? "Collapse department" : "Expand department"}
+                        >
+                          {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+                    {isOpen ? (
+                      <div className="mt-2 grid gap-2 border-t border-stone-200 pt-2">
+                        <div className="grid min-w-0 gap-2 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.95fr)_minmax(0,0.95fr)_88px]">
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
+                            <input className="h-8 min-w-0 rounded-md border border-stone-200 px-2 text-[12px] font-semibold" value={draft.name} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, name: event.target.value } }))} />
+                          </label>
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Manager</span>
+                            <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.manager} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, manager: event.target.value } }))}>
+                              <option value="">No manager</option>
+                              {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                            </select>
+                          </label>
+                          <label className="grid gap-1 min-w-0">
+                            <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Team Leader</span>
+                            <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.leader} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, leader: event.target.value } }))}>
+                              <option value="">No team leader</option>
+                              {teamLeaderOptions.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                            </select>
+                          </label>
+                          <select className="self-end h-8 rounded-md border border-stone-200 bg-white px-2 text-[12px] font-semibold" value={draft.hours} onChange={(event) => setDepartmentDrafts((current) => ({ ...current, [department.id]: { ...draft, hours: event.target.value } }))}>
+                            {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                          </select>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {([
+                            ["Mon", 1],
+                            ["Tue", 2],
+                            ["Wed", 3],
+                            ["Thu", 4],
+                            ["Fri", 5],
+                            ["Sat", 6],
+                            ["Sun", 0]
+                          ] as const).map(([day, index]) => (
+                            <label key={day} className="flex items-center gap-1 rounded-md border border-stone-200 bg-white px-2 py-1 text-[10px] font-bold">
+                              <input
+                                type="checkbox"
+                                checked={draft.days.includes(index)}
+                                onChange={(event) => setDepartmentDrafts((current) => ({
+                                  ...current,
+                                  [department.id]: {
+                                    ...draft,
+                                    days: event.target.checked ? Array.from(new Set([...draft.days, index])).sort() : draft.days.filter((value) => value !== index)
+                                  }
+                                }))}
+                              />
+                              {day}
+                            </label>
+                          ))}
+                        </div>
+                        <div className="rounded-lg border border-stone-200 bg-white p-2">
+                          <div className="mb-1.5 flex items-center justify-between gap-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Employees</p>
+                            <span className="text-[11px] font-semibold text-stone-500">{departmentUsers.length} in department</span>
+                          </div>
+                          {departmentUsers.length ? (
+                            <div className="grid gap-1">
+                              {departmentUsers
+                                .toSorted((a, b) => a.full_name.localeCompare(b.full_name))
+                                .map((profile) => (
+                                  <div key={profile.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md bg-stone-50 px-2 py-1.5">
+                                    <div className="min-w-0">
+                                      <strong className="block truncate text-[12px]">{profile.full_name}</strong>
+                                      <span className="block truncate text-[11px] font-semibold text-stone-500">{profile.position || ROLES[profile.role]} - {profile.email}</span>
+                                    </div>
+                                    <Badge variant="secondary" className="text-[10px]">{ROLES[profile.role]}</Badge>
+                                  </div>
+                                ))}
+                            </div>
+                          ) : (
+                            <p className="text-[12px] font-semibold text-stone-500">No employees in this department yet.</p>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button size="sm" variant="outline" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void deleteDepartment(department)}><Trash2 className="h-4 w-4" />Delete</Button>
+                          <Button size="sm" className="h-8 rounded-lg px-2 text-[11px] font-semibold" onClick={() => void updateDepartment(department)}><Save className="h-4 w-4" />Save</Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              }) : (
+                <p className="rounded-xl border border-dashed border-stone-200 bg-stone-50 p-4 text-sm font-semibold text-stone-500">No departments yet. Create one from the company header.</p>
+              )}
+            </div>
+
+            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50/60 p-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Employee directory</p>
+                  <p className="text-[12px] font-semibold text-stone-500">{companyUsers.length} users scoped to {selectedCompany.name}</p>
+                </div>
+                <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setEmployeeDirectoryOpen((value) => !value)}>
+                  {employeeDirectoryOpen ? "Hide list" : "View list"}
+                </Button>
+              </div>
+              {employeeDirectoryOpen ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-stone-200 bg-white">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="h-8 text-[11px]">Name</TableHead>
+                        <TableHead className="h-8 text-[11px]">Department</TableHead>
+                        <TableHead className="h-8 text-[11px]">Role</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {companyUsers.toSorted((a, b) => a.full_name.localeCompare(b.full_name)).map((profile) => (
+                        <TableRow key={profile.id}>
+                          <TableCell className="py-1.5">
+                            <strong className="block truncate text-[12px]">{profile.full_name}</strong>
+                            <span className="block truncate text-[11px] text-stone-500">{profile.email}</span>
+                          </TableCell>
+                          <TableCell className="py-1.5 text-[12px] font-semibold text-stone-600">
+                            {workspace.departments.find((department) => department.id === profile.department_id)?.name || "None"}
+                          </TableCell>
+                          <TableCell className="py-1.5">
+                            <Badge variant="secondary" className="text-[10px]">{ROLES[profile.role]}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {sidePanel ? (
+        <Card className="min-w-0 self-start rounded-[22px] border-stone-200 shadow-none">
+          <CardHeader className="pb-2.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <CardTitle className="text-base">{sidePanel.type === "department" ? "Create Department" : sidePanel.type === "company" ? "Company Settings" : "Create Employee"}</CardTitle>
+                <CardDescription className="text-xs">{selectedCompany.name}</CardDescription>
+              </div>
+              <Button size="sm" variant="outline" className="h-7 rounded-lg px-2 text-[11px] font-semibold" onClick={() => setSidePanel(null)}>Close</Button>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {sidePanel.type === "department" ? (
+              <div className="grid gap-2">
+                <label className="grid gap-1">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Department</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={departmentName} onChange={(event) => setDepartmentName(event.target.value)} placeholder="Department name" />
+                </label>
+                <div className="grid grid-cols-[76px_minmax(0,1fr)] gap-2">
+                  <label className="grid gap-1">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Shift</span>
+                    <select className="h-8 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={shiftHours} onChange={(event) => setShiftHours(event.target.value)}>
+                      {Array.from({ length: 24 }, (_, index) => String(index + 1)).map((hour) => <option key={hour} value={hour}>{hour}h</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 min-w-0">
+                    <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Manager</span>
+                    <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={managerId} onChange={(event) => setManagerId(event.target.value)}>
+                      <option value="">No manager</option>
+                      {companyManagers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Team leader</span>
+                  <select className="h-8 min-w-0 rounded-md border border-stone-200 bg-white px-2 text-[13px] font-semibold" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                    <option value="">No team leader</option>
+                    {availableTeamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                  </select>
+                </label>
+                <Button size="sm" className="h-8 rounded-lg text-[11px] font-semibold" onClick={() => void createDepartment()}><Plus className="h-4 w-4" />Create Department</Button>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "company" ? (
+              <div className="grid gap-3">
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Company name</span>
+                  <input className="h-8 rounded-md border border-stone-200 px-3 text-[13px] font-semibold" value={editingCompanyName[selectedCompany.id] || selectedCompany.name} onChange={(event) => setEditingCompanyName((current) => ({ ...current, [selectedCompany.id]: event.target.value }))} placeholder="Company name" />
+                </label>
+                <label className="grid gap-1 min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Logo</span>
+                  <span className="flex h-8 cursor-pointer items-center justify-center gap-2 rounded-md border border-stone-200 bg-white px-3 text-[12px] font-semibold">
+                    <ImageIcon className="h-4 w-4" />Upload logo
+                    <input className="hidden" type="file" accept="image/*" onChange={(event) => void uploadCompanyLogo(selectedCompany, event.target.files?.[0] || null)} />
+                  </span>
+                </label>
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <p className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-stone-500"><Palette className="h-3.5 w-3.5" />Timesheet Colors</p>
+                  {ENTRY_COLOR_KEYS.map(([key]) => (
+                    <label key={key} className="grid gap-1 text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">
+                      {ENTRY_COLOR_LABELS[key]}
+                      <div className="flex h-8 items-center gap-2 rounded-md border border-stone-200 bg-white px-2">
+                        <input className="h-5 w-7 border-0 bg-transparent p-0" type="color" value={colors[key] || DEFAULT_ENTRY_COLORS[key]} onChange={(event) => setColorDrafts((current) => ({ ...current, [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value } }))} />
+                        <input className="min-w-0 flex-1 bg-transparent text-xs font-semibold normal-case tracking-normal text-stone-900 outline-none" value={colors[key] || DEFAULT_ENTRY_COLORS[key]} onChange={(event) => setColorDrafts((current) => ({ ...current, [selectedCompany.id]: { ...(current[selectedCompany.id] || DEFAULT_ENTRY_COLORS), [key]: event.target.value } }))} />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void deleteCompany(selectedCompany)}><Trash2 className="h-4 w-4" />Delete</Button>
+                  <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => void updateCompany(selectedCompany)}><Save className="h-4 w-4" />Save</Button>
+                </div>
+              </div>
+            ) : null}
+
+            {sidePanel.type === "employee" ? (
+              <AccountManagement
+                mode="employees"
+                workspace={workspace}
+                supabase={supabase}
+                onReload={onReload}
+                onMessage={onMessage}
+                scopeCompanyId={selectedCompany.id}
+                scopeDepartmentId={sidePanel.departmentId}
+                hideList
+                compact
+              />
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
+    </div>
+  );
+}
+
+function AccountManagement({
+  mode,
+  workspace,
+  supabase,
+  onReload,
+  onMessage,
+  scopeCompanyId,
+  scopeDepartmentId,
+  hideList = false,
+  compact = false
+}: {
+  mode: "employees" | "admins";
+  workspace: Workspace;
+  supabase: SupabaseClient | null;
+  onReload: () => void;
+  onMessage: (message: string) => void;
+  scopeCompanyId?: string;
+  scopeDepartmentId?: string;
+  hideList?: boolean;
+  compact?: boolean;
+}) {
+  const roleOptions = mode === "employees"
+    ? ["employee", "team_leader", "department_manager"]
+    : workspace.profile.role === "admin_account"
+      ? ["payroll_admin", "company_manager"]
+      : ["company_manager"];
+  const [editingId, setEditingId] = React.useState("");
+  const [role, setRole] = React.useState(roleOptions[0]);
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [companyId, setCompanyId] = React.useState(scopeCompanyId || workspace.companies[0]?.id || "");
+  const [departmentId, setDepartmentId] = React.useState(scopeDepartmentId || "");
+  const [position, setPosition] = React.useState("");
+  const [identificationNumber, setIdentificationNumber] = React.useState("");
+  const [startDate, setStartDate] = React.useState("");
+  const [endDate, setEndDate] = React.useState("");
+  const [coAvailable, setCoAvailable] = React.useState("0");
+  const [reportsToId, setReportsToId] = React.useState("");
+  const [teamLeaderId, setTeamLeaderId] = React.useState("");
+  const [permittedCompanyIds, setPermittedCompanyIds] = React.useState<string[]>(companyId ? [companyId] : []);
+  const [listOpen, setListOpen] = React.useState(mode !== "employees" && !hideList);
+  const suggestedCoDays = startDate ? calculateCoEntitlement(startDate, endDate) : 0;
+  const roundedSuggestedCoDays = Math.round(suggestedCoDays);
+
+  const companyOptions = scopeCompanyId ? workspace.companies.filter((company) => company.id === scopeCompanyId) : workspace.companies;
+  const departmentOptions = workspace.departments.filter((department) => department.company_id === companyId && (!scopeDepartmentId || department.id === scopeDepartmentId));
+  const selectedDepartment = workspace.departments.find((department) => department.id === departmentId);
+  const managers = workspace.profiles.filter((profile) => (
+    ["department_manager", "company_manager"].includes(profile.role) &&
+    (profile.company_id === companyId || companyIdsForProfile(profile, workspace).has(companyId))
+  ));
+  const teamLeaders = workspace.profiles.filter((profile) => (
+    profile.role === "team_leader" &&
+    profile.company_id === companyId &&
+    (!departmentId || profile.department_id === departmentId)
+  ));
+  const accessibleCompanyIds = new Set(accessibleCompanies(workspace).map((company) => company.id));
+  const accounts = workspace.profiles
+    .filter((profile) => {
+      if (mode === "employees") {
+        return !["admin_account", "payroll_admin", "company_manager"].includes(profile.role) &&
+          (workspace.profile.role === "admin_account" || Boolean(profile.company_id && accessibleCompanyIds.has(profile.company_id))) &&
+          (!scopeCompanyId || profile.company_id === scopeCompanyId) &&
+          (!scopeDepartmentId || profile.department_id === scopeDepartmentId);
+      }
+      if (workspace.profile.role === "admin_account") return ["payroll_admin", "company_manager"].includes(profile.role);
+      if (profile.role !== "company_manager") return false;
+      const profileCompanies = companyIdsForProfile(profile, workspace);
+      return Array.from(profileCompanies).some((id) => accessibleCompanyIds.has(id));
+    })
+    .toSorted((a, b) => a.full_name.localeCompare(b.full_name));
+
+  React.useEffect(() => {
+    if (!scopeCompanyId || editingId) return;
+    setCompanyId(scopeCompanyId);
+    setDepartmentId(scopeDepartmentId || "");
+    if (scopeDepartmentId) applyDepartmentDefaults(scopeDepartmentId);
+  }, [scopeCompanyId, scopeDepartmentId, editingId]);
+
+  React.useEffect(() => {
+    if (!departmentId) return;
+    if (selectedDepartment?.manager_user_id && !reportsToId && ["employee", "team_leader"].includes(role)) setReportsToId(selectedDepartment.manager_user_id);
+    if (role === "employee" && !teamLeaderId) {
+      const leadersInDepartment = workspace.profiles.filter((profile) => (
+        profile.role === "team_leader" &&
+        profile.company_id === companyId &&
+        profile.department_id === departmentId
+      ));
+      if (selectedDepartment?.team_leader_user_id) setTeamLeaderId(selectedDepartment.team_leader_user_id);
+      else if (leadersInDepartment.length === 1) setTeamLeaderId(leadersInDepartment[0].id);
+    }
+    if (role !== "employee") setTeamLeaderId("");
+  }, [companyId, departmentId, reportsToId, role, selectedDepartment, teamLeaderId, workspace.profiles]);
+
+  function applyDepartmentDefaults(nextDepartmentId: string) {
+    setDepartmentId(nextDepartmentId);
+    const department = workspace.departments.find((item) => item.id === nextDepartmentId);
+    if (!department) {
+      setReportsToId("");
+      setTeamLeaderId("");
+      return;
+    }
+    if (["employee", "team_leader"].includes(role)) {
+      setReportsToId(department.manager_user_id || "");
+    }
+    if (role === "department_manager") {
+      const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
+      setReportsToId(companyManager?.id || "");
+      setTeamLeaderId("");
+      return;
+    }
+    if (role === "employee") {
+      const leaders = workspace.profiles.filter((profile) => profile.role === "team_leader" && profile.company_id === companyId && profile.department_id === nextDepartmentId);
+      setTeamLeaderId(department.team_leader_user_id || (leaders.length === 1 ? leaders[0].id : ""));
+    } else {
+      setTeamLeaderId("");
+    }
+  }
+
+  function resetForm() {
+    setEditingId("");
+    setRole(roleOptions[0]);
+    setName("");
+    setEmail("");
+    setPassword("");
+    setCompanyId(scopeCompanyId || workspace.companies[0]?.id || "");
+    setDepartmentId(scopeDepartmentId || "");
+    setPosition("");
+    setIdentificationNumber("");
+    setStartDate("");
+    setEndDate("");
+    setCoAvailable("0");
+    setReportsToId("");
+    setTeamLeaderId("");
+    setPermittedCompanyIds(scopeCompanyId ? [scopeCompanyId] : workspace.companies[0]?.id ? [workspace.companies[0].id] : []);
+  }
+
+  function updateStartDate(value: string) {
+    setStartDate(value);
+    if (mode === "employees" && value) setCoAvailable(String(calculateCoEntitlement(value, endDate)));
+  }
+
+  function updateEndDate(value: string) {
+    setEndDate(value);
+    if (mode === "employees" && startDate) setCoAvailable(String(calculateCoEntitlement(startDate, value)));
+  }
+
+  function updateRole(nextRole: string) {
+    setRole(nextRole);
+    if (nextRole !== "employee") setTeamLeaderId("");
+    if (departmentId) {
+      const department = workspace.departments.find((item) => item.id === departmentId);
+      if (["employee", "team_leader"].includes(nextRole)) setReportsToId(department?.manager_user_id || "");
+      if (nextRole === "department_manager") {
+        const companyManager = workspace.profiles.find((profile) => profile.role === "company_manager" && companyIdsForProfile(profile, workspace).has(companyId));
+        setReportsToId(companyManager?.id || "");
+      }
+    }
+  }
+
+  function editAccount(profile: ProfileRow) {
+    const access = workspace.access.filter((item) => item.payroll_user_id === profile.id).map((item) => item.company_id);
+    setEditingId(profile.id);
+    setRole(profile.role);
+    setName(profile.full_name);
+    setEmail(profile.email);
+    setPassword("");
+    setCompanyId(profile.company_id || access[0] || workspace.companies[0]?.id || "");
+    setDepartmentId(profile.department_id || "");
+    setPosition(profile.position || "");
+    setIdentificationNumber(profile.identification_number || "");
+    setStartDate(profile.start_date || "");
+    setEndDate(profile.end_date || "");
+    setCoAvailable(String(profile.co_available || 0));
+    setReportsToId(profile.reports_to_user_id || "");
+    setTeamLeaderId(profile.team_leader_user_id || "");
+    setPermittedCompanyIds(access.length ? access : profile.company_id ? [profile.company_id] : []);
+  }
+
+  async function saveAccount() {
+    if (!supabase) return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const adminRole = ["payroll_admin", "company_manager"].includes(role);
+    const payload = {
+      user: {
+        id: editingId || undefined,
+        name,
+        email,
+        role,
+        identificationNumber: adminRole ? "" : identificationNumber,
+        position: adminRole ? ROLES[role] : position,
+        companyId: adminRole ? permittedCompanyIds[0] || companyId : companyId,
+        departmentId: adminRole ? "" : departmentId,
+        reportsToId: adminRole ? "" : reportsToId,
+        teamLeaderId: role === "employee" ? teamLeaderId : "",
+        startDate: adminRole ? "" : startDate,
+        endDate: adminRole ? "" : endDate,
+        coAvailable: adminRole ? 0 : Math.max(0, Math.round(Number(coAvailable || 0)))
+      },
+      password,
+      permittedCompanyIds: adminRole ? permittedCompanyIds : []
+    };
+    const response = await fetch("/api/upsert-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not save account.");
+      return;
+    }
+    resetForm();
+    onReload();
+  }
+
+  async function deleteAccount(profile: ProfileRow) {
+    if (!supabase) return;
+    if (!window.confirm(`Delete account ${profile.full_name}?`)) return;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) {
+      onMessage("Session expired. Please log in again.");
+      return;
+    }
+    const response = await fetch("/api/delete-user", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify({ userId: profile.id })
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      onMessage(body.error || "Could not delete account.");
+      return;
+    }
+    onReload();
+  }
+
+  if (compact && mode === "employees") {
+    return (
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-background p-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Account</p>
+              <h3 className="truncate text-base font-black">{editingId ? "Edit employee" : "Create employee"}</h3>
+              <p className="truncate text-xs text-muted-foreground">{workspace.companies.find((company) => company.id === companyId)?.name || "Selected company"}</p>
+            </div>
+            <Badge variant="secondary" className="shrink-0">{ROLES[role]}</Badge>
+          </div>
+
+          <Separator className="my-3" />
+
+          <div className="grid gap-3">
+            <FieldShell label="Role">
+              <NativeSelect value={role} onChange={(event) => updateRole(event.target.value)}>
+                {roleOptions.map((option) => <option key={option} value={option}>{ROLES[option]}</option>)}
+              </NativeSelect>
+            </FieldShell>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <FieldShell label="Name">
+                <Input className="h-8 text-xs" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+              </FieldShell>
+              <FieldShell label="Email">
+                <Input className="h-8 text-xs" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+              </FieldShell>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_104px]">
+              <FieldShell label="Password">
+                <Input className="h-8 text-xs" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "Optional" : "Temporary"} type="password" />
+              </FieldShell>
+              <FieldShell label="Position">
+                <Input className="h-8 text-xs" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+              </FieldShell>
+              <FieldShell label="ID">
+                <Input className="h-8 text-xs" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="ID" />
+              </FieldShell>
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/25 p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Organization</p>
+                <span className="truncate text-[11px] font-semibold text-muted-foreground">{selectedDepartment?.name || "No department"}</span>
+              </div>
+              <div className="grid gap-2">
+                <FieldShell label="Department">
+                  <NativeSelect value={departmentId} disabled={Boolean(scopeDepartmentId)} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                    <option value="">No department</option>
+                    {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                  </NativeSelect>
+                </FieldShell>
+                <div className={cn("grid gap-2", role === "employee" && "sm:grid-cols-2")}>
+                  <FieldShell label="Reports to">
+                    <NativeSelect value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                      <option value="">Reports to none</option>
+                      {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                    </NativeSelect>
+                  </FieldShell>
+                  {role === "employee" ? (
+                    <FieldShell label="Team leader">
+                      <NativeSelect value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                        <option value="">No team leader</option>
+                        {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                      </NativeSelect>
+                    </FieldShell>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border bg-background p-2.5">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-black uppercase tracking-[0.18em] text-muted-foreground">Contract</p>
+                <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700" onClick={() => setCoAvailable(String(roundedSuggestedCoDays))}>
+                  Use {roundedSuggestedCoDays} CO
+                </button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_86px]">
+                <DateInput label="Start" value={startDate} onChange={updateStartDate} />
+                <DateInput label="End" value={endDate} onChange={updateEndDate} />
+                <FieldShell label="CO">
+                  <Input className="h-8 text-xs" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="1" />
+                </FieldShell>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+          <Button size="sm" onClick={saveAccount}><Save />Save Account</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-3">
+      <Card className={cn("border-stone-200 shadow-none", compact ? "rounded-2xl" : "rounded-[22px]")}>
+        <CardHeader className="pb-2.5">
+          <CardTitle className={cn(compact ? "text-base" : "text-lg")}>{editingId ? "Edit" : "Create"} {mode === "employees" ? "Employee" : "Admin / Manager"}</CardTitle>
+          <CardDescription className="text-[13px]">
+            {mode === "employees"
+              ? "Employees, Team Leaders, and Department Managers."
+              : "Payroll Admins and Company Managers. Company access uses checkboxes."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3">
+          {mode === "employees" ? (
+            <div className="grid gap-3">
+              <div className={cn(
+                "grid gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5",
+                !compact && "xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start"
+              )}>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Role</p>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={cn(
+                          "rounded-md border px-2.5 py-1 text-[11px] font-black transition-colors",
+                          role === option
+                            ? "border-emerald-700 bg-emerald-700 text-white"
+                            : "border-stone-200 bg-white text-stone-600 hover:border-emerald-300 hover:text-emerald-800"
+                        )}
+                        onClick={() => updateRole(option)}
+                      >
+                        {ROLES[option]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className={cn("flex flex-wrap gap-2", !compact && "xl:justify-end")}>
+                  <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={resetForm}>Reset</Button>
+                  <Button size="sm" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+                </div>
+              </div>
+
+              <div className={cn("grid gap-3", !compact && "xl:grid-cols-[minmax(0,1fr)_220px]")}>
+                <div className="grid gap-3">
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Identity</p>
+                      <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{ROLES[role]}</span>
+                    </div>
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]")}>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Name</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Employee name" />
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Email</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                      </label>
+                    </div>
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)_140px]")}>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Password</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Position</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={position} onChange={(event) => setPosition(event.target.value)} placeholder="Position" />
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">ID</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={identificationNumber} onChange={(event) => setIdentificationNumber(event.target.value)} placeholder="ID number" />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Organization</p>
+                    <div className={cn("grid gap-2", !compact && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]")}>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Company</span>
+                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={companyId} disabled={Boolean(scopeCompanyId)} onChange={(event) => {
+                          setCompanyId(event.target.value);
+                          setDepartmentId("");
+                          setReportsToId("");
+                          setTeamLeaderId("");
+                        }}>
+                          {companyOptions.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Department</span>
+                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={departmentId} disabled={Boolean(scopeDepartmentId)} onChange={(event) => applyDepartmentDefaults(event.target.value)}>
+                          <option value="">No department</option>
+                          {departmentOptions.map((department) => <option key={department.id} value={department.id}>{department.name}</option>)}
+                        </select>
+                      </label>
+                      <label className="grid gap-1 min-w-0">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Reports to</span>
+                        <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={reportsToId} onChange={(event) => setReportsToId(event.target.value)}>
+                          <option value="">Reports to none</option>
+                          {managers.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                        </select>
+                      </label>
+                      {role === "employee" ? (
+                        <label className="grid gap-1 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Team leader</span>
+                          <select className="h-8 rounded-md border border-stone-200 bg-stone-50 px-2 text-[13px] font-semibold text-stone-900" value={teamLeaderId} onChange={(event) => setTeamLeaderId(event.target.value)}>
+                            <option value="">No team leader</option>
+                            {teamLeaders.map((profile) => <option key={profile.id} value={profile.id}>{profile.full_name}</option>)}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className={cn("grid w-full gap-3", compact ? "max-w-none" : "max-w-[220px] xl:justify-self-start")}>
+                  <div className="grid gap-2 rounded-xl border border-stone-200 bg-white p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Contract</p>
+                      <button type="button" className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700" onClick={() => setCoAvailable(String(roundedSuggestedCoDays))}>
+                        Use {roundedSuggestedCoDays} CO
+                      </button>
+                    </div>
+                    <div className="grid gap-2">
+                      <DateInput label="Start date" value={startDate} onChange={updateStartDate} />
+                      <DateInput label="End date" value={endDate} onChange={updateEndDate} />
+                      <label className="grid gap-1">
+                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-stone-500">Available CO days</span>
+                        <input className="h-8 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900" value={coAvailable} onChange={(event) => setCoAvailable(event.target.value)} placeholder={`${suggestedCoDays}`} type="number" step="1" />
+                      </label>
+                    </div>
+                  </div>
+
+                  {!compact ? <div className="rounded-xl border border-stone-200 bg-stone-50 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-stone-500">Summary</p>
+                    <div className="mt-2 grid gap-2">
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>Company</span>
+                        <span className="text-stone-900">{workspace.companies.find((item) => item.id === companyId)?.name || "None"}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>Department</span>
+                        <span className="text-stone-900">{selectedDepartment?.name || "None"}</span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-md border border-stone-200 bg-white px-3 py-2 text-[13px] font-semibold text-stone-700">
+                        <span>CO available</span>
+                        <span className="text-stone-900">{coAvailable || "0"}</span>
+                      </div>
+                    </div>
+                  </div> : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="grid gap-3 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="grid gap-3">
+                <div className="grid gap-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
+                  <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Account</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {roleOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className={cn(
+                          "rounded-md border px-3 py-1.5 text-xs font-black transition-colors",
+                          role === option
+                            ? "border-emerald-700 bg-emerald-700 text-white"
+                            : "border-stone-200 bg-white text-stone-600 hover:border-emerald-300 hover:text-emerald-800"
+                        )}
+                        onClick={() => updateRole(option)}
+                      >
+                        {ROLES[option]}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="grid gap-2">
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Name</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={name} onChange={(event) => setName(event.target.value)} placeholder="Account name" />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Email</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" type="email" />
+                    </label>
+                    <label className="grid gap-1">
+                      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">Password</span>
+                      <input className="h-9 rounded-md border border-stone-200 bg-white px-3 text-[13px] font-semibold text-stone-900" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={editingId ? "New password optional" : "Temporary password"} type="password" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3">
+                <div className="rounded-xl border border-stone-200 bg-white p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-500">Company Access</p>
+                    <span className="rounded-full border border-stone-200 bg-stone-50 px-2 py-0.5 text-[11px] font-bold text-stone-600">{permittedCompanyIds.length} selected</span>
+                  </div>
+                  <div className="mt-2 grid max-h-48 gap-2 overflow-auto md:grid-cols-2">
+                    {workspace.companies.map((company) => (
+                      <label key={company.id} className="flex items-center gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 text-[13px] font-semibold text-stone-800">
+                        <input
+                          type="checkbox"
+                          checked={permittedCompanyIds.includes(company.id)}
+                          onChange={(event) => {
+                            setPermittedCompanyIds((current) => event.target.checked
+                              ? Array.from(new Set([...current, company.id]))
+                              : current.filter((id) => id !== company.id));
+                          }}
+                        />
+                        {company.name}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap justify-end gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2.5">
+                  <Button size="sm" variant="outline" onClick={resetForm}>Reset</Button>
+                  <Button size="sm" onClick={saveAccount}><Save className="h-4 w-4" />Save Account</Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {!hideList ? <Card className="rounded-[22px] border-stone-200 shadow-none">
+        <CardHeader className="pb-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-lg">{mode === "employees" ? "Employees" : "Admins and Managers"}</CardTitle>
+              <CardDescription className="text-[13px]">{accounts.length} accounts in this environment.</CardDescription>
+            </div>
+            <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={() => setListOpen((value) => !value)}>
+              {listOpen ? "Hide list" : "Show list"}
+            </Button>
+          </div>
+        </CardHeader>
+        {listOpen ? <CardContent className="grid gap-2">
+          {accounts.map((profile) => {
+            const access = workspace.access.filter((item) => item.payroll_user_id === profile.id).map((item) => workspace.companies.find((company) => company.id === item.company_id)?.name).filter(Boolean);
+            return (
+              <div key={profile.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-3">
+                <div>
+                  <strong>{profile.full_name}</strong>
+                  <p className="text-sm text-stone-500">
+                    {ROLES[profile.role]} - {mode === "admins" ? access.join(", ") || "No companies assigned" : profile.position || "No position"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={() => editAccount(profile)}>Edit</Button>
+                  <Button size="sm" variant="outline" onClick={() => void deleteAccount(profile)}><Trash2 className="h-4 w-4" />Delete</Button>
+                </div>
+              </div>
+            );
+          })}
+        </CardContent> : null}
+      </Card> : null}
+    </div>
+  );
+}
+
+function companyIdsForProfile(profile: ProfileRow, workspace: Workspace) {
+  const ids = new Set<string>();
+  if (profile.company_id) ids.add(profile.company_id);
+  workspace.access.filter((item) => item.payroll_user_id === profile.id).forEach((item) => ids.add(item.company_id));
+  return ids;
+}
+
+function DateInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="relative grid gap-1">
+      <span className="text-[11px] font-black uppercase tracking-[0.18em] text-stone-500">{label}</span>
+      <input
+        className={cn(
+          "h-8 rounded-md border border-stone-200 bg-stone-50 px-3 text-[13px] font-semibold text-stone-900",
+          !value && "text-transparent"
+        )}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        type="date"
+      />
+    </label>
+  );
+}
+
+function calculateCoEntitlement(startDate: string, endDate?: string) {
+  if (!startDate) return 0;
+  const start = new Date(`${startDate}T00:00:00`);
+  if (Number.isNaN(start.getTime())) return 0;
+  const yearEnd = new Date(start.getFullYear(), 11, 31);
+  const contractEnd = endDate ? new Date(`${endDate}T00:00:00`) : yearEnd;
+  const finalDay = contractEnd < yearEnd ? contractEnd : yearEnd;
+  if (finalDay < start) return 0;
+  let total = 0;
+  for (let cursor = new Date(start.getFullYear(), start.getMonth(), 1); cursor <= finalDay; cursor.setMonth(cursor.getMonth() + 1)) {
+    const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
+    const activeStart = start > monthStart ? start : monthStart;
+    const activeEnd = finalDay < monthEnd ? finalDay : monthEnd;
+    if (activeEnd >= activeStart) {
+      const activeDays = Math.floor((activeEnd.getTime() - activeStart.getTime()) / 86400000) + 1;
+      total += 1.75 * (activeDays / monthEnd.getDate());
+    }
+  }
+  return Math.round(total * 4) / 4;
+}
+
+function EntityCard({ title, items }: { title: string; items: string[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{items.length} records</CardDescription>
+      </CardHeader>
+      <CardContent className="grid max-h-96 gap-2 overflow-auto">
+        {items.map((item) => <div key={item} className="rounded-md border border-stone-200 p-2 text-sm font-semibold">{item}</div>)}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DocumentPreview({ html, onClose }: { html: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/40 p-4">
+      <Card className="w-full max-w-xl overflow-hidden rounded-[24px] shadow-[0_30px_80px_rgba(15,23,42,0.22)]">
+        <CardHeader className="flex-row items-center justify-between border-b border-stone-200 p-3.5">
+          <div>
+            <CardTitle className="text-lg">Leave Request Document</CardTitle>
+            <CardDescription className="text-[13px]">Preview of the generated request form.</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" className="h-8 rounded-lg px-2.5 text-[11px] font-semibold" onClick={onClose}>Close</Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <iframe className="h-[390px] w-full bg-white" srcDoc={scaledDocumentPreviewHtml(html)} title="Leave request document preview" />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function scaledDocumentPreviewHtml(html: string) {
+  const compactStyles = `
+    <style>
+      html, body { overflow: hidden !important; }
+      body { padding: 14px !important; font-size: 12px !important; line-height: 1.3 !important; }
+      .brand { font-size: 10px !important; letter-spacing: 0.18em !important; }
+      h1 { margin: 4px 0 10px !important; font-size: 18px !important; }
+      p { margin: 6px 0 !important; }
+      .box { padding: 10px !important; margin: 8px 0 !important; border-radius: 7px !important; }
+      .status { padding: 4px 7px !important; font-size: 11px !important; border-radius: 999px !important; }
+    </style>
+  `;
+  if (html.includes("</head>")) return html.replace("</head>", `${compactStyles}</head>`);
+  return `${compactStyles}${html}`;
+}
+
+async function uploadLeaveDocument(supabase: SupabaseClient, workspace: Workspace, entityId: string, file: File) {
+  if (!workspace.profile.environment_id) return null;
+  const safeName = file.name.replace(/[^a-z0-9._-]+/gi, "-");
+  const path = `${workspace.profile.environment_id}/${entityId}/${Date.now()}-${safeName}`;
+  const { error } = await supabase.storage.from("leave-documents").upload(path, file, { upsert: true });
+  if (error) throw error;
+  return path;
+}
+
+async function downloadStorageFile(supabase: SupabaseClient | null, bucket: string, path: string) {
+  if (!supabase || !path) return;
+  const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 60);
+  if (error || !data?.signedUrl) return;
+  window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+}
+
+function datesBetween(start: string, end: string) {
+  const startDate = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  const days: ReturnType<typeof daysInMonth> = [];
+  for (const date = new Date(startDate); date <= endDate; date.setDate(date.getDate() + 1)) {
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    days.push({
+      day: date.getDate(),
+      iso,
+      weekday: date.toLocaleDateString(undefined, { weekday: "short" }),
+      weekdayIndex: date.getDay()
+    });
+  }
+  return days;
+}
+
+function downloadHtml(html: string, filename: string) {
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename.replace(/[^a-z0-9.-]+/gi, "-");
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportCsv(companyName: string, month: string, employees: ProfileRow[], workspace: Workspace) {
+  const days = daysInMonth(month);
+  const rows = [
+    ["Employee", "Department", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "CO Left"]
+  ];
+  employees.forEach((employee) => {
+    const totals = totalsFor(employee, month, workspace);
+    const department = departmentFor(employee, workspace);
+    rows.push([
+      employee.full_name,
+      department?.name || "",
+      employee.position || ROLES[employee.role],
+      ...days.map((day) => {
+        const entry = entryFor(workspace.entries, employee.id, day.iso);
+        return entry ? String(Number(entry.hours || 0)) : "";
+      }),
+      String(totals.worked),
+      String(totals.expected),
+      String(totals.difference),
+      String(totals.overtime),
+      String(totals.vacationDays),
+      String(totals.medicalDays),
+      String(totals.specialEventDays),
+      String(totals.absenceDays),
+      String(Math.max(0, Number(employee.co_available || 0) - totals.vacationDays))
+    ]);
+  });
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${companyName}-${month}-timesheet.csv`.replace(/[^a-z0-9.-]+/gi, "-");
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function makeIndividualId(prefix = "table") {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${random}`;
+}
+
+function defaultIndividualRow(): IndividualRow {
+  return {
+    id: makeIndividualId("row"),
+    name: "",
+    company: "",
+    department: "",
+    identificationNumber: "",
+    position: ""
+  };
+}
+
+function createIndividualTable(id = makeIndividualId()): IndividualTableData {
+  return {
+    id,
+    month: currentMonth(),
+    normalHours: 8,
+    rows: [defaultIndividualRow()],
+    entries: {},
+    holidays: []
+  };
+}
+
+function migrateIndividualTable(raw: unknown, id: string): IndividualTableData | null {
+  if (!raw) return null;
+  let value = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const data = value as Partial<IndividualTableData>;
+  return {
+    id: data.id || id,
+    month: data.month || currentMonth(),
+    normalHours: sanitizeIndividualNormalHours(data.normalHours),
+    rows: Array.isArray(data.rows) && data.rows.length ? data.rows.map((row) => ({
+      id: row.id || makeIndividualId("row"),
+      name: row.name || "",
+      company: row.company || "",
+      department: row.department || "",
+      identificationNumber: row.identificationNumber || "",
+      position: row.position || ""
+    })) : [defaultIndividualRow()],
+    entries: data.entries && typeof data.entries === "object" ? data.entries : {},
+    holidays: Array.isArray(data.holidays) ? data.holidays.map((holiday) => ({
+      date: holiday.date || "",
+      name: holiday.name || "Public holiday",
+      countryCode: holiday.countryCode
+    })).filter((holiday) => holiday.date) : []
+  };
+}
+
+function sanitizeIndividualNormalHours(value: unknown) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours)) return 8;
+  return Math.max(1, Math.min(24, Math.round(hours)));
+}
+
+function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {
+  return sanitizeIndividualNormalHours(table.normalHours);
+}
+
+function isIndividualWorkDay(day: ReturnType<typeof daysInMonth>[number], holidaysByDate: Map<string, IndividualHoliday>) {
+  return day.weekdayIndex !== 0 && day.weekdayIndex !== 6 && !holidaysByDate.has(day.iso);
+}
+
+function individualTotals(row: IndividualRow, table: IndividualTableData) {
+  const holidays = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const normal = individualNormalHours(table);
+  const totals = daysInMonth(table.month).reduce((acc, day) => {
+    const entry = table.entries[row.id]?.[day.iso];
+    if (isIndividualWorkDay(day, holidays)) acc.norm += normal;
+    if (!entry) return acc;
+    const hours = Number(entry.hours || 0);
+    if (entry.type === "normal") acc.worked += hours;
+    if (entry.type === "overtime") {
+      acc.worked += hours;
+      acc.ot += Math.max(0, hours - normal);
+    }
+    if (entry.type === "vacation") acc.co += 1;
+    if (entry.type === "medical") acc.cm += 1;
+    if (entry.type === "special_event") acc.se += 1;
+    if (entry.type === "absence") acc.ab += 1;
+    return acc;
+  }, { worked: 0, norm: 0, diff: 0, ot: 0, co: 0, cm: 0, se: 0, ab: 0 });
+  totals.diff = totals.worked - totals.norm;
+  return totals;
+}
+
+function individualEntryCode(type: string) {
+  if (type === "vacation") return "CO";
+  if (type === "medical") return "CM";
+  if (type === "special_event") return "SE";
+  if (type === "absence") return "AB";
+  if (type === "holiday") return "H";
+  if (type === "overtime") return "OT";
+  return "N";
+}
+
+function individualTooltipText(entry: IndividualEntry | undefined, holiday: IndividualHoliday | undefined, workDay: boolean, normalHoursValue = 8) {
+  if (entry?.type === "normal") return `Normal shift: ${formatNumber(entry.hours)}h`;
+  if (entry?.type === "overtime") return `Overtime: ${formatNumber(Math.max(0, Number(entry.hours || 0) - normalHoursValue))}h over normal shift of ${formatNumber(normalHoursValue)}h`;
+  if (entry?.type === "vacation") return "Vacation day (CO)";
+  if (entry?.type === "medical") return "Medical leave day (CM)";
+  if (entry?.type === "special_event") return entry.reason ? `Special event: ${entry.reason}` : "Special event";
+  if (entry?.type === "absence") return "Absence";
+  if (holiday) return `Holiday: ${holiday.name}`;
+  return workDay ? "Expected working day" : "Non-working day";
+}
+
+function individualCellClass(type: string) {
+  if (type === "vacation") return "bg-emerald-100 text-emerald-950";
+  if (type === "medical") return "bg-rose-100 text-rose-900";
+  if (type === "overtime") return "bg-amber-100 text-amber-950";
+  if (type === "absence") return "bg-stone-950 text-white";
+  if (type === "special_event") return "bg-stone-200 text-stone-950";
+  if (type === "holiday") return "bg-yellow-50 text-stone-500";
+  if (type === "weekend") return "bg-sky-50";
+  return "bg-white";
+}
+
+function downloadIndividualTemplate() {
+  downloadXlsx("tableshifts-import-template.xlsx", "Employees", [
+    ["Employee", "Company", "Department", "Identification Number", "Position"],
+    ["", "", "", "", ""]
+  ]);
+}
+
+function exportIndividualCsv(table: IndividualTableData) {
+  const days = daysInMonth(table.month);
+  const rows = [
+    ["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB"]
+  ];
+  table.rows.forEach((row) => {
+    const totals = individualTotals(row, table);
+    rows.push([
+      row.name,
+      row.company,
+      row.department,
+      row.identificationNumber,
+      row.position,
+      ...days.map((day) => {
+        const entry = table.entries[row.id]?.[day.iso];
+        if (!entry) return "";
+        if (["normal", "overtime"].includes(entry.type)) return String(entry.hours || "");
+        return individualEntryCode(entry.type);
+      }),
+      String(totals.worked),
+      String(totals.norm),
+      String(totals.worked - totals.norm),
+      String(totals.ot),
+      String(totals.co),
+      String(totals.cm),
+      String(totals.se),
+      String(totals.ab)
+    ]);
+  });
+  downloadCsv(`individual-tableshifts-${table.month}.csv`, rows);
+}
+
+function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadXlsx(filename: string, sheetName: string, rows: Array<Array<string | number>>) {
+  const worksheet = XLSX.utils.aoa_to_sheet(rows);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  const output = XLSX.write(workbook, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+  const blob = new Blob([output], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseEmployeeWorkbook(buffer: ArrayBuffer) {
+  const workbook = XLSX.read(buffer, { type: "array" });
+  const firstSheetName = workbook.SheetNames[0];
+  if (!firstSheetName) return [];
+  const sheet = workbook.Sheets[firstSheetName];
+  return XLSX.utils
+    .sheet_to_json<Array<string | number | boolean | null>>(sheet, { header: 1, defval: "" })
+    .map((row) => row.map((cell) => String(cell ?? "")));
+}
+
+function individualRowsFromMatrix(rows: string[][]) {
+  const [header = [], ...body] = rows;
+  const normalized = header.map((cell) => cell.trim().toLowerCase());
+  const columnIndex = (name: string) => normalized.indexOf(name.toLowerCase());
+  const employeeIndex = columnIndex("employee");
+  const companyIndex = columnIndex("company");
+  const departmentIndex = columnIndex("department");
+  const idIndex = columnIndex("identification number");
+  const positionIndex = columnIndex("position");
+
+  return body
+    .map((row) => ({
+      id: makeIndividualId("row"),
+      name: row[employeeIndex] || "",
+      company: companyIndex >= 0 ? row[companyIndex] || "" : "",
+      department: departmentIndex >= 0 ? row[departmentIndex] || "" : "",
+      identificationNumber: idIndex >= 0 ? row[idIndex] || "" : "",
+      position: positionIndex >= 0 ? row[positionIndex] || "" : ""
+    }))
+    .filter((row) => row.name.trim());
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === "\"" && quoted && next === "\"") {
+      cell += "\"";
+      index += 1;
+    } else if (char === "\"") {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows.filter((items) => items.some((item) => item.trim()));
+}
+
+function tabLabel(tab: string) {
+  return nav.find((item) => item.value === tab)?.label || "Timesheet";
+}
+
+function sheetDescription(tab: string) {
+  if (tab === "leave") return "Requests, approvals, and supporting leave documents.";
+  if (tab === "charts") return "Compact analytics for the current visible scope.";
+  if (tab === "companies") return "Selected-company hierarchy, departments, colors, and employee creation.";
+  if (tab === "admins") return "Admin-account access, payroll admins, and company managers.";
+  if (tab === "settings") return "Holidays, danger actions, and deployment-safe preferences.";
+  return "Workspace panel";
+}
+
+function SideSheet({
+  open,
+  title,
+  description,
+  wide,
+  extraWide,
+  onClose,
+  children
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  wide?: boolean;
+  extraWide?: boolean;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen) onClose();
+    }}>
+      <SheetContent
+        side="left"
+        className={cn(
+          "left-[calc(252px+1.5rem)] top-6 h-[calc(100vh-3rem)] rounded-[24px] border-stone-200 bg-background p-0 shadow-[0_24px_80px_rgba(15,23,42,0.14)] sm:max-w-none",
+          extraWide ? "w-[min(1360px,calc(100vw-300px))]" : wide ? "w-[min(1040px,calc(100vw-300px))]" : "w-[min(540px,calc(100vw-300px))]"
+        )}
+      >
+        <SheetHeader className="border-b border-border bg-muted/35 px-4 py-3 text-left">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">Workspace Sheet</p>
+          <SheetTitle className="truncate text-[22px] font-black leading-tight">{title}</SheetTitle>
+          <SheetDescription className="max-w-2xl text-xs">{description}</SheetDescription>
+        </SheetHeader>
+        <ScrollArea className="h-[calc(100%-92px)]">
+          <div className="p-4">{children}</div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  );
+}

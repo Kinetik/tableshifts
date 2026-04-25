@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const appDir = path.join(root, "app");
+const appDir = path.join(root, "legacy-app");
 const distDir = path.join(root, "dist");
 
 function readDotEnv(filePath) {
