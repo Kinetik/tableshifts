@@ -465,15 +465,18 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
 
   async function saveIndividualTable(nextTable: IndividualTableData) {
     setIndividualTable(nextTable);
-    if (!supabase) {
+    if (typeof window !== "undefined") {
       window.localStorage.setItem(`tableshifts.individual.${nextTable.id}`, JSON.stringify(nextTable));
-      return;
     }
-    const { error } = await supabase.rpc("save_individual_table", {
-      token_value: nextTable.id,
-      data_value: nextTable
-    });
-    if (error) setMessage(error.message);
+    if (supabase) {
+      const { error } = await supabase.rpc("save_individual_table", {
+        token_value: nextTable.id,
+        data_value: nextTable
+      });
+      if (error) {
+        console.warn("Individual TableShifts Supabase save fallback:", error.message);
+      }
+    }
   }
 
   async function openIndividualTable(token?: string) {
@@ -481,9 +484,10 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     let table: IndividualTableData | null = null;
     if (supabase) {
       const { data, error } = await supabase.rpc("get_individual_table", { token_value: id });
-      if (error) setMessage(error.message);
-      table = migrateIndividualTable(data, id);
-    } else if (typeof window !== "undefined") {
+      if (!error && data) table = migrateIndividualTable(data, id);
+      else if (error) console.warn("Individual TableShifts Supabase load fallback:", error.message);
+    }
+    if (!table && typeof window !== "undefined") {
       table = migrateIndividualTable(window.localStorage.getItem(`tableshifts.individual.${id}`), id);
     }
     const nextTable = table || createIndividualTable(id);
