@@ -146,6 +146,35 @@ const COUNTRY_OPTIONS = [
   ["US", "United States"]
 ] as const;
 
+type IndividualEntry = {
+  type: string;
+  hours: number;
+  reason?: string;
+};
+
+type IndividualRow = {
+  id: string;
+  name: string;
+  company: string;
+  department: string;
+  identificationNumber: string;
+  position: string;
+};
+
+type IndividualHoliday = {
+  date: string;
+  name: string;
+  countryCode?: string;
+};
+
+type IndividualTableData = {
+  id: string;
+  month: string;
+  rows: IndividualRow[];
+  entries: Record<string, Record<string, IndividualEntry>>;
+  holidays: IndividualHoliday[];
+};
+
 function FieldShell({
   label,
   children,
@@ -202,6 +231,12 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const [month, setMonth] = React.useState(currentMonth());
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [authMode, setAuthMode] = React.useState<"login" | "create-admin">("login");
+  const [adminName, setAdminName] = React.useState("");
+  const [adminEmail, setAdminEmail] = React.useState("");
+  const [adminPassword, setAdminPassword] = React.useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = React.useState("");
+  const [individualTable, setIndividualTable] = React.useState<IndividualTableData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
   const [totalsExpanded, setTotalsExpanded] = React.useState(false);
@@ -213,12 +248,37 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
   const companyMenuRef = React.useRef<HTMLDivElement | null>(null);
   const userMenuRef = React.useRef<HTMLDivElement | null>(null);
 
+  async function ensureAdminEnvironment(user: User) {
+    if (!supabase) return null;
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const response = await fetch("/api/create-admin-environment", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split("@")[0] || "Admin Account"
+      })
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Could not create Admin environment.");
+    return result.profile as ProfileRow | null;
+  }
+
   const loadWorkspace = React.useCallback(async (user: User) => {
     if (!supabase) return;
     setLoading(true);
     setMessage("");
     try {
-      const profile = await waitForProfile(supabase, user.id);
+      let profile = await waitForProfile(supabase, user.id);
+      const wantsOauthAdmin = typeof window !== "undefined" && window.localStorage.getItem("tableshifts.oauth.createAdmin") === "1";
+      if (!profile?.environment_id && wantsOauthAdmin) {
+        profile = await ensureAdminEnvironment(user);
+        window.localStorage.removeItem("tableshifts.oauth.createAdmin");
+      }
       if (!profile?.environment_id) {
         setWorkspace(null);
         setMessage("This account exists, but no TableShifts profile/environment is attached yet.");
@@ -343,6 +403,102 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     if (data.user) await loadWorkspace(data.user);
   }
 
+  async function createAdminAccount(event: React.FormEvent) {
+    event.preventDefault();
+    if (!supabase) return;
+    if (adminPassword !== adminPasswordConfirm) {
+      setMessage("The two passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    setMessage("");
+    const { data, error } = await supabase.auth.signUp({
+      email: adminEmail,
+      password: adminPassword,
+      options: {
+        data: {
+          full_name: adminName,
+          account_type: "admin_account"
+        },
+        emailRedirectTo: typeof window === "undefined" ? undefined : `${window.location.origin}${window.location.pathname}`
+      }
+    });
+    setLoading(false);
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+    setEmail(adminEmail);
+    setPassword("");
+    setAuthMode("login");
+    setMessage(data.session ? "Admin Account created. You can continue in TableShifts." : "Admin Account created. Confirm the email if Supabase asks, then sign in.");
+    if (data.user && data.session) {
+      setAuthUser(data.user);
+      await loadWorkspace(data.user);
+    }
+  }
+
+  async function signInWithProvider(provider: "google" | "apple", createAdmin = false) {
+    if (!supabase || typeof window === "undefined") return;
+    setMessage("");
+    if (createAdmin) window.localStorage.setItem("tableshifts.oauth.createAdmin", "1");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${window.location.origin}${window.location.pathname}`
+      }
+    });
+    if (error) setMessage(error.message);
+  }
+
+  async function saveIndividualTable(nextTable: IndividualTableData) {
+    setIndividualTable(nextTable);
+    if (!supabase) {
+      window.localStorage.setItem(`tableshifts.individual.${nextTable.id}`, JSON.stringify(nextTable));
+      return;
+    }
+    const { error } = await supabase.rpc("save_individual_table", {
+      token_value: nextTable.id,
+      data_value: nextTable
+    });
+    if (error) setMessage(error.message);
+  }
+
+  async function openIndividualTable(token?: string) {
+    const id = token || makeIndividualId();
+    let table: IndividualTableData | null = null;
+    if (supabase) {
+      const { data, error } = await supabase.rpc("get_individual_table", { token_value: id });
+      if (error) setMessage(error.message);
+      table = migrateIndividualTable(data, id);
+    } else if (typeof window !== "undefined") {
+      table = migrateIndividualTable(window.localStorage.getItem(`tableshifts.individual.${id}`), id);
+    }
+    const nextTable = table || createIndividualTable(id);
+    setIndividualTable(nextTable);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("table", id);
+      window.history.replaceState(null, "", url.toString());
+    }
+    if (!table) await saveIndividualTable(nextTable);
+  }
+
+  React.useEffect(() => {
+    if (individualTable || typeof window === "undefined") return;
+    const token = new URLSearchParams(window.location.search).get("table");
+    if (token) void openIndividualTable(token);
+  }, [individualTable, supabase]);
+
+  function closeIndividualTable() {
+    setIndividualTable(null);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("table");
+      window.history.replaceState(null, "", url.toString());
+    }
+  }
+
   async function signOut() {
     if (!supabase) return;
     await supabase.auth.signOut();
@@ -372,31 +528,40 @@ export function TableShiftsRedesign({ supabaseUrl, supabaseAnonKey }: Props) {
     if (authUser) void loadWorkspace(authUser);
   }
 
+  if (individualTable) {
+    return (
+      <IndividualTableShifts
+        table={individualTable}
+        onSave={saveIndividualTable}
+        onBack={closeIndividualTable}
+      />
+    );
+  }
+
   if (!authUser || !workspace) {
     return (
-      <main className="flex min-h-screen items-center justify-center p-5">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <p className="text-xs font-black uppercase tracking-[0.22em] text-emerald-700">Tableshifts</p>
-            <CardTitle className="text-4xl font-black">Sign in</CardTitle>
-            <CardDescription>Use your real TableShifts account from Supabase.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-3" onSubmit={signIn}>
-              <label className="grid gap-1 text-sm font-semibold">
-                Email
-                <input className="h-11 rounded-md border border-stone-200 px-3" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
-              </label>
-              <label className="grid gap-1 text-sm font-semibold">
-                Password
-                <input className="h-11 rounded-md border border-stone-200 px-3" value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
-              </label>
-              {message ? <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-900">{message}</p> : null}
-              <Button type="submit" disabled={loading}>{loading ? "Loading..." : "Enter"}</Button>
-            </form>
-          </CardContent>
-        </Card>
-      </main>
+      <LoginPanel
+        mode={authMode}
+        setMode={setAuthMode}
+        email={email}
+        setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        adminName={adminName}
+        setAdminName={setAdminName}
+        adminEmail={adminEmail}
+        setAdminEmail={setAdminEmail}
+        adminPassword={adminPassword}
+        setAdminPassword={setAdminPassword}
+        adminPasswordConfirm={adminPasswordConfirm}
+        setAdminPasswordConfirm={setAdminPasswordConfirm}
+        loading={loading}
+        message={message}
+        onSignIn={signIn}
+        onCreateAdmin={createAdminAccount}
+        onOAuth={signInWithProvider}
+        onIndividual={() => void openIndividualTable()}
+      />
     );
   }
 
@@ -816,6 +981,608 @@ async function waitForProfile(supabase: SupabaseClient, userId: string) {
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
   return null;
+}
+
+function LoginPanel({
+  mode,
+  setMode,
+  email,
+  setEmail,
+  password,
+  setPassword,
+  adminName,
+  setAdminName,
+  adminEmail,
+  setAdminEmail,
+  adminPassword,
+  setAdminPassword,
+  adminPasswordConfirm,
+  setAdminPasswordConfirm,
+  loading,
+  message,
+  onSignIn,
+  onCreateAdmin,
+  onOAuth,
+  onIndividual
+}: {
+  mode: "login" | "create-admin";
+  setMode: (mode: "login" | "create-admin") => void;
+  email: string;
+  setEmail: (value: string) => void;
+  password: string;
+  setPassword: (value: string) => void;
+  adminName: string;
+  setAdminName: (value: string) => void;
+  adminEmail: string;
+  setAdminEmail: (value: string) => void;
+  adminPassword: string;
+  setAdminPassword: (value: string) => void;
+  adminPasswordConfirm: string;
+  setAdminPasswordConfirm: (value: string) => void;
+  loading: boolean;
+  message: string;
+  onSignIn: (event: React.FormEvent) => void;
+  onCreateAdmin: (event: React.FormEvent) => void;
+  onOAuth: (provider: "google" | "apple", createAdmin?: boolean) => void;
+  onIndividual: () => void;
+}) {
+  return (
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dff4ea,transparent_34%),linear-gradient(135deg,#f8fbf8,#eef5f1)] p-5 text-stone-950">
+      <div className="mx-auto grid min-h-[calc(100vh-40px)] w-full max-w-5xl place-items-center">
+        <Card className="grid w-full overflow-hidden rounded-[24px] border-white/70 shadow-[0_28px_90px_rgba(6,47,35,0.16)] md:grid-cols-[1.05fr_0.95fr]">
+          <div className="flex min-h-[560px] flex-col justify-between bg-[#062f23] p-8 text-white">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.28em] text-emerald-200">TableShifts</p>
+              <h1 className="mt-6 max-w-sm text-5xl font-black leading-none tracking-tight">Time work, leave, and teams in one clean sheet.</h1>
+              <p className="mt-5 max-w-md text-sm font-semibold leading-6 text-emerald-100/80">
+                Sign in to a managed workspace, create your Admin Account environment, or open a standalone Individual TableShifts sheet.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-emerald-200">Standalone mode</p>
+              <p className="mt-2 text-sm text-emerald-50/80">No login required. Anyone with the generated link can keep editing that one table.</p>
+              <Button className="mt-4 w-full bg-white text-emerald-950 hover:bg-emerald-50" onClick={onIndividual}>
+                Individual TableShifts
+              </Button>
+            </div>
+          </div>
+          <div className="p-6 md:p-8">
+            <div className="mb-5 grid grid-cols-2 rounded-xl bg-stone-100 p-1">
+              <button
+                type="button"
+                className={cn("rounded-lg px-3 py-2 text-sm font-black transition", mode === "login" ? "bg-white shadow-sm" : "text-stone-500")}
+                onClick={() => setMode("login")}
+              >
+                Log in
+              </button>
+              <button
+                type="button"
+                className={cn("rounded-lg px-3 py-2 text-sm font-black transition", mode === "create-admin" ? "bg-white shadow-sm" : "text-stone-500")}
+                onClick={() => setMode("create-admin")}
+              >
+                Create Account
+              </button>
+            </div>
+            {mode === "login" ? (
+              <form className="grid gap-4" onSubmit={onSignIn}>
+                <div>
+                  <h2 className="text-3xl font-black">Welcome back</h2>
+                  <p className="mt-1 text-sm font-semibold text-stone-500">Use your TableShifts email and password.</p>
+                </div>
+                <FieldShell label="Email">
+                  <Input className="h-10" value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+                </FieldShell>
+                <FieldShell label="Password">
+                  <Input className="h-10" value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+                </FieldShell>
+                {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+                <Button className="h-10" type="submit" disabled={loading}>{loading ? "Loading..." : "Enter"}</Button>
+                <OAuthButtons onOAuth={(provider) => onOAuth(provider, false)} />
+              </form>
+            ) : (
+              <form className="grid gap-4" onSubmit={onCreateAdmin}>
+                <div>
+                  <h2 className="text-3xl font-black">Create Admin Account</h2>
+                  <p className="mt-1 text-sm font-semibold text-stone-500">This creates a new isolated TableShifts environment.</p>
+                </div>
+                <FieldShell label="Name">
+                  <Input className="h-10" value={adminName} onChange={(event) => setAdminName(event.target.value)} required />
+                </FieldShell>
+                <FieldShell label="Email">
+                  <Input className="h-10" value={adminEmail} onChange={(event) => setAdminEmail(event.target.value)} type="email" required />
+                </FieldShell>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FieldShell label="Password">
+                    <Input className="h-10" value={adminPassword} onChange={(event) => setAdminPassword(event.target.value)} type="password" required minLength={6} />
+                  </FieldShell>
+                  <FieldShell label="Repeat password">
+                    <Input className="h-10" value={adminPasswordConfirm} onChange={(event) => setAdminPasswordConfirm(event.target.value)} type="password" required minLength={6} />
+                  </FieldShell>
+                </div>
+                {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+                <Button className="h-10" type="submit" disabled={loading}>{loading ? "Creating..." : "Create Admin Account"}</Button>
+                <OAuthButtons onOAuth={(provider) => onOAuth(provider, true)} create />
+              </form>
+            )}
+          </div>
+        </Card>
+      </div>
+    </main>
+  );
+}
+
+function OAuthButtons({ onOAuth, create = false }: { onOAuth: (provider: "google" | "apple") => void; create?: boolean }) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center gap-3 text-[11px] font-black uppercase tracking-[0.16em] text-stone-400">
+        <Separator className="flex-1" />
+        or
+        <Separator className="flex-1" />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <Button type="button" variant="outline" className="h-10" onClick={() => onOAuth("google")}>
+          {create ? "Create with Google" : "Continue with Google"}
+        </Button>
+        <Button type="button" variant="outline" className="h-10" onClick={() => onOAuth("apple")}>
+          {create ? "Create with Apple" : "Continue with Apple"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function IndividualTableShifts({
+  table,
+  onSave,
+  onBack
+}: {
+  table: IndividualTableData;
+  onSave: (table: IndividualTableData) => void;
+  onBack: () => void;
+}) {
+  const [metaExpanded, setMetaExpanded] = React.useState(false);
+  const [totalsExpanded, setTotalsExpanded] = React.useState(false);
+  const [holidayCountry, setHolidayCountry] = React.useState("RO");
+  const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
+  const [holidayDraft, setHolidayDraft] = React.useState<IndividualHoliday[]>([]);
+  const [message, setMessage] = React.useState("");
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const totalsColumns = totalsExpanded ? ["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "More", "Fill", "Clear"] : ["Worked", "More"];
+  const totalWidth = (label: string) => ["More", "Fill", "Clear"].includes(label) ? 58 : 54;
+  const fixedWidth = 202 + (metaExpanded ? 350 : 0) + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0);
+  const minWidth = totalsExpanded || metaExpanded ? 230 + (metaExpanded ? 350 : 0) + days.length * 42 + totalsColumns.reduce((sum, label) => sum + totalWidth(label), 0) : undefined;
+
+  function save(next: IndividualTableData) {
+    onSave(next);
+  }
+
+  function updateRow(rowId: string, patch: Partial<IndividualRow>) {
+    const rows = table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row);
+    save({ ...table, rows });
+  }
+
+  function deleteRow(rowId: string) {
+    const entries = { ...table.entries };
+    delete entries[rowId];
+    save({ ...table, rows: table.rows.filter((row) => row.id !== rowId), entries });
+  }
+
+  function setEntry(rowId: string, iso: string, entry: IndividualEntry | null) {
+    const entries = { ...table.entries, [rowId]: { ...(table.entries[rowId] || {}) } };
+    if (entry) entries[rowId][iso] = entry;
+    else delete entries[rowId][iso];
+    save({ ...table, entries });
+  }
+
+  function fillRow(row: IndividualRow) {
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => {
+      if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: 8 };
+    });
+    save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+  }
+
+  function clearRow(row: IndividualRow) {
+    if (!window.confirm(`Clear ${row.name || "this row"} for ${table.month}?`)) return;
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => delete rowEntries[day.iso]);
+    save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+  }
+
+  async function addPublicHolidays() {
+    setMessage("");
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${holidayYear}/${holidayCountry}`);
+      if (!response.ok) throw new Error("Could not load public holidays.");
+      const data = await response.json();
+      const nextHolidays = (Array.isArray(data) ? data : []).map((item) => ({
+        date: item.date,
+        name: item.localName || item.name || "Public holiday",
+        countryCode: holidayCountry
+      }));
+      setHolidayDraft(nextHolidays);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not load public holidays.");
+    }
+  }
+
+  function applyHolidayDraft() {
+    const merged = new Map(table.holidays.map((holiday) => [`${holiday.date}:${holiday.name}`, holiday]));
+    holidayDraft.forEach((holiday) => merged.set(`${holiday.date}:${holiday.name}`, holiday));
+    save({ ...table, holidays: Array.from(merged.values()).toSorted((a, b) => a.date.localeCompare(b.date)) });
+    setHolidayDraft([]);
+  }
+
+  function importCsv(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCsv(String(reader.result || ""));
+      const [header = [], ...body] = rows;
+      const normalized = header.map((item) => item.trim().toLowerCase());
+      const index = (name: string) => normalized.indexOf(name.toLowerCase());
+      const nextRows = body
+        .map((line) => ({
+          id: makeIndividualId("row"),
+          name: line[index("Employee")] || line[index("Name")] || "",
+          company: line[index("Company")] || "",
+          department: line[index("Department")] || "",
+          identificationNumber: line[index("Identification Number")] || line[index("ID")] || "",
+          position: line[index("Position")] || ""
+        }))
+        .filter((row) => row.name.trim());
+      if (nextRows.length) save({ ...table, rows: [...table.rows, ...nextRows] });
+    };
+    reader.readAsText(file);
+  }
+
+  return (
+    <main className="min-h-screen bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+      <div className="mx-auto grid max-w-[1800px] gap-4">
+        <header className="flex flex-wrap items-start justify-between gap-3 border-b border-emerald-900/10 pb-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
+            <h1 className="text-4xl font-black tracking-tight">Individual TableShifts</h1>
+            <p className="mt-1 break-all text-sm font-semibold text-stone-500">{typeof window === "undefined" ? "" : window.location.href}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => void navigator.clipboard?.writeText(window.location.href)}>Copy Link</Button>
+            <Button onClick={onBack}>Back to Login</Button>
+          </div>
+        </header>
+
+        <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_auto_auto]">
+          <Card className="p-3">
+            <FieldShell label="Month">
+              <NativeSelect value={table.month} onChange={(event) => save({ ...table, month: event.target.value })}>
+                {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </NativeSelect>
+            </FieldShell>
+          </Card>
+          <Card className="grid gap-2 p-3 md:grid-cols-[auto_180px_90px_auto] md:items-end">
+            <p className="self-center text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">Public Holidays</p>
+            <FieldShell label="Country">
+              <NativeSelect value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
+                {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name} ({code})</option>)}
+              </NativeSelect>
+            </FieldShell>
+            <FieldShell label="Year">
+              <Input className="h-8 text-xs font-semibold" value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </FieldShell>
+            <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => void addPublicHolidays()}>Add Public Holidays</Button>
+          </Card>
+          <Card className="grid gap-2 p-3 md:grid-cols-[auto_auto] md:items-end">
+            <FieldShell label="Import Employees">
+              <Input className="h-8 text-xs file:mr-2 file:rounded file:border-0 file:bg-stone-100 file:px-2 file:py-1 file:text-xs file:font-bold" type="file" accept=".csv,text/csv" onChange={(event) => importCsv(event.target.files?.[0] || null)} />
+            </FieldShell>
+            <Button variant="outline" className="h-8 px-3 text-xs" onClick={downloadIndividualTemplate}>Import Template</Button>
+          </Card>
+          <Button className="h-full min-h-12 px-5" onClick={() => exportIndividualCsv(table)}>Export CSV</Button>
+        </div>
+        {message ? <p className="rounded-lg bg-amber-50 p-3 text-xs font-bold text-amber-900">{message}</p> : null}
+
+        <Card className="overflow-hidden">
+          <div className={cn("max-h-[calc(100vh-280px)]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
+            <table
+              className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
+              style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
+            >
+              <colgroup>
+                <col style={{ width: metaExpanded || totalsExpanded ? "190px" : "160px" }} />
+                <col style={{ width: "42px" }} />
+                {metaExpanded ? (
+                  <>
+                    <col style={{ width: "92px" }} />
+                    <col style={{ width: "92px" }} />
+                    <col style={{ width: "76px" }} />
+                    <col style={{ width: "90px" }} />
+                  </>
+                ) : null}
+                {days.map((day) => (
+                  <col key={day.iso} style={totalsExpanded || metaExpanded ? { width: "42px" } : { width: `calc((100% - ${fixedWidth}px) / ${days.length})` }} />
+                ))}
+                {totalsColumns.map((label) => <col key={label} style={{ width: `${totalWidth(label)}px` }} />)}
+              </colgroup>
+              <thead>
+                <tr className="border-b bg-stone-50">
+                  <th className="px-2 py-2 text-left font-black">Employee</th>
+                  <th className="border-l px-1 py-2 text-center">
+                    <Button size="sm" className="h-7 rounded-md bg-emerald-700 px-2 text-xs" onClick={() => setMetaExpanded((value) => !value)}>
+                      {metaExpanded ? "Less" : "More"}
+                    </Button>
+                  </th>
+                  {metaExpanded ? ["Company", "Department", "ID", "Position"].map((label) => <th key={label} className="border-l px-1 py-2 text-center font-black">{label}</th>) : null}
+                  {days.map((day) => (
+                    <th key={day.iso} className="border-l px-0.5 py-1 text-center">
+                      <span className="block text-sm font-black leading-tight">{day.day}</span>
+                      <span className="text-[10px] font-bold text-stone-500">{day.weekday.slice(0, 3)}</span>
+                    </th>
+                  ))}
+                  {totalsColumns.map((label) => (
+                    <th key={label} className="border-l px-1 py-2 text-center font-black">{label === "More" && totalsExpanded ? "Less" : label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((row) => {
+                  const totals = individualTotals(row, table);
+                  return (
+                    <tr key={row.id} className="h-11 border-b">
+                      <td className="px-2">
+                        <input
+                          className="h-8 w-full bg-transparent text-sm font-black outline-none placeholder:text-stone-400"
+                          value={row.name}
+                          placeholder="Employee name"
+                          onChange={(event) => updateRow(row.id, { name: event.target.value })}
+                          onBlur={() => {
+                            if (!row.name.trim() && window.confirm("Delete this empty row?")) deleteRow(row.id);
+                          }}
+                        />
+                      </td>
+                      <td className="border-l px-1 text-center text-lg font-black text-stone-500">...</td>
+                      {metaExpanded ? (
+                        <>
+                          <IndividualTextCell value={row.company} onChange={(value) => updateRow(row.id, { company: value })} placeholder="Company" />
+                          <IndividualTextCell value={row.department} onChange={(value) => updateRow(row.id, { department: value })} placeholder="Department" />
+                          <IndividualTextCell value={row.identificationNumber} onChange={(value) => updateRow(row.id, { identificationNumber: value })} placeholder="ID" />
+                          <IndividualTextCell value={row.position} onChange={(value) => updateRow(row.id, { position: value })} placeholder="Position" />
+                        </>
+                      ) : null}
+                      {days.map((day) => (
+                        <IndividualDayCell
+                          key={day.iso}
+                          row={row}
+                          day={day}
+                          table={table}
+                          holiday={holidaysByDate.get(day.iso)}
+                          entry={table.entries[row.id]?.[day.iso]}
+                          onSetEntry={setEntry}
+                        />
+                      ))}
+                      <td className="border-l px-1 text-center font-black">{formatNumber(totals.worked)}h</td>
+                      {totalsExpanded ? (
+                        <>
+                          <td className="border-l px-1 text-center font-black">{formatNumber(totals.norm)}h</td>
+                          <td className={cn("border-l px-1 text-center font-black", totals.diff < 0 ? "text-rose-700" : "text-emerald-700")}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</td>
+                          <td className="border-l px-1 text-center font-black">{formatNumber(totals.ot)}h</td>
+                          <td className="border-l px-1 text-center font-black">{totals.co}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.cm}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.se}d</td>
+                          <td className="border-l px-1 text-center font-black">{totals.ab}d</td>
+                        </>
+                      ) : null}
+                      <td className="border-l px-1 text-center">
+                        <Button size="sm" className="h-7 rounded-md bg-amber-600 px-2 text-xs hover:bg-amber-700" onClick={() => setTotalsExpanded((value) => !value)}>
+                          {totalsExpanded ? "Less" : "More"}
+                        </Button>
+                      </td>
+                      {totalsExpanded ? (
+                        <>
+                          <td className="border-l px-1 text-center"><Button size="sm" variant="outline" className="h-7 px-2 text-xs text-emerald-700" onClick={() => fillRow(row)}>Fill</Button></td>
+                          <td className="border-l px-1 text-center"><Button size="sm" variant="outline" className="h-7 px-2 text-xs text-rose-700" onClick={() => clearRow(row)}>Clear</Button></td>
+                        </>
+                      ) : null}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={() => save({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>New row</Button>
+          <p className="text-sm font-semibold text-stone-500">Anyone with this link can edit this individual table. It is separate from the company app.</p>
+        </div>
+      </div>
+      {holidayDraft.length ? (
+        <IndividualHolidayPreview
+          holidays={holidayDraft}
+          setHolidays={setHolidayDraft}
+          onApply={applyHolidayDraft}
+          onClose={() => setHolidayDraft([])}
+        />
+      ) : null}
+    </main>
+  );
+}
+
+function IndividualTextCell({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <td className="border-l px-1">
+      <input className="h-8 w-full bg-transparent text-center font-semibold outline-none placeholder:text-stone-400" value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </td>
+  );
+}
+
+function IndividualDayCell({
+  row,
+  day,
+  table,
+  holiday,
+  entry,
+  onSetEntry
+}: {
+  row: IndividualRow;
+  day: ReturnType<typeof daysInMonth>[number];
+  table: IndividualTableData;
+  holiday?: IndividualHoliday;
+  entry?: IndividualEntry;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+}) {
+  const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
+  const numeric = !entry || ["normal", "overtime"].includes(entry.type);
+  const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
+  const [draft, setDraft] = React.useState(value);
+  React.useEffect(() => setDraft(value), [value]);
+  React.useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [menu]);
+
+  function commit(next = draft) {
+    const trimmed = next.trim();
+    if (!trimmed) {
+      onSetEntry(row.id, day.iso, null);
+      return;
+    }
+    const hours = Math.min(24, Number(trimmed.replace(/\D/g, "")));
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    onSetEntry(row.id, day.iso, { type: hours > 8 ? "overtime" : "normal", hours });
+  }
+
+  const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  return (
+    <td
+      className={cn("border-l p-0 text-center", individualCellClass(type))}
+      title={holiday?.name || ""}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        const rect = event.currentTarget.getBoundingClientRect();
+        setMenu({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
+      }}
+    >
+      <div className="flex h-11 items-center justify-center">
+        {numeric ? (
+          <label className="flex items-center justify-center gap-0.5">
+            <input
+              className="w-[2ch] bg-transparent text-center text-sm font-black outline-none"
+              value={draft}
+              placeholder={holiday ? "H" : ""}
+              inputMode="numeric"
+              onChange={(event) => {
+                const digits = event.target.value.replace(/\D/g, "");
+                setDraft(digits ? String(Math.min(24, Number(digits))) : "");
+              }}
+              onBlur={() => commit()}
+              onKeyDown={(event) => {
+                if (event.key.length === 1 && !/\d/.test(event.key)) event.preventDefault();
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+            />
+            {draft ? <span className="text-[10px] font-bold text-stone-500">h</span> : null}
+          </label>
+        ) : (
+          <div className="leading-tight">
+            <span className="block text-[11px] font-black">{individualEntryCode(entry?.type || "holiday")}</span>
+            {["vacation", "medical", "special_event"].includes(entry?.type || "") ? <span className="text-[10px] text-stone-500">day</span> : null}
+          </div>
+        )}
+      </div>
+      {menu ? (
+        <IndividualCellMenu
+          x={menu.x}
+          y={menu.y}
+          onApply={(type, reason) => {
+            setMenu(null);
+            if (type === "clear") onSetEntry(row.id, day.iso, null);
+            else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: 8 });
+            else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
+          }}
+        />
+      ) : null}
+    </td>
+  );
+}
+
+function IndividualCellMenu({ x, y, onApply }: { x: number; y: number; onApply: (type: string, reason?: string) => void }) {
+  return createPortal(
+    <div
+      className="fixed z-[90] grid min-w-36 rounded-md border bg-white p-1 text-xs font-semibold shadow-xl"
+      style={{ left: Math.max(8, Math.min(x, window.innerWidth - 180)), top: Math.max(8, Math.min(y, window.innerHeight - 260)) }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {[
+        ["normal", "Normal shift"],
+        ["vacation", "Vacation CO"],
+        ["medical", "Medical CM"],
+        ["absence", "Absence"]
+      ].map(([type, label]) => (
+        <button key={type} className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply(type)}>{label}</button>
+      ))}
+      <div className="group relative">
+        <button className="flex w-full justify-between rounded px-2 py-1.5 text-left hover:bg-stone-100">
+          Special Event <span>›</span>
+        </button>
+        <div className="absolute left-full top-0 hidden min-w-44 rounded-md border bg-white p-1 shadow-xl group-hover:grid">
+          {SPECIAL_EVENT_REASONS.map((reason) => <button key={reason} className="rounded px-2 py-1.5 text-left hover:bg-stone-100" onClick={() => onApply("special_event", reason)}>{reason}</button>)}
+        </div>
+      </div>
+      <button className="rounded px-2 py-1.5 text-left text-rose-700 hover:bg-rose-50" onClick={() => onApply("clear")}>Clear</button>
+    </div>,
+    document.body
+  );
+}
+
+function IndividualHolidayPreview({
+  holidays,
+  setHolidays,
+  onApply,
+  onClose
+}: {
+  holidays: IndividualHoliday[];
+  setHolidays: (holidays: IndividualHoliday[]) => void;
+  onApply: () => void;
+  onClose: () => void;
+}) {
+  return createPortal(
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-stone-950/40 p-4">
+      <Card className="max-h-[80vh] w-full max-w-2xl overflow-hidden">
+        <CardHeader className="flex-row items-center justify-between">
+          <div>
+            <CardTitle>Public Holidays</CardTitle>
+            <CardDescription>Review, remove, or add holidays before applying.</CardDescription>
+          </div>
+          <Button variant="outline" onClick={onClose}><X className="h-4 w-4" />Close</Button>
+        </CardHeader>
+        <CardContent className="grid max-h-[58vh] gap-2 overflow-auto">
+          {holidays.map((holiday, index) => (
+            <div key={`${holiday.date}-${index}`} className="grid grid-cols-[130px_1fr_auto] gap-2">
+              <Input className="h-8 text-xs" value={holiday.date} onChange={(event) => setHolidays(holidays.map((item, itemIndex) => itemIndex === index ? { ...item, date: event.target.value } : item))} />
+              <Input className="h-8 text-xs" value={holiday.name} onChange={(event) => setHolidays(holidays.map((item, itemIndex) => itemIndex === index ? { ...item, name: event.target.value } : item))} />
+              <Button variant="outline" size="sm" onClick={() => setHolidays(holidays.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
+            </div>
+          ))}
+          <Button variant="outline" onClick={() => setHolidays([...holidays, { date: "", name: "Custom holiday" }])}>Add another</Button>
+        </CardContent>
+        <div className="flex justify-end gap-2 border-t p-4">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={onApply}>Apply Holidays</Button>
+        </div>
+      </Card>
+    </div>,
+    document.body
+  );
 }
 
 function SummaryCard({ label, value, hint, accent }: { label: string; value: string; hint: string; accent?: "good" | "bad" }) {
@@ -3939,6 +4706,194 @@ function exportCsv(companyName: string, month: string, employees: ProfileRow[], 
   link.download = `${companyName}-${month}-timesheet.csv`.replace(/[^a-z0-9.-]+/gi, "-");
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function makeIndividualId(prefix = "table") {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID().slice(0, 8)
+    : Math.random().toString(36).slice(2, 10);
+  return `${prefix}-${random}`;
+}
+
+function defaultIndividualRow(): IndividualRow {
+  return {
+    id: makeIndividualId("row"),
+    name: "",
+    company: "",
+    department: "",
+    identificationNumber: "",
+    position: ""
+  };
+}
+
+function createIndividualTable(id = makeIndividualId()): IndividualTableData {
+  return {
+    id,
+    month: currentMonth(),
+    rows: [defaultIndividualRow()],
+    entries: {},
+    holidays: []
+  };
+}
+
+function migrateIndividualTable(raw: unknown, id: string): IndividualTableData | null {
+  if (!raw) return null;
+  let value = raw;
+  if (typeof raw === "string") {
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  }
+  if (typeof value !== "object" || value === null) return null;
+  const data = value as Partial<IndividualTableData>;
+  return {
+    id: data.id || id,
+    month: data.month || currentMonth(),
+    rows: Array.isArray(data.rows) && data.rows.length ? data.rows.map((row) => ({
+      id: row.id || makeIndividualId("row"),
+      name: row.name || "",
+      company: row.company || "",
+      department: row.department || "",
+      identificationNumber: row.identificationNumber || "",
+      position: row.position || ""
+    })) : [defaultIndividualRow()],
+    entries: data.entries && typeof data.entries === "object" ? data.entries : {},
+    holidays: Array.isArray(data.holidays) ? data.holidays.map((holiday) => ({
+      date: holiday.date || "",
+      name: holiday.name || "Public holiday",
+      countryCode: holiday.countryCode
+    })).filter((holiday) => holiday.date) : []
+  };
+}
+
+function isIndividualWorkDay(day: ReturnType<typeof daysInMonth>[number], holidaysByDate: Map<string, IndividualHoliday>) {
+  return day.weekdayIndex !== 0 && day.weekdayIndex !== 6 && !holidaysByDate.has(day.iso);
+}
+
+function individualTotals(row: IndividualRow, table: IndividualTableData) {
+  const holidays = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const totals = daysInMonth(table.month).reduce((acc, day) => {
+    const entry = table.entries[row.id]?.[day.iso];
+    if (isIndividualWorkDay(day, holidays)) acc.norm += 8;
+    if (!entry) return acc;
+    const hours = Number(entry.hours || 0);
+    if (entry.type === "normal") acc.worked += hours;
+    if (entry.type === "overtime") {
+      acc.worked += hours;
+      acc.ot += Math.max(0, hours - 8);
+    }
+    if (entry.type === "vacation") acc.co += 1;
+    if (entry.type === "medical") acc.cm += 1;
+    if (entry.type === "special_event") acc.se += 1;
+    if (entry.type === "absence") acc.ab += 1;
+    return acc;
+  }, { worked: 0, norm: 0, diff: 0, ot: 0, co: 0, cm: 0, se: 0, ab: 0 });
+  totals.diff = totals.worked - totals.norm;
+  return totals;
+}
+
+function individualEntryCode(type: string) {
+  if (type === "vacation") return "CO";
+  if (type === "medical") return "CM";
+  if (type === "special_event") return "SE";
+  if (type === "absence") return "AB";
+  if (type === "holiday") return "H";
+  if (type === "overtime") return "OT";
+  return "N";
+}
+
+function individualCellClass(type: string) {
+  if (type === "vacation") return "bg-emerald-100 text-emerald-950";
+  if (type === "medical") return "bg-rose-100 text-rose-900";
+  if (type === "overtime") return "bg-amber-100 text-amber-950";
+  if (type === "absence") return "bg-stone-950 text-white";
+  if (type === "special_event") return "bg-stone-200 text-stone-950";
+  if (type === "holiday") return "bg-yellow-50 text-stone-500";
+  if (type === "weekend") return "bg-sky-50";
+  return "bg-white";
+}
+
+function downloadIndividualTemplate() {
+  downloadCsv("tableshifts-import-template.csv", [
+    ["Employee", "Company", "Department", "Identification Number", "Position"],
+    ["", "", "", "", ""]
+  ]);
+}
+
+function exportIndividualCsv(table: IndividualTableData) {
+  const days = daysInMonth(table.month);
+  const rows = [
+    ["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB"]
+  ];
+  table.rows.forEach((row) => {
+    const totals = individualTotals(row, table);
+    rows.push([
+      row.name,
+      row.company,
+      row.department,
+      row.identificationNumber,
+      row.position,
+      ...days.map((day) => {
+        const entry = table.entries[row.id]?.[day.iso];
+        if (!entry) return "";
+        if (["normal", "overtime"].includes(entry.type)) return String(entry.hours || "");
+        return individualEntryCode(entry.type);
+      }),
+      String(totals.worked),
+      String(totals.norm),
+      String(totals.worked - totals.norm),
+      String(totals.ot),
+      String(totals.co),
+      String(totals.cm),
+      String(totals.se),
+      String(totals.ab)
+    ]);
+  });
+  downloadCsv(`individual-tableshifts-${table.month}.csv`, rows);
+}
+
+function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
+  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    const next = text[index + 1];
+    if (char === "\"" && quoted && next === "\"") {
+      cell += "\"";
+      index += 1;
+    } else if (char === "\"") {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      row.push(cell);
+      cell = "";
+    } else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+    } else {
+      cell += char;
+    }
+  }
+  row.push(cell);
+  rows.push(row);
+  return rows.filter((items) => items.some((item) => item.trim()));
 }
 
 function tabLabel(tab: string) {
