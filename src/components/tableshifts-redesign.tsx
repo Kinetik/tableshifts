@@ -184,6 +184,7 @@ type IndividualHoliday = {
 type IndividualTableData = {
   id: string;
   month: string;
+  normalHours: number;
   rows: IndividualRow[];
   entries: Record<string, Record<string, IndividualEntry>>;
   holidays: IndividualHoliday[];
@@ -1212,9 +1213,10 @@ function IndividualTableShifts({
   }
 
   function fillRow(row: IndividualRow) {
+    const normal = individualNormalHours(table);
     const rowEntries = { ...(table.entries[row.id] || {}) };
     days.forEach((day) => {
-      if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: 8 };
+      if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: normal };
     });
     save({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
     toast.success(`${row.name || "Row"} filled with normal shifts.`);
@@ -1331,11 +1333,25 @@ function IndividualTableShifts({
         </header>
 
         <div className="grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)_auto_auto]">
-          <Card className="p-3">
+          <Card className="grid gap-2 p-3 sm:grid-cols-[1fr_88px]">
             <FieldShell label="Month">
               <NativeSelect value={table.month} onChange={(event) => save({ ...table, month: event.target.value })}>
                 {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
               </NativeSelect>
+            </FieldShell>
+            <FieldShell label="Normal h">
+              <Input
+                className="h-8 text-xs font-semibold"
+                inputMode="numeric"
+                min={1}
+                max={24}
+                type="number"
+                value={individualNormalHours(table)}
+                onChange={(event) => {
+                  const hours = Math.max(1, Math.min(24, Number(event.target.value) || 8));
+                  save({ ...table, normalHours: hours });
+                }}
+              />
             </FieldShell>
           </Card>
           <Card className="grid gap-2 p-3 md:grid-cols-[auto_180px_90px_auto_auto] md:items-end">
@@ -1547,6 +1563,7 @@ function IndividualDailyBars({ days }: { days: Array<{ day: number; worked: numb
 function individualHeaderStats(table: IndividualTableData) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const normal = individualNormalHours(table);
   const totals = table.rows.reduce(
     (sum, row) => {
       const rowTotals = individualTotals(row, table);
@@ -1568,13 +1585,13 @@ function individualHeaderStats(table: IndividualTableData) {
         const entry = table.entries[row.id]?.[day.iso];
         return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
       }, 0);
-      const norm = table.rows.length * 8;
-      return { day: day.day, worked, variance: worked - norm, strength: "normal" as const };
+      const norm = table.rows.length * normal;
+      return { day: day.day, worked, norm, variance: worked - norm, strength: "normal" as const };
     });
-  const activeDays = daily.filter((day) => day.worked > 0);
-  const minWorked = activeDays.length >= 2 ? Math.min(...activeDays.map((day) => day.worked)) : null;
-  const maxWorked = activeDays.length >= 2 ? Math.max(...activeDays.map((day) => day.worked)) : null;
-  const hasSpread = minWorked !== null && maxWorked !== null && minWorked !== maxWorked;
+  const underNormDays = daily.filter((day) => day.worked > 0 && day.worked < day.norm);
+  const overNormDays = daily.filter((day) => day.worked > day.norm);
+  const weakestVariance = underNormDays.length ? Math.min(...underNormDays.map((day) => day.variance)) : null;
+  const strongestVariance = overNormDays.length ? Math.max(...overNormDays.map((day) => day.variance)) : null;
   return {
     people: table.rows.length,
     worked: totals.worked,
@@ -1587,7 +1604,11 @@ function individualHeaderStats(table: IndividualTableData) {
     ab: totals.ab,
     daily: daily.map((day) => ({
       ...day,
-      strength: hasSpread && day.worked === minWorked ? "weak" as const : hasSpread && day.worked === maxWorked ? "strong" as const : "normal" as const
+      strength: weakestVariance !== null && day.variance === weakestVariance
+        ? "weak" as const
+        : strongestVariance !== null && day.variance === strongestVariance
+          ? "strong" as const
+          : "normal" as const
     }))
   };
 }
@@ -1616,6 +1637,7 @@ function IndividualDayCell({
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
 }) {
   const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
+  const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const numeric = !entry || ["normal", "overtime"].includes(entry.type);
   const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
@@ -1629,11 +1651,11 @@ function IndividualDayCell({
     }
     const hours = Math.min(24, Number(trimmed.replace(/\D/g, "")));
     if (!Number.isFinite(hours) || hours <= 0) return;
-    onSetEntry(row.id, day.iso, { type: hours > 8 ? "overtime" : "normal", hours });
+    onSetEntry(row.id, day.iso, { type: hours > normalHours ? "overtime" : "normal", hours });
   }
 
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
-  const tooltip = individualTooltipText(entry, holiday, workDay);
+  const tooltip = individualTooltipText(entry, holiday, workDay, normalHours);
   return (
     <td
       className={cn("border-l p-0 text-center", individualCellClass(type))}
@@ -1688,7 +1710,7 @@ function IndividualDayCell({
         onApply={(type, reason) => {
           setMenu(null);
           if (type === "clear") onSetEntry(row.id, day.iso, null);
-          else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: 8 });
+          else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
           else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
         }}
       />
@@ -4931,6 +4953,7 @@ function createIndividualTable(id = makeIndividualId()): IndividualTableData {
   return {
     id,
     month: currentMonth(),
+    normalHours: 8,
     rows: [defaultIndividualRow()],
     entries: {},
     holidays: []
@@ -4952,6 +4975,7 @@ function migrateIndividualTable(raw: unknown, id: string): IndividualTableData |
   return {
     id: data.id || id,
     month: data.month || currentMonth(),
+    normalHours: sanitizeIndividualNormalHours(data.normalHours),
     rows: Array.isArray(data.rows) && data.rows.length ? data.rows.map((row) => ({
       id: row.id || makeIndividualId("row"),
       name: row.name || "",
@@ -4969,21 +4993,32 @@ function migrateIndividualTable(raw: unknown, id: string): IndividualTableData |
   };
 }
 
+function sanitizeIndividualNormalHours(value: unknown) {
+  const hours = Number(value);
+  if (!Number.isFinite(hours)) return 8;
+  return Math.max(1, Math.min(24, Math.round(hours)));
+}
+
+function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {
+  return sanitizeIndividualNormalHours(table.normalHours);
+}
+
 function isIndividualWorkDay(day: ReturnType<typeof daysInMonth>[number], holidaysByDate: Map<string, IndividualHoliday>) {
   return day.weekdayIndex !== 0 && day.weekdayIndex !== 6 && !holidaysByDate.has(day.iso);
 }
 
 function individualTotals(row: IndividualRow, table: IndividualTableData) {
   const holidays = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const normal = individualNormalHours(table);
   const totals = daysInMonth(table.month).reduce((acc, day) => {
     const entry = table.entries[row.id]?.[day.iso];
-    if (isIndividualWorkDay(day, holidays)) acc.norm += 8;
+    if (isIndividualWorkDay(day, holidays)) acc.norm += normal;
     if (!entry) return acc;
     const hours = Number(entry.hours || 0);
     if (entry.type === "normal") acc.worked += hours;
     if (entry.type === "overtime") {
       acc.worked += hours;
-      acc.ot += Math.max(0, hours - 8);
+      acc.ot += Math.max(0, hours - normal);
     }
     if (entry.type === "vacation") acc.co += 1;
     if (entry.type === "medical") acc.cm += 1;
@@ -5005,9 +5040,9 @@ function individualEntryCode(type: string) {
   return "N";
 }
 
-function individualTooltipText(entry: IndividualEntry | undefined, holiday: IndividualHoliday | undefined, workDay: boolean) {
+function individualTooltipText(entry: IndividualEntry | undefined, holiday: IndividualHoliday | undefined, workDay: boolean, normalHoursValue = 8) {
   if (entry?.type === "normal") return `Normal shift: ${formatNumber(entry.hours)}h`;
-  if (entry?.type === "overtime") return `Overtime: ${formatNumber(Math.max(0, Number(entry.hours || 0) - 8))}h over normal shift of 8h`;
+  if (entry?.type === "overtime") return `Overtime: ${formatNumber(Math.max(0, Number(entry.hours || 0) - normalHoursValue))}h over normal shift of ${formatNumber(normalHoursValue)}h`;
   if (entry?.type === "vacation") return "Vacation day (CO)";
   if (entry?.type === "medical") return "Medical leave day (CM)";
   if (entry?.type === "special_event") return entry.reason ? `Special event: ${entry.reason}` : "Special event";
