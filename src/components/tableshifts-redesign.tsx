@@ -1280,9 +1280,10 @@ function IndividualTableShifts({
   }
 
   return (
-    <main className="min-h-screen bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
-      <Toaster position="top-center" richColors closeButton />
-      <div className="mx-auto grid max-w-[1800px] gap-4">
+    <TooltipProvider delayDuration={250}>
+      <main className="min-h-screen bg-[linear-gradient(135deg,#f7faf8,#edf5f1)] p-4 text-stone-950">
+        <Toaster position="top-center" richColors closeButton />
+        <div className="mx-auto grid max-w-[1800px] gap-4">
         <header className="grid gap-3 border-b border-emerald-900/10 pb-4 lg:grid-cols-[minmax(250px,360px)_minmax(360px,1fr)_minmax(260px,330px)] lg:items-stretch">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-700">TableShifts</p>
@@ -1356,7 +1357,6 @@ function IndividualTableShifts({
 
         <Card className="overflow-hidden">
           <div className={cn("max-h-[calc(100vh-280px)]", totalsExpanded || metaExpanded ? "overflow-auto" : "overflow-y-auto overflow-x-hidden")}>
-            <TooltipProvider delayDuration={250}>
               <table
                 className={cn("w-full table-fixed border-collapse text-xs", (totalsExpanded || metaExpanded) && "min-w-max")}
                 style={minWidth ? { minWidth: `${minWidth}px` } : undefined}
@@ -1475,7 +1475,6 @@ function IndividualTableShifts({
                 })}
               </tbody>
               </table>
-            </TooltipProvider>
           </div>
         </Card>
 
@@ -1483,16 +1482,17 @@ function IndividualTableShifts({
           <Button onClick={() => save({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>New row</Button>
           <p className="text-sm font-semibold text-stone-500">Anyone with this link can edit this individual table. It is separate from the company app.</p>
         </div>
-      </div>
-      {holidayDraft.length ? (
-        <IndividualHolidayPreview
-          holidays={holidayDraft}
-          setHolidays={setHolidayDraft}
-          onApply={applyHolidayDraft}
-          onClose={() => setHolidayDraft([])}
-        />
-      ) : null}
-    </main>
+        </div>
+        {holidayDraft.length ? (
+          <IndividualHolidayPreview
+            holidays={holidayDraft}
+            setHolidays={setHolidayDraft}
+            onApply={applyHolidayDraft}
+            onClose={() => setHolidayDraft([])}
+          />
+        ) : null}
+      </main>
+    </TooltipProvider>
   );
 }
 
