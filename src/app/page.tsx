@@ -1,4 +1,4 @@
-import { TableShiftsRedesign } from "@/components/tableshifts-redesign";
+import { FlowbiteIndividualTableShiftsApp } from "@/components/flowbite-individual-tableshifts";
 
 export default function Home() {
   const supabaseUrl =
@@ -12,5 +12,5 @@ export default function Home() {
     process.env.tableshifts_dbSUPABASE_PUBLISHABLE_KEY ||
     "";
 
-  return <TableShiftsRedesign supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} />;
+  return <FlowbiteIndividualTableShiftsApp supabaseUrl={supabaseUrl} supabaseAnonKey={supabaseAnonKey} />;
 }
