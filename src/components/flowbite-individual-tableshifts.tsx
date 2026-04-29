@@ -305,20 +305,487 @@ function IndividualTableWorkspace({
   layoutMode: LayoutMode;
   setLayoutMode: (mode: LayoutMode) => void;
 }) {
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const days = daysInMonth(table.month);
+  const stats = individualHeaderStats(table);
+
+  function updateTable(patch: Partial<IndividualTableData>) {
+    onSave({ ...table, ...patch });
+  }
+
+  function updateRow(rowId: string, patch: Partial<IndividualRow>) {
+    onSave({ ...table, rows: table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row) });
+  }
+
+  function removeRow(rowId: string) {
+    const entries = { ...table.entries };
+    delete entries[rowId];
+    onSave({ ...table, rows: table.rows.filter((row) => row.id !== rowId), entries });
+    toast.success("Employee row removed.");
+  }
+
+  function setEntry(rowId: string, iso: string, entry: IndividualEntry | null) {
+    const entries = { ...table.entries, [rowId]: { ...(table.entries[rowId] || {}) } };
+    if (entry) entries[rowId][iso] = entry;
+    else delete entries[rowId][iso];
+    onSave({ ...table, entries });
+  }
+
+  function fillRow(row: IndividualRow) {
+    const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+    const normal = individualNormalHours(table);
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => {
+      if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: normal };
+    });
+    onSave({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} filled.`);
+  }
+
+  function clearRow(row: IndividualRow) {
+    const rowEntries = { ...(table.entries[row.id] || {}) };
+    days.forEach((day) => delete rowEntries[day.iso]);
+    onSave({ ...table, entries: { ...table.entries, [row.id]: rowEntries } });
+    toast.success(`${row.name || "Row"} cleared.`);
+  }
+
+  function importEmployeeFile(file: File | null) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
+        const rows = isExcel
+          ? parseEmployeeWorkbook(reader.result as ArrayBuffer)
+          : parseCsv(String(reader.result || ""));
+        const nextRows = individualRowsFromMatrix(rows);
+        if (nextRows.length) {
+          onSave({ ...table, rows: [...table.rows, ...nextRows] });
+          toast.success(`${nextRows.length} employees imported.`);
+        } else {
+          toast.warning("No employees found in that file.");
+        }
+      } catch {
+        toast.error("Could not import that employee file.");
+      }
+    };
+    if (/\.(xlsx|xls)$/i.test(file.name)) reader.readAsArrayBuffer(file);
+    else reader.readAsText(file);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast.success("Share link copied.");
+    } catch {
+      toast.error("Could not copy the share link.");
+    }
+  }
+
   return (
-    <main className="min-h-screen bg-white p-6 text-slate-950 dark:bg-slate-950 dark:text-white">
-      <button type="button" onClick={onBack}>Back</button>
-      <button type="button" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>Theme</button>
-      <button type="button" onClick={() => setLayoutMode(layoutMode === "desktop" ? "mobile" : "desktop")}>{layoutMode}</button>
-      <h1>Individual TableShifts</h1>
-      <p>{table.id}</p>
-      <p>{daysInMonth(table.month).length} days in {table.month}</p>
-      <p>{formatNumber(individualNormalHours(table))}h shifts</p>
-      <p>{COUNTRY_OPTIONS[0][1]} holidays available later</p>
-      <p>{SPECIAL_EVENT_REASONS.length} special event reasons</p>
-      <button type="button" onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>Add row</button>
-      <button type="button" onClick={downloadIndividualTemplate}>Template</button>
-      <button type="button" onClick={() => exportIndividualCsv(table)}>Export</button>
+    <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-white">
+      <div className="flex min-h-screen flex-col">
+        <header className="border-b border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 lg:px-6">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.2em] text-teal-700 dark:text-teal-300">
+                <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
+                TableShifts
+              </div>
+              <h1 className="mt-1 truncate text-2xl font-black tracking-tight">Individual TableShifts</h1>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className={toolButtonClass()} onClick={copyLink}>Copy Link</button>
+              <button type="button" className={toolButtonClass()} onClick={() => setLayoutMode(layoutMode === "desktop" ? "mobile" : "desktop")}>
+                {layoutMode === "desktop" ? "Desktop" : "Mobile"}
+              </button>
+              <button type="button" className={toolButtonClass()} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+                {theme === "dark" ? "Light" : "Dark"}
+              </button>
+              <button type="button" className={toolButtonClass("border-transparent bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950")} onClick={onBack}>
+                Login
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <section className="border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[180px_92px_auto_auto_auto_auto_auto] lg:items-end">
+              <Field label="Month">
+                <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
+                  {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Shifts">
+                <input
+                  className={inputClass("text-center")}
+                  inputMode="numeric"
+                  min={1}
+                  max={24}
+                  type="number"
+                  value={individualNormalHours(table)}
+                  onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
+                />
+              </Field>
+              <button type="button" className={commandButtonClass("bg-teal-700 text-white hover:bg-teal-800")} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
+                Add Row
+              </button>
+              <button type="button" className={commandButtonClass()} onClick={() => fileInputRef.current?.click()}>Import</button>
+              <button type="button" className={commandButtonClass()} onClick={downloadIndividualTemplate}>Template</button>
+              <button
+                type="button"
+                className={commandButtonClass()}
+                onClick={() => {
+                  exportIndividualCsv(table);
+                  toast.success("CSV exported.");
+                }}
+              >
+                Export
+              </button>
+              <button type="button" className={commandButtonClass()} onClick={copyLink}>Share</button>
+              <input
+                ref={fileInputRef}
+                className="hidden"
+                type="file"
+                accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:w-[540px]">
+              <Kpi label="People" value={String(stats.people)} />
+              <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
+              <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
+              <Kpi label="Diff" value={`${stats.diff > 0 ? "+" : ""}${formatNumber(stats.diff)}h`} tone={stats.diff < 0 ? "bad" : "good"} />
+              <Kpi label="OT" value={`${formatNumber(stats.ot)}h`} />
+            </div>
+          </div>
+          <div className="mt-3 truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
+            {typeof window === "undefined" ? table.id : window.location.href}
+          </div>
+        </section>
+
+        <section className="min-h-0 flex-1 p-3 lg:p-4">
+          <DesktopIndividualTable
+            table={table}
+            onUpdateRow={updateRow}
+            onRemoveRow={removeRow}
+            onSetEntry={setEntry}
+            onFillRow={fillRow}
+            onClearRow={clearRow}
+          />
+        </section>
+      </div>
     </main>
   );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1">
+      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={`text-sm font-black ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function DesktopIndividualTable({
+  table,
+  onUpdateRow,
+  onRemoveRow,
+  onSetEntry,
+  onFillRow,
+  onClearRow
+}: {
+  table: IndividualTableData;
+  onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
+  onRemoveRow: (rowId: string) => void;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+  onFillRow: (row: IndividualRow) => void;
+  onClearRow: (row: IndividualRow) => void;
+}) {
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+
+  return (
+    <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+      <div className="h-full overflow-auto">
+        <table className="min-w-max border-collapse text-xs">
+          <thead className="sticky top-0 z-30 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <tr>
+              <th className="sticky left-0 z-40 w-56 border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700 dark:bg-slate-800">Employee</th>
+              <th className="w-32 border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Company</th>
+              <th className="w-32 border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Department</th>
+              {days.map((day) => (
+                <th key={day.iso} className="w-11 border-b border-r border-slate-200 px-1 py-1 text-center dark:border-slate-700">
+                  <span className="block text-sm font-black text-slate-950 dark:text-white">{day.day}</span>
+                  <span className="text-[9px] font-bold uppercase">{day.weekday.slice(0, 3)}</span>
+                </th>
+              ))}
+              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "Actions"].map((label) => (
+                <th key={label} className="w-16 border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">{label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {table.rows.map((row) => {
+              const totals = individualTotals(row, table);
+              return (
+                <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
+                  <td className="sticky left-0 z-20 border-r border-slate-200 bg-white px-2 py-1 shadow-[12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
+                    <input
+                      className={tableInputClass("font-black")}
+                      value={row.name}
+                      placeholder="Employee name"
+                      onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
+                    />
+                  </td>
+                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                    <input className={tableInputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+                  </td>
+                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                    <input className={tableInputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
+                  </td>
+                  {days.map((day) => (
+                    <DayCell
+                      key={day.iso}
+                      day={day}
+                      row={row}
+                      table={table}
+                      holiday={holidaysByDate.get(day.iso)}
+                      entry={table.entries[row.id]?.[day.iso]}
+                      onSetEntry={onSetEntry}
+                    />
+                  ))}
+                  <TotalCell>{formatNumber(totals.worked)}h</TotalCell>
+                  <TotalCell>{formatNumber(totals.norm)}h</TotalCell>
+                  <TotalCell tone={totals.diff < 0 ? "bad" : "good"}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</TotalCell>
+                  <TotalCell>{formatNumber(totals.ot)}h</TotalCell>
+                  <TotalCell>{totals.co}d</TotalCell>
+                  <TotalCell>{totals.cm}d</TotalCell>
+                  <TotalCell>{totals.se}d</TotalCell>
+                  <TotalCell>{totals.ab}d</TotalCell>
+                  <td className="border-r border-slate-100 px-2 py-1 dark:border-slate-800">
+                    <div className="flex items-center justify-center gap-1">
+                      <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onFillRow(row)}>Fill</button>
+                      <button type="button" className={tinyActionClass("text-slate-600 dark:text-slate-300")} onClick={() => onClearRow(row)}>Clear</button>
+                      <button type="button" className={tinyActionClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Del</button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DayCell({
+  day,
+  row,
+  table,
+  holiday,
+  entry,
+  onSetEntry
+}: {
+  day: ReturnType<typeof daysInMonth>[number];
+  row: IndividualRow;
+  table: IndividualTableData;
+  holiday?: IndividualHoliday;
+  entry?: IndividualEntry;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+}) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const normalHours = individualNormalHours(table);
+  const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
+  const numeric = !entry || ["normal", "overtime"].includes(entry.type);
+  const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
+  const [draft, setDraft] = React.useState(value);
+  React.useEffect(() => setDraft(value), [value]);
+
+  function commit(nextValue = draft) {
+    const trimmed = nextValue.trim();
+    if (!trimmed) {
+      onSetEntry(row.id, day.iso, null);
+      return;
+    }
+    const hours = Math.min(24, Number(trimmed.replace(/[^\d.]/g, "")));
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    onSetEntry(row.id, day.iso, { type: hours > normalHours ? "overtime" : "normal", hours });
+  }
+
+  const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  return (
+    <td className={`relative h-10 border-r border-slate-100 p-0 text-center dark:border-slate-800 ${individualCellClass(type)}`}>
+      <button
+        type="button"
+        aria-label="Open cell actions"
+        className="absolute right-0 top-0 z-10 h-3 w-3 rounded-bl bg-black/5 opacity-0 transition hover:bg-black/10 group-hover:opacity-100 dark:bg-white/10"
+        onClick={() => setMenuOpen((open) => !open)}
+      />
+      <div title={individualTooltipText(entry, holiday, workDay, normalHours)} className="grid h-10 place-items-center">
+        {numeric ? (
+          <input
+            className="h-8 w-9 bg-transparent text-center text-sm font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            value={draft}
+            placeholder={holiday ? "H" : ""}
+            inputMode="numeric"
+            onChange={(event) => {
+              const next = event.target.value.replace(/[^\d.]/g, "");
+              setDraft(next ? String(Math.min(24, Number(next))) : "");
+            }}
+            onBlur={() => commit()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") {
+                setDraft(value);
+                event.currentTarget.blur();
+              }
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenuOpen(true);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            className="h-full w-full text-[11px] font-black"
+            onClick={() => setMenuOpen(true)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenuOpen(true);
+            }}
+          >
+            {individualEntryCode(entry?.type || "holiday")}
+          </button>
+        )}
+      </div>
+      {menuOpen ? (
+        <CellActionPopover
+          onClose={() => setMenuOpen(false)}
+          onApply={(type, reason) => {
+            setMenuOpen(false);
+            if (type === "clear") onSetEntry(row.id, day.iso, null);
+            else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
+            else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
+          }}
+        />
+      ) : null}
+    </td>
+  );
+}
+
+function CellActionPopover({
+  onClose,
+  onApply
+}: {
+  onClose: () => void;
+  onApply: (type: string, reason?: string) => void;
+}) {
+  return (
+    <div className="absolute left-8 top-6 z-50 w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900">
+      <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
+      <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
+      <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
+      <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
+      <details className="group">
+        <summary className="cursor-pointer rounded-md px-2 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800">Special Event</summary>
+        <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-800">
+          {SPECIAL_EVENT_REASONS.map((reason) => (
+            <button key={reason} type="button" className={menuItemClass("pl-4 text-[11px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
+          ))}
+        </div>
+      </details>
+      <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
+      <button type="button" className={menuItemClass("text-slate-500")} onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
+function TotalCell({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "good" | "bad" }) {
+  return (
+    <td className={`border-r border-slate-100 px-2 py-1 text-center text-xs font-black dark:border-slate-800 ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>
+      {children}
+    </td>
+  );
+}
+
+function individualHeaderStats(table: IndividualTableData) {
+  const totals = table.rows.reduce(
+    (sum, row) => {
+      const rowTotals = individualTotals(row, table);
+      sum.worked += rowTotals.worked;
+      sum.norm += rowTotals.norm;
+      sum.ot += rowTotals.ot;
+      sum.co += rowTotals.co;
+      sum.cm += rowTotals.cm;
+      sum.se += rowTotals.se;
+      sum.ab += rowTotals.ab;
+      return sum;
+    },
+    { worked: 0, norm: 0, ot: 0, co: 0, cm: 0, se: 0, ab: 0 }
+  );
+  return {
+    people: table.rows.length,
+    worked: totals.worked,
+    norm: totals.norm,
+    diff: totals.worked - totals.norm,
+    ot: totals.ot,
+    co: totals.co,
+    cm: totals.cm,
+    se: totals.se,
+    ab: totals.ab
+  };
+}
+
+function inputClass(extra = "") {
+  return `h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-950 dark:text-white ${extra}`;
+}
+
+function selectClass() {
+  return inputClass("appearance-none");
+}
+
+function toolButtonClass(extra = "") {
+  return `inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function commandButtonClass(extra = "") {
+  return `h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function tableInputClass(extra = "") {
+  return `h-8 w-full rounded-md bg-transparent px-2 text-xs font-semibold text-slate-950 outline-none placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-teal-600 dark:text-white dark:placeholder:text-slate-500 dark:focus:bg-slate-950 ${extra}`;
+}
+
+function tinyActionClass(extra = "") {
+  return `rounded-md px-1.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] hover:bg-slate-100 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function menuItemClass(extra = "") {
+  return `block w-full rounded-md px-2 py-1.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function individualCellClass(type: string) {
+  if (type === "vacation") return "bg-emerald-100 text-emerald-950 dark:bg-emerald-900/55 dark:text-emerald-50";
+  if (type === "medical") return "bg-rose-100 text-rose-950 dark:bg-rose-900/55 dark:text-rose-50";
+  if (type === "overtime") return "bg-amber-100 text-amber-950 dark:bg-amber-900/55 dark:text-amber-50";
+  if (type === "absence") return "bg-slate-950 text-white dark:bg-slate-100 dark:text-slate-950";
+  if (type === "special_event") return "bg-slate-200 text-slate-950 dark:bg-slate-700 dark:text-white";
+  if (type === "holiday") return "bg-yellow-50 text-slate-500 dark:bg-yellow-950/40 dark:text-yellow-100";
+  if (type === "weekend") return "bg-sky-50 text-slate-500 dark:bg-sky-950/30 dark:text-slate-400";
+  return "bg-white text-slate-950 dark:bg-slate-900 dark:text-white";
 }
