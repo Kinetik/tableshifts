@@ -265,7 +265,7 @@ export function individualRowsFromMatrix(rows: string[][]) {
       company: companyIndex >= 0 ? row[companyIndex] || "" : "",
       department: departmentIndex >= 0 ? row[departmentIndex] || "" : "",
       identificationNumber: idIndex >= 0 ? row[idIndex] || "" : "",
-      position: positionIndex >= 0 ? row[positionIndex] || ""
+      position: positionIndex >= 0 ? row[positionIndex] || "" : ""
     }))
     .filter((row) => row.name.trim());
 }
