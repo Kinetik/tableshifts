@@ -308,6 +308,8 @@ function IndividualTableWorkspace({
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const days = daysInMonth(table.month);
   const stats = individualHeaderStats(table);
+  const [holidayCountry, setHolidayCountry] = React.useState("RO");
+  const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
@@ -383,6 +385,25 @@ function IndividualTableWorkspace({
     }
   }
 
+  async function addPublicHolidays() {
+    try {
+      const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${holidayYear}/${holidayCountry}`);
+      if (!response.ok) throw new Error("Could not load public holidays.");
+      const data = await response.json();
+      const loaded: IndividualHoliday[] = (Array.isArray(data) ? data : []).map((item) => ({
+        date: item.date,
+        name: item.localName || item.name || "Public holiday",
+        countryCode: holidayCountry
+      }));
+      const merged = new Map(table.holidays.map((holiday) => [`${holiday.date}:${holiday.name}`, holiday]));
+      loaded.forEach((holiday) => merged.set(`${holiday.date}:${holiday.name}`, holiday));
+      onSave({ ...table, holidays: Array.from(merged.values()).toSorted((a, b) => a.date.localeCompare(b.date)) });
+      toast.success(`${loaded.length} public holidays loaded.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not load public holidays.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-white">
       <div className="flex min-h-screen flex-col">
@@ -412,7 +433,7 @@ function IndividualTableWorkspace({
 
         <section className="border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
           <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[180px_92px_auto_auto_auto_auto_auto] lg:items-end">
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[180px_92px_130px_82px_auto_auto_auto_auto_auto_auto] lg:items-end">
               <Field label="Month">
                 <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                   {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -429,9 +450,18 @@ function IndividualTableWorkspace({
                   onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
                 />
               </Field>
+              <Field label="Holiday Country">
+                <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
+                  {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                </select>
+              </Field>
+              <Field label="Year">
+                <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+              </Field>
               <button type="button" className={commandButtonClass("bg-teal-700 text-white hover:bg-teal-800")} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
                 Add Row
               </button>
+              <button type="button" className={commandButtonClass()} onClick={addPublicHolidays}>Holidays</button>
               <button type="button" className={commandButtonClass()} onClick={() => fileInputRef.current?.click()}>Import</button>
               <button type="button" className={commandButtonClass()} onClick={downloadIndividualTemplate}>Template</button>
               <button
@@ -459,22 +489,39 @@ function IndividualTableWorkspace({
               <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
               <Kpi label="Diff" value={`${stats.diff > 0 ? "+" : ""}${formatNumber(stats.diff)}h`} tone={stats.diff < 0 ? "bad" : "good"} />
               <Kpi label="OT" value={`${formatNumber(stats.ot)}h`} />
+              <Kpi label="CO" value={`${stats.co}d`} />
+              <Kpi label="CM" value={`${stats.cm}d`} />
+              <Kpi label="SE" value={`${stats.se}d`} />
+              <Kpi label="AB" value={`${stats.ab}d`} tone={stats.ab ? "bad" : "neutral"} />
+              <Kpi label="Holidays" value={`${table.holidays.length}`} />
             </div>
           </div>
+          <DailyBarStrip days={stats.daily} />
           <div className="mt-3 truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
             {typeof window === "undefined" ? table.id : window.location.href}
           </div>
         </section>
 
         <section className="min-h-0 flex-1 p-3 lg:p-4">
-          <DesktopIndividualTable
-            table={table}
-            onUpdateRow={updateRow}
-            onRemoveRow={removeRow}
-            onSetEntry={setEntry}
-            onFillRow={fillRow}
-            onClearRow={clearRow}
-          />
+          {layoutMode === "mobile" ? (
+            <MobileIndividualTable
+              table={table}
+              onUpdateRow={updateRow}
+              onRemoveRow={removeRow}
+              onSetEntry={setEntry}
+              onFillRow={fillRow}
+              onClearRow={clearRow}
+            />
+          ) : (
+            <DesktopIndividualTable
+              table={table}
+              onUpdateRow={updateRow}
+              onRemoveRow={removeRow}
+              onSetEntry={setEntry}
+              onFillRow={fillRow}
+              onClearRow={clearRow}
+            />
+          )}
         </section>
       </div>
     </main>
@@ -495,6 +542,22 @@ function Kpi({ label, value, tone = "neutral" }: { label: string; value: string;
     <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
       <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-sm font-black ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function DailyBarStrip({ days }: { days: Array<{ day: number; worked: number; variance: number }> }) {
+  const max = Math.max(1, ...days.map((day) => day.worked));
+  return (
+    <div className="mt-3 flex h-10 items-end gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950">
+      {days.map((day) => (
+        <div
+          key={day.day}
+          title={`Day ${day.day}: ${formatNumber(day.worked)}h (${day.variance > 0 ? "+" : ""}${formatNumber(day.variance)}h)`}
+          className={`min-h-1 flex-1 rounded-t-sm ${day.variance < 0 && day.worked > 0 ? "bg-rose-500" : day.variance > 0 ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"}`}
+          style={{ height: `${Math.max(6, (day.worked / max) * 30)}px` }}
+        />
+      ))}
     </div>
   );
 }
@@ -588,6 +651,117 @@ function DesktopIndividualTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function MobileIndividualTable({
+  table,
+  onUpdateRow,
+  onRemoveRow,
+  onSetEntry,
+  onFillRow,
+  onClearRow
+}: {
+  table: IndividualTableData;
+  onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
+  onRemoveRow: (rowId: string) => void;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+  onFillRow: (row: IndividualRow) => void;
+  onClearRow: (row: IndividualRow) => void;
+}) {
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  return (
+    <div className="grid gap-3">
+      {table.rows.map((row) => {
+        const totals = individualTotals(row, table);
+        return (
+          <article key={row.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
+            <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+              <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
+              <input className={inputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+              <input className={inputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
+              <div className="grid grid-cols-4 gap-1">
+                <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
+                <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
+                <Kpi label="CO" value={`${totals.co}d`} />
+                <Kpi label="AB" value={`${totals.ab}d`} tone={totals.ab ? "bad" : "neutral"} />
+              </div>
+            </div>
+            <div className="mt-3 grid grid-cols-7 gap-1">
+              {days.map((day) => (
+                <MobileDayButton
+                  key={day.iso}
+                  day={day}
+                  row={row}
+                  table={table}
+                  holiday={holidaysByDate.get(day.iso)}
+                  entry={table.entries[row.id]?.[day.iso]}
+                  onSetEntry={onSetEntry}
+                />
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" className={commandButtonClass()} onClick={() => onFillRow(row)}>Fill Row</button>
+              <button type="button" className={commandButtonClass()} onClick={() => onClearRow(row)}>Clear Row</button>
+              <button type="button" className={commandButtonClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
+            </div>
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
+function MobileDayButton({
+  day,
+  row,
+  table,
+  holiday,
+  entry,
+  onSetEntry
+}: {
+  day: ReturnType<typeof daysInMonth>[number];
+  row: IndividualRow;
+  table: IndividualTableData;
+  holiday?: IndividualHoliday;
+  entry?: IndividualEntry;
+  onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
+}) {
+  const [menuOpen, setMenuOpen] = React.useState(false);
+  const normalHours = individualNormalHours(table);
+  const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
+  const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        title={individualTooltipText(entry, holiday, workDay, normalHours)}
+        className={`h-14 w-full rounded-lg border border-slate-200 text-center text-[11px] font-black dark:border-slate-800 ${individualCellClass(type)}`}
+        onClick={() => {
+          if (!entry && workDay) onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
+          else setMenuOpen(true);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenuOpen(true);
+        }}
+      >
+        <span className="block text-[10px] text-current/70">{day.day}</span>
+        <span>{entry ? (["normal", "overtime"].includes(entry.type) ? `${formatNumber(entry.hours)}h` : individualEntryCode(entry.type)) : holiday ? "H" : workDay ? "+" : "-"}</span>
+      </button>
+      {menuOpen ? (
+        <CellActionPopover
+          onClose={() => setMenuOpen(false)}
+          onApply={(type, reason) => {
+            setMenuOpen(false);
+            if (type === "clear") onSetEntry(row.id, day.iso, null);
+            else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
+            else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
+          }}
+        />
+      ) : null}
     </div>
   );
 }
@@ -724,6 +898,9 @@ function TotalCell({ children, tone = "neutral" }: { children: React.ReactNode; 
 }
 
 function individualHeaderStats(table: IndividualTableData) {
+  const days = daysInMonth(table.month);
+  const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const normal = individualNormalHours(table);
   const totals = table.rows.reduce(
     (sum, row) => {
       const rowTotals = individualTotals(row, table);
@@ -747,7 +924,17 @@ function individualHeaderStats(table: IndividualTableData) {
     co: totals.co,
     cm: totals.cm,
     se: totals.se,
-    ab: totals.ab
+    ab: totals.ab,
+    daily: days
+      .filter((day) => isIndividualWorkDay(day, holidaysByDate))
+      .map((day) => {
+        const worked = table.rows.reduce((sum, row) => {
+          const entry = table.entries[row.id]?.[day.iso];
+          return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
+        }, 0);
+        const norm = table.rows.length * normal;
+        return { day: day.day, worked, variance: worked - norm };
+      })
   };
 }
 
