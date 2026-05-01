@@ -34,7 +34,7 @@ type Props = {
   supabaseAnonKey: string;
 };
 
-type ThemeMode = "light" | "dark";
+type ThemeMode = "light" | "dark" | "auto";
 type LayoutMode = "desktop" | "mobile";
 
 export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey }: Props) {
@@ -43,7 +43,8 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
     return createClient(supabaseUrl, supabaseAnonKey);
   }, [supabaseUrl, supabaseAnonKey]);
 
-  const [theme, setTheme] = React.useState<ThemeMode>("light");
+  const [theme, setTheme] = React.useState<ThemeMode>("auto");
+  const [systemTheme, setSystemTheme] = React.useState<"light" | "dark">("light");
   const [layoutMode, setLayoutMode] = React.useState<LayoutMode>("desktop");
   const [table, setTable] = React.useState<IndividualTableData | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -55,6 +56,14 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
     syncLayout();
     query.addEventListener("change", syncLayout);
     return () => query.removeEventListener("change", syncLayout);
+  }, []);
+
+  React.useEffect(() => {
+    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncTheme = () => setSystemTheme(query.matches ? "dark" : "light");
+    syncTheme();
+    query.addEventListener("change", syncTheme);
+    return () => query.removeEventListener("change", syncTheme);
   }, []);
 
   React.useEffect(() => {
@@ -127,7 +136,7 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
   }
 
   return (
-    <div className={theme === "dark" ? "dark" : ""}>
+    <div className={(theme === "auto" ? systemTheme : theme) === "dark" ? "dark" : ""}>
       <Toaster position="top-center" richColors closeButton />
       {table ? (
         <IndividualTableWorkspace
@@ -137,7 +146,6 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
           theme={theme}
           setTheme={setTheme}
           layoutMode={layoutMode}
-          setLayoutMode={setLayoutMode}
         />
       ) : (
         <PremiumCalmLogin
@@ -197,9 +205,9 @@ function PremiumCalmLogin({
               <button
                 type="button"
                 className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                onClick={() => setTheme(nextThemeMode(theme))}
               >
-                {theme === "dark" ? "Light" : "Dark"}
+                {themeLabel(theme)}
               </button>
             </div>
 
@@ -305,8 +313,7 @@ function IndividualTableWorkspace({
   onBack,
   theme,
   setTheme,
-  layoutMode,
-  setLayoutMode
+  layoutMode
 }: {
   table: IndividualTableData;
   onSave: (table: IndividualTableData) => void;
@@ -314,7 +321,6 @@ function IndividualTableWorkspace({
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   layoutMode: LayoutMode;
-  setLayoutMode: (mode: LayoutMode) => void;
 }) {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const days = daysInMonth(table.month);
@@ -465,15 +471,17 @@ function IndividualTableWorkspace({
                 <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                 TableShifts
               </div>
-              <h1 className="mt-1 truncate text-2xl font-black tracking-tight">Individual TableShifts</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="truncate text-2xl font-black tracking-tight">Individual TableShifts</h1>
+                <span className="inline-flex h-6 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  {layoutMode === "desktop" ? "Desktop View" : "Mobile View"}
+                </span>
+              </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className={secondaryButtonClass()} onClick={copyLink}>Copy Link</button>
-              <button type="button" className={secondaryButtonClass()} onClick={() => setLayoutMode(layoutMode === "desktop" ? "mobile" : "desktop")}>
-                {layoutMode === "desktop" ? "Desktop" : "Mobile"}
-              </button>
-              <button type="button" className={secondaryButtonClass()} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-                {theme === "dark" ? "Light" : "Dark"}
+              <button type="button" className={secondaryButtonClass()} onClick={() => setTheme(nextThemeMode(theme))}>
+                {themeLabel(theme)}
               </button>
               <button type="button" className={primaryDarkButtonClass()} onClick={onBack}>
                 Login
@@ -1387,6 +1395,17 @@ function findActiveEmployeeRow(rows: IndividualRow[], employee: IndividualRow) {
 
 function rowHasRecordedData(rowId: string, table: IndividualTableData) {
   return Object.keys(table.entries[rowId] || {}).length > 0;
+}
+
+function nextThemeMode(theme: ThemeMode): ThemeMode {
+  if (theme === "light") return "dark";
+  if (theme === "dark") return "auto";
+  return "light";
+}
+
+function themeLabel(theme: ThemeMode) {
+  if (theme === "auto") return "Auto";
+  return theme === "dark" ? "Dark" : "Light";
 }
 
 function inputClass(extra = "") {
