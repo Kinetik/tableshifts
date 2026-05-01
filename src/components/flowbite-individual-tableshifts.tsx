@@ -483,9 +483,9 @@ function IndividualTableWorkspace({
         </header>
 
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-3 xl:grid-cols-[auto_500px] xl:items-start xl:justify-between">
+          <div className="grid gap-3 xl:grid-cols-[auto_620px] xl:items-start xl:justify-between">
             <div className="flex flex-wrap gap-2">
-              <ToolbarGroup label="Table Setup" className="w-full sm:w-[360px]" contentClassName="grid-cols-[minmax(180px,1fr)_92px]">
+              <ToolbarGroup label="Table Setup" className="w-full sm:w-[316px]" contentClassName="grid-cols-[200px_78px]">
                 <Field label="Month">
                   <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -499,7 +499,7 @@ function IndividualTableWorkspace({
                   </select>
                 </Field>
               </ToolbarGroup>
-              <ToolbarGroup label="Holidays" className="w-full sm:w-[540px]" contentClassName="grid-cols-[minmax(180px,1fr)_96px_82px]">
+              <ToolbarGroup label="Holidays" className="w-full sm:w-[468px]" contentClassName="grid-cols-[250px_86px_78px]">
                 <Field label="Country">
                   <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
                     {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -511,7 +511,7 @@ function IndividualTableWorkspace({
                 <button type="button" className={secondaryButtonClass("h-8")} onClick={addPublicHolidays}>Load</button>
               </ToolbarGroup>
             </div>
-            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 xl:w-[500px] xl:justify-self-end">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 xl:w-[620px] xl:grid-cols-10 xl:justify-self-end">
               <Kpi label="People" value={String(stats.people)} />
               <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
               <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
@@ -713,8 +713,8 @@ function EmployeeDropdown({
 
 function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
-    <div className="flex min-h-12 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-center dark:border-slate-800 dark:bg-slate-950">
-      <p className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
+    <div className="flex min-h-11 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-center dark:border-slate-800 dark:bg-slate-950">
+      <p className="text-[7px] font-black uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-[13px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
     </div>
   );
@@ -1216,7 +1216,7 @@ function DayCell({
                 openMenu(event);
               }}
             />
-            <span className="pointer-events-none text-[11px] font-black text-current/70">h</span>
+            <span className="pointer-events-none text-[10px] font-medium text-current/45">h</span>
           </div>
         ) : (
           <button
