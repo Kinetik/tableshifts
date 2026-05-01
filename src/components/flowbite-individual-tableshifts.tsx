@@ -483,8 +483,8 @@ function IndividualTableWorkspace({
         </header>
 
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(500px,620px)] xl:items-stretch">
-            <div className="grid gap-2 lg:grid-cols-[minmax(220px,0.85fr)_minmax(260px,1fr)_minmax(270px,1fr)]">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_540px] xl:items-stretch">
+            <div className="grid gap-2 lg:grid-cols-[minmax(220px,0.85fr)_minmax(260px,1fr)]">
               <ToolbarGroup label="Table Setup">
                 <Field label="Month">
                   <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
@@ -492,15 +492,11 @@ function IndividualTableWorkspace({
                   </select>
                 </Field>
                 <Field label="Shifts">
-                  <input
-                    className={inputClass("text-center")}
-                    inputMode="numeric"
-                    min={1}
-                    max={24}
-                    type="text"
-                    value={`${individualNormalHours(table)}h`}
-                    onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value.replace(/[^\d.]/g, "")) || 8)) })}
-                  />
+                  <select className={selectClass("text-center")} value={individualNormalHours(table)} onChange={(event) => updateTable({ normalHours: Number(event.target.value) })}>
+                    {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
+                      <option key={hour} value={hour}>{hour}h</option>
+                    ))}
+                  </select>
                 </Field>
               </ToolbarGroup>
               <ToolbarGroup label="Holidays">
@@ -514,29 +510,8 @@ function IndividualTableWorkspace({
                 </Field>
                 <button type="button" className={secondaryButtonClass("h-8")} onClick={addPublicHolidays}>Load</button>
               </ToolbarGroup>
-              <ToolbarGroup label="Files & Share">
-                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("h-8")} onClick={() => setEmployeesOpen((open) => !open)}>Add Employees</button>
-                <button
-                  type="button"
-                  className={secondaryButtonClass("h-8")}
-                  onClick={() => {
-                    exportIndividualCsv(table);
-                    toast.success("CSV exported.");
-                  }}
-                >
-                  Export
-                </button>
-                <button type="button" className={secondaryButtonClass("h-8")} onClick={copyLink}>Share</button>
-                <input
-                  ref={fileInputRef}
-                  className="hidden"
-                  type="file"
-                  accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                  onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
-                />
-              </ToolbarGroup>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:w-[540px] xl:justify-self-end">
               <Kpi label="People" value={String(stats.people)} />
               <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
               <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
@@ -550,10 +525,30 @@ function IndividualTableWorkspace({
             </div>
           </div>
           <DailyBarStrip days={stats.daily} />
-          <div className="mt-2 flex justify-start">
+          <div className="mt-2 flex flex-wrap justify-start gap-2">
             <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={addBlankRow}>
               Add Row
             </button>
+            <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => setEmployeesOpen((open) => !open)}>
+              Add Employees
+            </button>
+            <button
+              type="button"
+              className={secondaryButtonClass("w-full sm:w-auto")}
+              onClick={() => {
+                exportIndividualCsv(table);
+                toast.success("CSV exported.");
+              }}
+            >
+              Export
+            </button>
+            <input
+              ref={fileInputRef}
+              className="hidden"
+              type="file"
+              accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
+            />
           </div>
           {employeesOpen ? (
             <EmployeeDropdown
@@ -708,7 +703,7 @@ function EmployeeDropdown({
 
 function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-950">
       <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-sm font-black ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
     </div>
@@ -1143,7 +1138,7 @@ function DayCell({
   const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const numeric = !entry || ["normal", "overtime"].includes(entry.type);
-  const value = numeric && entry ? `${formatNumber(entry.hours)}h` : "";
+  const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
   const [draft, setDraft] = React.useState(value);
   React.useEffect(() => setDraft(value), [value]);
 
@@ -1188,27 +1183,31 @@ function DayCell({
             {holiday ? "H" : "-"}
           </button>
         ) : numeric ? (
-          <input
-            className="h-8 w-10 bg-transparent text-center text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
-            value={draft}
-            placeholder={holiday ? "H" : ""}
-            inputMode="numeric"
-            onChange={(event) => {
-              const next = event.target.value.replace(/[^\d.]/g, "");
-              setDraft(next ? `${Math.min(24, Number(next))}h` : "");
-            }}
-            onBlur={() => commit()}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-              if (event.key === "Escape") {
-                setDraft(value);
-                event.currentTarget.blur();
-              }
-            }}
-            onContextMenu={(event) => {
-              openMenu(event);
-            }}
-          />
+          <div className="relative h-8 w-11">
+            <input
+              className="h-8 w-full bg-transparent pr-3 text-center text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              value={draft}
+              placeholder={holiday ? "H" : ""}
+              inputMode="numeric"
+              onFocus={(event) => event.currentTarget.select()}
+              onChange={(event) => {
+                const next = event.target.value.replace(/[^\d.]/g, "");
+                setDraft(next ? String(Math.min(24, Number(next))) : "");
+              }}
+              onBlur={() => commit()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+                if (event.key === "Escape") {
+                  setDraft(value);
+                  event.currentTarget.blur();
+                }
+              }}
+              onContextMenu={(event) => {
+                openMenu(event);
+              }}
+            />
+            <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-black text-current/70">h</span>
+          </div>
         ) : (
           <button
             type="button"
