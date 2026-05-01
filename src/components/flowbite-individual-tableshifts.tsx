@@ -1363,8 +1363,8 @@ function inputClass(extra = "") {
   return `h-8 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-950 dark:text-white ${extra}`;
 }
 
-function selectClass() {
-  return inputClass("appearance-none");
+function selectClass(extra = "") {
+  return inputClass(`appearance-none ${extra}`);
 }
 
 function primaryButtonClass(extra = "") {
