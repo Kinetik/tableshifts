@@ -1062,43 +1062,77 @@ function MobileIndividualTable({
 }) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const [openRowId, setOpenRowId] = React.useState(table.rows[0]?.id || "");
+  React.useEffect(() => {
+    if (!table.rows.length) {
+      setOpenRowId("");
+      return;
+    }
+    if (!table.rows.some((row) => row.id === openRowId)) setOpenRowId(table.rows[0].id);
+  }, [openRowId, table.rows]);
+
   return (
-    <div className="grid gap-3">
-      {table.rows.map((row) => {
+    <div className="grid gap-2">
+      {table.rows.map((row, index) => {
         const totals = individualTotals(row, table);
+        const expanded = row.id === openRowId;
         return (
-          <article key={row.id} className="rounded-xl border border-slate-200 bg-white p-3 shadow-lg shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
-            <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
-              <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
-              <input className={inputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
-              <input className={inputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
-              <input className={inputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
-              <input className={inputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
-              <div className="grid grid-cols-4 gap-1">
-                <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
-                <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
-                <Kpi label="CO" value={`${totals.co}d`} />
-                <Kpi label="AB" value={`${totals.ab}d`} tone={totals.ab ? "bad" : "neutral"} />
+          <article key={row.id} className={`overflow-hidden rounded-xl border bg-white shadow-lg shadow-slate-200/60 transition dark:bg-slate-900 dark:shadow-black/20 ${expanded ? "border-teal-200 dark:border-teal-800" : "border-slate-200 dark:border-slate-800"}`}>
+            <button
+              type="button"
+              className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${expanded ? "bg-teal-50/70 dark:bg-teal-950/30" : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70"}`}
+              onClick={() => setOpenRowId(row.id)}
+              aria-expanded={expanded}
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-300">{index + 1}</span>
+                  <span className="truncate text-sm font-black text-slate-950 dark:text-white">{row.name || "Employee name"}</span>
+                </div>
+                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  {[row.department, row.position].filter(Boolean).join(" / ") || row.company || row.identificationNumber || "No details yet"}
+                </p>
               </div>
-            </div>
-            <div className="mt-3 grid grid-cols-7 gap-1">
-              {days.map((day) => (
-                <MobileDayButton
-                  key={day.iso}
-                  day={day}
-                  row={row}
-                  table={table}
-                  holiday={holidaysByDate.get(day.iso)}
-                  entry={table.entries[row.id]?.[day.iso]}
-                  onSetEntry={onSetEntry}
-                />
-              ))}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onFillRow(row)}>Fill Row</button>
-              <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onClearRow(row)}>Clear Row</button>
-              <button type="button" className={secondaryButtonClass("h-9 text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
-            </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs font-black text-slate-500 dark:text-slate-300">{formatNumber(totals.worked)}h</span>
+                <span className={`text-lg leading-none text-slate-400 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
+              </div>
+            </button>
+            {expanded ? (
+              <div className="p-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+                  <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
+                  <input className={inputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+                  <input className={inputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
+                  <input className={inputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+                  <input className={inputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
+                  <div className="grid grid-cols-4 gap-1">
+                    <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
+                    <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
+                    <Kpi label="CO" value={`${totals.co}d`} />
+                    <Kpi label="AB" value={`${totals.ab}d`} tone={totals.ab ? "bad" : "neutral"} />
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-7 gap-1">
+                  {days.map((day) => (
+                    <MobileDayButton
+                      key={day.iso}
+                      day={day}
+                      row={row}
+                      table={table}
+                      holiday={holidaysByDate.get(day.iso)}
+                      entry={table.entries[row.id]?.[day.iso]}
+                      onSetEntry={onSetEntry}
+                    />
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onFillRow(row)}>Fill Row</button>
+                  <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onClearRow(row)}>Clear Row</button>
+                  <button type="button" className={secondaryButtonClass("h-9 text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
+                </div>
+              </div>
+            ) : null}
           </article>
         );
       })}
