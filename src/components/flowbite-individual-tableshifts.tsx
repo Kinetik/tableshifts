@@ -483,9 +483,9 @@ function IndividualTableWorkspace({
         </header>
 
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_540px] xl:items-stretch">
-            <div className="grid gap-2 lg:grid-cols-[minmax(220px,0.85fr)_minmax(260px,1fr)]">
-              <ToolbarGroup label="Table Setup">
+          <div className="grid gap-3 xl:grid-cols-[auto_500px] xl:items-start xl:justify-between">
+            <div className="flex flex-wrap gap-2">
+              <ToolbarGroup label="Table Setup" className="w-full sm:w-[360px]" contentClassName="grid-cols-[minmax(180px,1fr)_92px]">
                 <Field label="Month">
                   <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -499,7 +499,7 @@ function IndividualTableWorkspace({
                   </select>
                 </Field>
               </ToolbarGroup>
-              <ToolbarGroup label="Holidays">
+              <ToolbarGroup label="Holidays" className="w-full sm:w-[540px]" contentClassName="grid-cols-[minmax(180px,1fr)_96px_82px]">
                 <Field label="Country">
                   <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
                     {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -511,7 +511,7 @@ function IndividualTableWorkspace({
                 <button type="button" className={secondaryButtonClass("h-8")} onClick={addPublicHolidays}>Load</button>
               </ToolbarGroup>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:w-[540px] xl:justify-self-end">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 xl:w-[500px] xl:justify-self-end">
               <Kpi label="People" value={String(stats.people)} />
               <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
               <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
@@ -603,11 +603,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function ToolbarGroup({ label, children }: { label: string; children: React.ReactNode }) {
+function ToolbarGroup({
+  label,
+  children,
+  className = "",
+  contentClassName = "grid-cols-2"
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+  contentClassName?: string;
+}) {
   return (
-    <div className="h-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-800 dark:bg-slate-950/60">
+    <div className={`rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-800 dark:bg-slate-950/60 ${className}`}>
       <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
-      <div className="grid grid-cols-2 items-end gap-2 [&>button]:w-full">
+      <div className={`grid items-end gap-2 [&>button]:w-full ${contentClassName}`}>
         {children}
       </div>
     </div>
@@ -703,9 +713,9 @@ function EmployeeDropdown({
 
 function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-950">
-      <p className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={`text-sm font-black ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
+    <div className="flex min-h-12 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-center dark:border-slate-800 dark:bg-slate-950">
+      <p className="text-[8px] font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={`text-[13px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
     </div>
   );
 }
@@ -1183,9 +1193,9 @@ function DayCell({
             {holiday ? "H" : "-"}
           </button>
         ) : numeric ? (
-          <div className="relative h-8 w-11">
+          <div className="flex h-8 items-center justify-center gap-0.5">
             <input
-              className="h-8 w-full bg-transparent pr-3 text-center text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="h-8 w-5 bg-transparent p-0 text-right text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
               value={draft}
               placeholder={holiday ? "H" : ""}
               inputMode="numeric"
@@ -1206,7 +1216,7 @@ function DayCell({
                 openMenu(event);
               }}
             />
-            <span className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 text-[11px] font-black text-current/70">h</span>
+            <span className="pointer-events-none text-[11px] font-black text-current/70">h</span>
           </div>
         ) : (
           <button
