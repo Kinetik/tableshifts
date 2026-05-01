@@ -47,6 +47,14 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
   const [message, setMessage] = React.useState("");
 
   React.useEffect(() => {
+    const query = window.matchMedia("(max-width: 767px)");
+    const syncLayout = () => setLayoutMode(query.matches ? "mobile" : "desktop");
+    syncLayout();
+    query.addEventListener("change", syncLayout);
+    return () => query.removeEventListener("change", syncLayout);
+  }, []);
+
+  React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tableId = params.get("table");
     if (tableId && supabase) void loadTable(tableId);
@@ -583,21 +591,41 @@ function DesktopIndividualTable({
   return (
     <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
       <div className="h-full overflow-auto">
-        <table className="min-w-max border-collapse text-xs">
+        <table className="w-full min-w-[1440px] table-fixed border-collapse text-xs">
+          <colgroup>
+            <col className="w-56" />
+            <col className="w-32" />
+            <col className="w-32" />
+            <col className="w-32" />
+            <col className="w-32" />
+            {days.map((day) => <col key={day.iso} className="w-11" />)}
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-16" />
+            <col className="w-40" />
+          </colgroup>
           <thead className="sticky top-0 z-30 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
               <th className="sticky left-0 z-40 w-56 border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700 dark:bg-slate-800">Employee</th>
-              <th className="w-32 border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Company</th>
-              <th className="w-32 border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Department</th>
+              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Company</th>
+              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Department</th>
+              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">ID</th>
+              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Position</th>
               {days.map((day) => (
                 <th key={day.iso} className="w-11 border-b border-r border-slate-200 px-1 py-1 text-center dark:border-slate-700">
                   <span className="block text-sm font-black text-slate-950 dark:text-white">{day.day}</span>
                   <span className="text-[9px] font-bold uppercase">{day.weekday.slice(0, 3)}</span>
                 </th>
               ))}
-              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB", "Actions"].map((label) => (
-                <th key={label} className="w-16 border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">{label}</th>
+              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB"].map((label) => (
+                <th key={label} className="border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">{label}</th>
               ))}
+              <th className="sticky right-0 z-40 border-b border-l border-r border-slate-200 bg-slate-100 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700 dark:bg-slate-800">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -619,6 +647,12 @@ function DesktopIndividualTable({
                   <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
                     <input className={tableInputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
                   </td>
+                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                    <input className={tableInputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+                  </td>
+                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                    <input className={tableInputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
+                  </td>
                   {days.map((day) => (
                     <DayCell
                       key={day.iso}
@@ -638,7 +672,7 @@ function DesktopIndividualTable({
                   <TotalCell>{totals.cm}d</TotalCell>
                   <TotalCell>{totals.se}d</TotalCell>
                   <TotalCell>{totals.ab}d</TotalCell>
-                  <td className="border-r border-slate-100 px-2 py-1 dark:border-slate-800">
+                  <td className="sticky right-0 z-10 border-l border-r border-slate-200 bg-white px-2 py-1 shadow-[-12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
                     <div className="flex items-center justify-center gap-1">
                       <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onFillRow(row)}>Fill</button>
                       <button type="button" className={tinyActionClass("text-slate-600 dark:text-slate-300")} onClick={() => onClearRow(row)}>Clear</button>
@@ -682,6 +716,8 @@ function MobileIndividualTable({
               <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
               <input className={inputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
               <input className={inputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
+              <input className={inputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+              <input className={inputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
               <div className="grid grid-cols-4 gap-1">
                 <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
                 <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
