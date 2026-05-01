@@ -8,6 +8,7 @@ import { daysInMonth, formatNumber, monthOptions } from "@/lib/tableshifts";
 import {
   COUNTRY_OPTIONS,
   SPECIAL_EVENT_REASONS,
+  type IndividualColumnWidths,
   type IndividualEntry,
   type IndividualHoliday,
   type IndividualRow,
@@ -319,6 +320,8 @@ function IndividualTableWorkspace({
   const stats = individualHeaderStats(table);
   const [holidayCountry, setHolidayCountry] = React.useState("RO");
   const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
+  const [detailColumnsOpen, setDetailColumnsOpen] = React.useState(false);
+  const [totalColumnsOpen, setTotalColumnsOpen] = React.useState(false);
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
@@ -326,6 +329,10 @@ function IndividualTableWorkspace({
 
   function updateRow(rowId: string, patch: Partial<IndividualRow>) {
     onSave({ ...table, rows: table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row) });
+  }
+
+  function updateColumnWidths(columnWidths: IndividualColumnWidths) {
+    onSave({ ...table, columnWidths: { ...(table.columnWidths || {}), ...columnWidths } });
   }
 
   function removeRow(rowId: string) {
@@ -460,9 +467,6 @@ function IndividualTableWorkspace({
                     onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
                   />
                 </Field>
-                <button type="button" className={primaryButtonClass()} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
-                  Add Row
-                </button>
               </ToolbarGroup>
               <ToolbarGroup label="Holidays">
                 <Field label="Country">
@@ -508,12 +512,14 @@ function IndividualTableWorkspace({
               <Kpi label="CM" value={`${stats.cm}d`} />
               <Kpi label="SE" value={`${stats.se}d`} />
               <Kpi label="AB" value={`${stats.ab}d`} tone={stats.ab ? "bad" : "neutral"} />
-              <Kpi label="Holidays" value={`${table.holidays.length}`} />
+              <Kpi label="Holidays" value={`${stats.holidays}`} />
             </div>
           </div>
           <DailyBarStrip days={stats.daily} />
-          <div className="mt-3 truncate rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
-            {typeof window === "undefined" ? table.id : window.location.href}
+          <div className="mt-3 flex justify-end">
+            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
+              Add Row
+            </button>
           </div>
         </section>
 
@@ -535,6 +541,11 @@ function IndividualTableWorkspace({
               onSetEntry={setEntry}
               onFillRow={fillRow}
               onClearRow={clearRow}
+              detailColumnsOpen={detailColumnsOpen}
+              onToggleDetailColumns={() => setDetailColumnsOpen((open) => !open)}
+              totalColumnsOpen={totalColumnsOpen}
+              onToggleTotalColumns={() => setTotalColumnsOpen((open) => !open)}
+              onColumnWidthsChange={updateColumnWidths}
             />
           )}
         </section>
@@ -556,7 +567,7 @@ function ToolbarGroup({ label, children }: { label: string; children: React.Reac
   return (
     <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
       <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
-      <div className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[repeat(auto-fit,minmax(82px,1fr))]">
+      <div className="grid grid-cols-2 items-end gap-2 [&>button]:w-full">
         {children}
       </div>
     </div>
@@ -588,13 +599,51 @@ function DailyBarStrip({ days }: { days: Array<{ day: number; worked: number; va
   );
 }
 
+type IndividualWidthKey = keyof Required<IndividualColumnWidths>;
+
+const DEFAULT_INDIVIDUAL_COLUMN_WIDTHS: Record<IndividualWidthKey, number> = {
+  employee: 224,
+  company: 128,
+  department: 128,
+  identificationNumber: 120,
+  position: 132
+};
+
+const INDIVIDUAL_COLUMN_LIMITS: Record<IndividualWidthKey, { min: number; max: number }> = {
+  employee: { min: 160, max: 420 },
+  company: { min: 96, max: 280 },
+  department: { min: 96, max: 280 },
+  identificationNumber: { min: 88, max: 260 },
+  position: { min: 96, max: 300 }
+};
+
+function resolvedIndividualColumnWidths(widths?: IndividualColumnWidths): Record<IndividualWidthKey, number> {
+  return {
+    employee: clampIndividualColumnWidth("employee", widths?.employee ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.employee),
+    company: clampIndividualColumnWidth("company", widths?.company ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.company),
+    department: clampIndividualColumnWidth("department", widths?.department ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.department),
+    identificationNumber: clampIndividualColumnWidth("identificationNumber", widths?.identificationNumber ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.identificationNumber),
+    position: clampIndividualColumnWidth("position", widths?.position ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.position)
+  };
+}
+
+function clampIndividualColumnWidth(key: IndividualWidthKey, width: number) {
+  const limits = INDIVIDUAL_COLUMN_LIMITS[key];
+  return Math.max(limits.min, Math.min(limits.max, Math.round(width)));
+}
+
 function DesktopIndividualTable({
   table,
   onUpdateRow,
   onRemoveRow,
   onSetEntry,
   onFillRow,
-  onClearRow
+  onClearRow,
+  detailColumnsOpen,
+  onToggleDetailColumns,
+  totalColumnsOpen,
+  onToggleTotalColumns,
+  onColumnWidthsChange
 }: {
   table: IndividualTableData;
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
@@ -602,47 +651,99 @@ function DesktopIndividualTable({
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
   onClearRow: (row: IndividualRow) => void;
+  detailColumnsOpen: boolean;
+  onToggleDetailColumns: () => void;
+  totalColumnsOpen: boolean;
+  onToggleTotalColumns: () => void;
+  onColumnWidthsChange: (widths: IndividualColumnWidths) => void;
 }) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
+  const committedWidths = React.useMemo(() => resolvedIndividualColumnWidths(table.columnWidths), [table.columnWidths]);
+  const [draftWidths, setDraftWidths] = React.useState(committedWidths);
+  React.useEffect(() => setDraftWidths(committedWidths), [committedWidths]);
+  const tableMinWidth = draftWidths.employee
+    + 64
+    + (detailColumnsOpen ? draftWidths.company + draftWidths.department + draftWidths.identificationNumber + draftWidths.position : 0)
+    + days.length * 44
+    + 64
+    + (totalColumnsOpen ? 7 * 64 : 64)
+    + 160;
+
+  function resizeColumn(key: IndividualWidthKey, width: number) {
+    const nextWidth = clampIndividualColumnWidth(key, width);
+    setDraftWidths((current) => ({ ...current, [key]: nextWidth }));
+  }
+
+  function commitColumnWidth(key: IndividualWidthKey, width: number) {
+    onColumnWidthsChange({ [key]: clampIndividualColumnWidth(key, width) });
+  }
 
   return (
     <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
       <div className="h-full overflow-auto">
-        <table className="w-full min-w-[1440px] table-fixed border-collapse text-xs">
+        <table className="w-full table-fixed border-collapse text-xs" style={{ minWidth: `${tableMinWidth}px` }}>
           <colgroup>
-            <col className="w-56" />
-            <col className="w-32" />
-            <col className="w-32" />
-            <col className="w-32" />
-            <col className="w-32" />
+            <col style={{ width: `${draftWidths.employee}px` }} />
+            <col className="w-16" />
+            {detailColumnsOpen ? (
+              <>
+                <col style={{ width: `${draftWidths.company}px` }} />
+                <col style={{ width: `${draftWidths.department}px` }} />
+                <col style={{ width: `${draftWidths.identificationNumber}px` }} />
+                <col style={{ width: `${draftWidths.position}px` }} />
+              </>
+            ) : null}
             {days.map((day) => <col key={day.iso} className="w-11" />)}
             <col className="w-16" />
             <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-16" />
-            <col className="w-16" />
+            {totalColumnsOpen ? (
+              <>
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
+                <col className="w-16" />
+              </>
+            ) : null}
             <col className="w-40" />
           </colgroup>
           <thead className="sticky top-0 z-30 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
-              <th className="sticky left-0 z-40 w-56 border-b border-r border-slate-200 bg-slate-100 px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700 dark:bg-slate-800">Employee</th>
-              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Company</th>
-              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Department</th>
-              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">ID</th>
-              <th className="border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Position</th>
+              <ResizableHeader
+                label="Employee"
+                widthKey="employee"
+                width={draftWidths.employee}
+                sticky
+                onResize={resizeColumn}
+                onCommit={commitColumnWidth}
+              />
+              <th className="border-b border-r border-slate-200 px-1 py-2 text-center dark:border-slate-700">
+                <button type="button" className={compactToggleClass()} onClick={onToggleDetailColumns}>{detailColumnsOpen ? "Less" : "More"}</button>
+              </th>
+              {detailColumnsOpen ? (
+                <>
+                  <ResizableHeader label="Company" widthKey="company" width={draftWidths.company} onResize={resizeColumn} onCommit={commitColumnWidth} />
+                  <ResizableHeader label="Department" widthKey="department" width={draftWidths.department} onResize={resizeColumn} onCommit={commitColumnWidth} />
+                  <ResizableHeader label="ID" widthKey="identificationNumber" width={draftWidths.identificationNumber} onResize={resizeColumn} onCommit={commitColumnWidth} />
+                  <ResizableHeader label="Position" widthKey="position" width={draftWidths.position} onResize={resizeColumn} onCommit={commitColumnWidth} />
+                </>
+              ) : null}
               {days.map((day) => (
                 <th key={day.iso} className="w-11 border-b border-r border-slate-200 px-1 py-1 text-center dark:border-slate-700">
                   <span className="block text-sm font-black text-slate-950 dark:text-white">{day.day}</span>
                   <span className="text-[9px] font-bold uppercase">{day.weekday.slice(0, 3)}</span>
                 </th>
               ))}
-              {["Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB"].map((label) => (
+              <th className="border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Worked</th>
+              <th className="border-b border-r border-slate-200 px-1 py-2 text-center dark:border-slate-700">
+                <button type="button" className={compactToggleClass()} onClick={onToggleTotalColumns}>{totalColumnsOpen ? "Less" : "More"}</button>
+              </th>
+              {totalColumnsOpen ? ["Norm", "Diff", "OT", "CO", "CM", "SE", "AB"].map((label) => (
                 <th key={label} className="border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">{label}</th>
-              ))}
+              )) : null}
               <th className="sticky right-0 z-40 border-b border-l border-r border-slate-200 bg-slate-100 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700 dark:bg-slate-800">Actions</th>
             </tr>
           </thead>
@@ -659,18 +760,25 @@ function DesktopIndividualTable({
                       onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
                     />
                   </td>
-                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                    <input className={tableInputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+                  <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
+                    <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleDetailColumns}>{detailColumnsOpen ? "Less" : "..."}</button>
                   </td>
-                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                    <input className={tableInputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
-                  </td>
-                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                    <input className={tableInputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
-                  </td>
-                  <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                    <input className={tableInputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
-                  </td>
+                  {detailColumnsOpen ? (
+                    <>
+                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                        <input className={tableInputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+                      </td>
+                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                        <input className={tableInputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
+                      </td>
+                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                        <input className={tableInputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+                      </td>
+                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                        <input className={tableInputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
+                      </td>
+                    </>
+                  ) : null}
                   {days.map((day) => (
                     <DayCell
                       key={day.iso}
@@ -683,13 +791,20 @@ function DesktopIndividualTable({
                     />
                   ))}
                   <TotalCell>{formatNumber(totals.worked)}h</TotalCell>
-                  <TotalCell>{formatNumber(totals.norm)}h</TotalCell>
-                  <TotalCell tone={totals.diff < 0 ? "bad" : "good"}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</TotalCell>
-                  <TotalCell>{formatNumber(totals.ot)}h</TotalCell>
-                  <TotalCell>{totals.co}d</TotalCell>
-                  <TotalCell>{totals.cm}d</TotalCell>
-                  <TotalCell>{totals.se}d</TotalCell>
-                  <TotalCell>{totals.ab}d</TotalCell>
+                  <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
+                    <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleTotalColumns}>{totalColumnsOpen ? "Less" : "..."}</button>
+                  </td>
+                  {totalColumnsOpen ? (
+                    <>
+                      <TotalCell>{formatNumber(totals.norm)}h</TotalCell>
+                      <TotalCell tone={totals.diff < 0 ? "bad" : "good"}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</TotalCell>
+                      <TotalCell>{formatNumber(totals.ot)}h</TotalCell>
+                      <TotalCell>{totals.co}d</TotalCell>
+                      <TotalCell>{totals.cm}d</TotalCell>
+                      <TotalCell>{totals.se}d</TotalCell>
+                      <TotalCell>{totals.ab}d</TotalCell>
+                    </>
+                  ) : null}
                   <td className="sticky right-0 z-10 border-l border-r border-slate-200 bg-white px-2 py-1 shadow-[-12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
                     <div className="flex items-center justify-center gap-1">
                       <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onFillRow(row)}>Fill</button>
@@ -704,6 +819,59 @@ function DesktopIndividualTable({
         </table>
       </div>
     </div>
+  );
+}
+
+function ResizableHeader({
+  label,
+  widthKey,
+  width,
+  sticky = false,
+  onResize,
+  onCommit
+}: {
+  label: string;
+  widthKey: IndividualWidthKey;
+  width: number;
+  sticky?: boolean;
+  onResize: (key: IndividualWidthKey, width: number) => void;
+  onCommit: (key: IndividualWidthKey, width: number) => void;
+}) {
+  function startResize(event: React.PointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startWidth = width;
+    let nextWidth = width;
+
+    function handleMove(moveEvent: PointerEvent) {
+      nextWidth = clampIndividualColumnWidth(widthKey, startWidth + moveEvent.clientX - startX);
+      onResize(widthKey, nextWidth);
+    }
+
+    function handleUp() {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      onCommit(widthKey, nextWidth);
+    }
+
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  }
+
+  return (
+    <th
+      className={`${sticky ? "sticky left-0 z-40 bg-slate-100 dark:bg-slate-800" : ""} relative border-b border-r border-slate-200 px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.12em] dark:border-slate-700`}
+      style={{ width: `${width}px` }}
+    >
+      <span className="block truncate pr-2">{label}</span>
+      <button
+        type="button"
+        aria-label={`Resize ${label} column`}
+        className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none border-r border-transparent hover:border-teal-500 focus:border-teal-600 focus:outline-none"
+        onPointerDown={startResize}
+      />
+    </th>
   );
 }
 
@@ -952,25 +1120,29 @@ function CellActionPopover({
   const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 340));
   if (typeof document === "undefined") return null;
   return createPortal(
-    <div
-      className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
-      style={{ left, top }}
-    >
-      <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
-      <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
-      <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
-      <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
-      <details className="group">
-        <summary className="cursor-pointer rounded-md px-2 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800">Special Event</summary>
-        <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-800">
-          {SPECIAL_EVENT_REASONS.map((reason) => (
-            <button key={reason} type="button" className={menuItemClass("pl-4 text-[11px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
-          ))}
-        </div>
-      </details>
-      <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
-      <button type="button" className={menuItemClass("text-slate-500")} onClick={onClose}>Close</button>
-    </div>,
+    <>
+      <button type="button" aria-label="Close cell menu" className="fixed inset-0 z-[99] cursor-default bg-transparent" onClick={onClose} />
+      <div
+        className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
+        style={{ left, top }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
+        <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
+        <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
+        <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
+        <details className="group">
+          <summary className="cursor-pointer rounded-md px-2 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800">Special Event</summary>
+          <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-800">
+            {SPECIAL_EVENT_REASONS.map((reason) => (
+              <button key={reason} type="button" className={menuItemClass("pl-4 text-[11px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
+            ))}
+          </div>
+        </details>
+        <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
+        <button type="button" className={menuItemClass("text-slate-500")} onClick={onClose}>Close</button>
+      </div>
+    </>,
     document.body
   );
 }
@@ -1011,6 +1183,7 @@ function individualHeaderStats(table: IndividualTableData) {
     cm: totals.cm,
     se: totals.se,
     ab: totals.ab,
+    holidays: table.holidays.filter((holiday) => holiday.date.startsWith(`${table.month}-`)).length,
     daily: days
       .filter((day) => isIndividualWorkDay(day, holidaysByDate))
       .map((day) => {
@@ -1050,6 +1223,10 @@ function tableInputClass(extra = "") {
 
 function tinyActionClass(extra = "") {
   return `rounded-md px-1.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] hover:bg-slate-100 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function compactToggleClass(extra = "") {
+  return `inline-flex h-7 items-center justify-center rounded-md border border-slate-200 bg-white px-2 text-[10px] font-black uppercase tracking-[0.08em] text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
 }
 
 function menuItemClass(extra = "") {

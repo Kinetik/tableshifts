@@ -22,6 +22,14 @@ export type IndividualHoliday = {
   countryCode?: string;
 };
 
+export type IndividualColumnWidths = {
+  employee?: number;
+  company?: number;
+  department?: number;
+  identificationNumber?: number;
+  position?: number;
+};
+
 export type IndividualTableData = {
   id: string;
   month: string;
@@ -29,6 +37,7 @@ export type IndividualTableData = {
   rows: IndividualRow[];
   entries: Record<string, Record<string, IndividualEntry>>;
   holidays: IndividualHoliday[];
+  columnWidths?: IndividualColumnWidths;
 };
 
 export const SPECIAL_EVENT_REASONS = [
@@ -79,7 +88,8 @@ export function createIndividualTable(id = makeIndividualId()): IndividualTableD
     normalHours: 8,
     rows: [defaultIndividualRow()],
     entries: {},
-    holidays: []
+    holidays: [],
+    columnWidths: {}
   };
 }
 
@@ -118,8 +128,27 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
       date: holiday.date || "",
       name: holiday.name || "Public holiday",
       countryCode: holiday.countryCode
-    })).filter((holiday) => holiday.date) : []
+    })).filter((holiday) => holiday.date) : [],
+    columnWidths: sanitizeIndividualColumnWidths(data.columnWidths)
   };
+}
+
+export function sanitizeIndividualColumnWidths(value: unknown): IndividualColumnWidths {
+  if (typeof value !== "object" || value === null) return {};
+  const widths = value as Record<string, unknown>;
+  return {
+    employee: sanitizeColumnWidth(widths.employee, 160, 420),
+    company: sanitizeColumnWidth(widths.company, 96, 280),
+    department: sanitizeColumnWidth(widths.department, 96, 280),
+    identificationNumber: sanitizeColumnWidth(widths.identificationNumber, 88, 260),
+    position: sanitizeColumnWidth(widths.position, 96, 300)
+  };
+}
+
+function sanitizeColumnWidth(value: unknown, min: number, max: number) {
+  const width = Number(value);
+  if (!Number.isFinite(width)) return undefined;
+  return Math.max(min, Math.min(max, Math.round(width)));
 }
 
 export function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {
