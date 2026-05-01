@@ -222,7 +222,7 @@ export function downloadIndividualTemplate() {
   ]);
 }
 
-export function exportIndividualCsv(table: IndividualTableData) {
+export function exportIndividualXlsx(table: IndividualTableData) {
   const days = daysInMonth(table.month);
   const rows = [
     ["Employee", "Company", "Department", "Identification Number", "Position", ...days.map((day) => day.iso), "Worked", "Norm", "Diff", "OT", "CO", "CM", "SE", "AB"]
@@ -251,7 +251,7 @@ export function exportIndividualCsv(table: IndividualTableData) {
       String(totals.ab)
     ]);
   });
-  downloadCsv(`individual-tableshifts-${table.month}.csv`, rows);
+  downloadXlsx(`individual-tableshifts-${table.month}.xlsx`, "Individual TableShift", rows);
 }
 
 export function downloadCsv(filename: string, rows: Array<Array<string | number>>) {

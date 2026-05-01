@@ -16,7 +16,7 @@ import {
   createIndividualTable,
   defaultIndividualRow,
   downloadIndividualTemplate,
-  exportIndividualCsv,
+  exportIndividualXlsx,
   individualEntryCode,
   individualNormalHours,
   individualRowHasContent,
@@ -25,7 +25,6 @@ import {
   individualTotals,
   isIndividualWorkDay,
   migrateIndividualTable,
-  parseCsv,
   parseEmployeeWorkbook
 } from "@/lib/individual-tableshifts";
 
@@ -49,6 +48,7 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
   const [table, setTable] = React.useState<IndividualTableData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [message, setMessage] = React.useState("");
+  const resolvedTheme = theme === "auto" ? systemTheme : theme;
 
   React.useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
@@ -72,6 +72,10 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
     if (tableId && supabase) void loadTable(tableId);
     else setLoading(false);
   }, [supabase]);
+
+  React.useEffect(() => {
+    document.documentElement.classList.toggle("dark", resolvedTheme === "dark");
+  }, [resolvedTheme]);
 
   async function saveTable(next: IndividualTableData) {
     setTable(next);
@@ -136,7 +140,7 @@ export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey 
   }
 
   return (
-    <div className={(theme === "auto" ? systemTheme : theme) === "dark" ? "dark" : ""}>
+    <div className={resolvedTheme === "dark" ? "dark" : ""}>
       <Toaster position="top-center" richColors closeButton />
       {table ? (
         <IndividualTableWorkspace
@@ -387,10 +391,7 @@ function IndividualTableWorkspace({
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const isExcel = /\.(xlsx|xls)$/i.test(file.name);
-        const rows = isExcel
-          ? parseEmployeeWorkbook(reader.result as ArrayBuffer)
-          : parseCsv(String(reader.result || ""));
+        const rows = parseEmployeeWorkbook(reader.result as ArrayBuffer);
         const nextRows = individualRowsFromMatrix(rows);
         if (nextRows.length) {
           const employeePool = mergeEmployeeRows([...(table.employeePool || []), ...nextRows]);
@@ -404,8 +405,7 @@ function IndividualTableWorkspace({
         toast.error("Could not import that employee file.");
       }
     };
-    if (/\.(xlsx|xls)$/i.test(file.name)) reader.readAsArrayBuffer(file);
-    else reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
@@ -495,12 +495,12 @@ function IndividualTableWorkspace({
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-wrap items-end gap-2.5">
                 <CompactField label="Month" className="w-[152px]">
-                  <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
+                  <select className={centeredSelectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </CompactField>
                 <CompactField label="Shift" className="w-[74px]">
-                  <select className={selectClass("text-center")} value={individualNormalHours(table)} onChange={(event) => updateTable({ normalHours: Number(event.target.value) })}>
+                  <select className={centeredSelectClass()} value={individualNormalHours(table)} onChange={(event) => updateTable({ normalHours: Number(event.target.value) })}>
                     {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
                       <option key={hour} value={hour}>{hour}h</option>
                     ))}
@@ -511,7 +511,7 @@ function IndividualTableWorkspace({
                   Holidays
                 </div>
                 <CompactField label="Country" className="w-[158px]">
-                  <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
+                  <select className={centeredSelectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
                     {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                   </select>
                 </CompactField>
@@ -546,8 +546,8 @@ function IndividualTableWorkspace({
               type="button"
               className={secondaryButtonClass("w-full sm:w-auto")}
               onClick={() => {
-                exportIndividualCsv(table);
-                toast.success("CSV exported.");
+                exportIndividualXlsx(table);
+                toast.success("XLSX exported.");
               }}
             >
               Export
@@ -556,7 +556,7 @@ function IndividualTableWorkspace({
               ref={fileInputRef}
               className="hidden"
               type="file"
-              accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
               onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
             />
           </div>
@@ -1455,6 +1455,10 @@ function inputClass(extra = "") {
 
 function selectClass(extra = "") {
   return inputClass(`appearance-none ${extra}`);
+}
+
+function centeredSelectClass(extra = "") {
+  return selectClass(`text-center [text-align-last:center] ${extra}`);
 }
 
 function primaryButtonClass(extra = "") {
