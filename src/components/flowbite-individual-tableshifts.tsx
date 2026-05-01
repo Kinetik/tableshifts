@@ -19,6 +19,7 @@ import {
   exportIndividualCsv,
   individualEntryCode,
   individualNormalHours,
+  individualRowHasContent,
   individualRowsFromMatrix,
   individualTooltipText,
   individualTotals,
@@ -322,13 +323,17 @@ function IndividualTableWorkspace({
   const [holidayYear, setHolidayYear] = React.useState(String(new Date().getFullYear()));
   const [detailColumnsOpen, setDetailColumnsOpen] = React.useState(false);
   const [totalColumnsOpen, setTotalColumnsOpen] = React.useState(false);
+  const [employeesOpen, setEmployeesOpen] = React.useState(false);
+  const employeesButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const employeeDirectory = React.useMemo(() => mergeEmployeeRows([...(table.employeePool || []), ...table.rows]), [table.employeePool, table.rows]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
   }
 
   function updateRow(rowId: string, patch: Partial<IndividualRow>) {
-    onSave({ ...table, rows: table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row) });
+    const rows = table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row);
+    onSave({ ...table, rows });
   }
 
   function updateColumnWidths(columnWidths: IndividualColumnWidths) {
@@ -340,6 +345,10 @@ function IndividualTableWorkspace({
     delete entries[rowId];
     onSave({ ...table, rows: table.rows.filter((row) => row.id !== rowId), entries });
     toast.success("Employee row removed.");
+  }
+
+  function addBlankRow() {
+    onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] });
   }
 
   function setEntry(rowId: string, iso: string, entry: IndividualEntry | null) {
@@ -378,8 +387,10 @@ function IndividualTableWorkspace({
           : parseCsv(String(reader.result || ""));
         const nextRows = individualRowsFromMatrix(rows);
         if (nextRows.length) {
-          onSave({ ...table, rows: [...table.rows, ...nextRows] });
-          toast.success(`${nextRows.length} employees imported.`);
+          const employeePool = mergeEmployeeRows([...(table.employeePool || []), ...nextRows]);
+          onSave({ ...table, employeePool });
+          setEmployeesOpen(true);
+          toast.success(`${nextRows.length} employees added to the list.`);
         } else {
           toast.warning("No employees found in that file.");
         }
@@ -390,6 +401,30 @@ function IndividualTableWorkspace({
     if (/\.(xlsx|xls)$/i.test(file.name)) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
     if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function toggleEmployee(employee: IndividualRow, selected: boolean) {
+    const activeRow = findActiveEmployeeRow(table.rows, employee);
+    if (selected) {
+      if (activeRow) return;
+      const rows = table.rows.filter((row) => individualRowHasContent(row) || rowHasRecordedData(row.id, table));
+      onSave({
+        ...table,
+        employeePool: mergeEmployeeRows([...(table.employeePool || []), employee]),
+        rows: [...rows, employee]
+      });
+      return;
+    }
+    if (!activeRow) return;
+    if (rowHasRecordedData(activeRow.id, table) && !window.confirm(`${activeRow.name || "This employee"} has recorded table data. Remove the employee and delete those entries?`)) return;
+    const entries = { ...table.entries };
+    delete entries[activeRow.id];
+    onSave({
+      ...table,
+      employeePool: mergeEmployeeRows([...(table.employeePool || []), activeRow]),
+      rows: table.rows.filter((row) => row.id !== activeRow.id),
+      entries
+    });
   }
 
   async function copyLink() {
@@ -447,9 +482,9 @@ function IndividualTableWorkspace({
           </div>
         </header>
 
-        <section className="border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-            <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)_minmax(320px,1.2fr)]">
+        <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(500px,620px)] xl:items-stretch">
+            <div className="grid gap-2 lg:grid-cols-[minmax(220px,0.85fr)_minmax(260px,1fr)_minmax(270px,1fr)]">
               <ToolbarGroup label="Table Setup">
                 <Field label="Month">
                   <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
@@ -462,9 +497,9 @@ function IndividualTableWorkspace({
                     inputMode="numeric"
                     min={1}
                     max={24}
-                    type="number"
-                    value={individualNormalHours(table)}
-                    onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
+                    type="text"
+                    value={`${individualNormalHours(table)}h`}
+                    onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value.replace(/[^\d.]/g, "")) || 8)) })}
                   />
                 </Field>
               </ToolbarGroup>
@@ -477,14 +512,13 @@ function IndividualTableWorkspace({
                 <Field label="Year">
                   <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
                 </Field>
-                <button type="button" className={secondaryButtonClass("h-9")} onClick={addPublicHolidays}>Load</button>
+                <button type="button" className={secondaryButtonClass("h-8")} onClick={addPublicHolidays}>Load</button>
               </ToolbarGroup>
               <ToolbarGroup label="Files & Share">
-                <button type="button" className={secondaryButtonClass("h-9")} onClick={() => fileInputRef.current?.click()}>Import</button>
-                <button type="button" className={secondaryButtonClass("h-9")} onClick={downloadIndividualTemplate}>Template</button>
+                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("h-8")} onClick={() => setEmployeesOpen((open) => !open)}>Add Employees</button>
                 <button
                   type="button"
-                  className={secondaryButtonClass("h-9")}
+                  className={secondaryButtonClass("h-8")}
                   onClick={() => {
                     exportIndividualCsv(table);
                     toast.success("CSV exported.");
@@ -492,7 +526,7 @@ function IndividualTableWorkspace({
                 >
                   Export
                 </button>
-                <button type="button" className={secondaryButtonClass("h-9")} onClick={copyLink}>Share</button>
+                <button type="button" className={secondaryButtonClass("h-8")} onClick={copyLink}>Share</button>
                 <input
                   ref={fileInputRef}
                   className="hidden"
@@ -502,7 +536,7 @@ function IndividualTableWorkspace({
                 />
               </ToolbarGroup>
             </div>
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:w-[540px]">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
               <Kpi label="People" value={String(stats.people)} />
               <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
               <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
@@ -516,11 +550,22 @@ function IndividualTableWorkspace({
             </div>
           </div>
           <DailyBarStrip days={stats.daily} />
-          <div className="mt-3 flex justify-end">
-            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
+          <div className="mt-2 flex justify-start">
+            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={addBlankRow}>
               Add Row
             </button>
           </div>
+          {employeesOpen ? (
+            <EmployeeDropdown
+              anchorRef={employeesButtonRef}
+              employees={employeeDirectory}
+              activeRows={table.rows}
+              onClose={() => setEmployeesOpen(false)}
+              onImport={() => fileInputRef.current?.click()}
+              onTemplate={downloadIndividualTemplate}
+              onToggleEmployee={toggleEmployee}
+            />
+          ) : null}
         </section>
 
         <section className="min-h-0 flex-1 p-3 lg:p-4">
@@ -565,12 +610,99 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function ToolbarGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
-      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
+    <div className="h-full rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 dark:border-slate-800 dark:bg-slate-950/60">
+      <p className="mb-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
       <div className="grid grid-cols-2 items-end gap-2 [&>button]:w-full">
         {children}
       </div>
     </div>
+  );
+}
+
+function EmployeeDropdown({
+  anchorRef,
+  employees,
+  activeRows,
+  onClose,
+  onImport,
+  onTemplate,
+  onToggleEmployee
+}: {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  employees: IndividualRow[];
+  activeRows: IndividualRow[];
+  onClose: () => void;
+  onImport: () => void;
+  onTemplate: () => void;
+  onToggleEmployee: (employee: IndividualRow, selected: boolean) => void;
+}) {
+  if (typeof document === "undefined") return null;
+  const rect = anchorRef.current?.getBoundingClientRect();
+  const width = Math.min(680, Math.max(320, window.innerWidth - 24));
+  const left = rect ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) : 12;
+  const top = rect ? Math.min(rect.bottom + 8, window.innerHeight - 420) : 96;
+
+  return createPortal(
+    <>
+      <button type="button" aria-label="Close employees menu" className="fixed inset-0 z-[89] cursor-default bg-transparent" onClick={onClose} />
+      <div
+        className="fixed z-[90] max-h-[min(520px,calc(100vh-7rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-950 shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        style={{ left, top: Math.max(12, top), width }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Employees</p>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{employees.length} saved in this table</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" className={secondaryButtonClass("h-8")} onClick={onImport}>Import</button>
+            <button type="button" className={secondaryButtonClass("h-8")} onClick={onTemplate}>Template</button>
+          </div>
+        </div>
+        <div className="max-h-[390px] overflow-auto">
+          <table className="w-full min-w-[620px] border-collapse text-xs">
+            <thead className="sticky top-0 bg-white text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <tr>
+                <th className="w-14 border-b border-slate-100 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Select</th>
+                <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Employee</th>
+                <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Department</th>
+                <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">ID</th>
+                <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Position</th>
+              </tr>
+            </thead>
+            <tbody>
+              {employees.length ? employees.map((employee) => {
+                const active = Boolean(findActiveEmployeeRow(activeRows, employee));
+                return (
+                  <tr key={`${employee.id}-${employeeMatchKey(employee)}`} className={active ? "bg-teal-50 dark:bg-teal-950/35" : "hover:bg-slate-50 dark:hover:bg-slate-800/70"}>
+                    <td className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
+                      <input
+                        type="checkbox"
+                        checked={active}
+                        className="h-4 w-4 rounded border-slate-300 text-teal-700 focus:ring-teal-600 dark:border-slate-700 dark:bg-slate-950"
+                        onChange={(event) => onToggleEmployee(employee, event.target.checked)}
+                      />
+                    </td>
+                    <td className="border-b border-slate-100 px-2 py-2 font-black dark:border-slate-800">{employee.name || "Unnamed employee"}</td>
+                    <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.department || "-"}</td>
+                    <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.identificationNumber || "-"}</td>
+                    <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.position || "-"}</td>
+                  </tr>
+                );
+              }) : (
+                <tr>
+                  <td colSpan={5} className="px-3 py-8 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
+                    Import a template or type an employee in the table to build this list.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>,
+    document.body
   );
 }
 
@@ -586,13 +718,13 @@ function Kpi({ label, value, tone = "neutral" }: { label: string; value: string;
 function DailyBarStrip({ days }: { days: Array<{ day: number; worked: number; variance: number }> }) {
   const max = Math.max(1, ...days.map((day) => day.worked));
   return (
-    <div className="mt-3 flex h-10 items-end gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950">
+    <div className="mt-2 flex h-8 items-end gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 dark:border-slate-800 dark:bg-slate-950">
       {days.map((day) => (
         <div
           key={day.day}
           title={`Day ${day.day}: ${formatNumber(day.worked)}h (${day.variance > 0 ? "+" : ""}${formatNumber(day.variance)}h)`}
           className={`min-h-1 flex-1 rounded-t-sm ${day.variance < 0 && day.worked > 0 ? "bg-rose-500" : day.variance > 0 ? "bg-teal-600" : "bg-slate-300 dark:bg-slate-700"}`}
-          style={{ height: `${Math.max(6, (day.worked / max) * 30)}px` }}
+          style={{ height: `${Math.max(5, (day.worked / max) * 22)}px` }}
         />
       ))}
     </div>
@@ -1011,7 +1143,7 @@ function DayCell({
   const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const numeric = !entry || ["normal", "overtime"].includes(entry.type);
-  const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
+  const value = numeric && entry ? `${formatNumber(entry.hours)}h` : "";
   const [draft, setDraft] = React.useState(value);
   React.useEffect(() => setDraft(value), [value]);
 
@@ -1057,13 +1189,13 @@ function DayCell({
           </button>
         ) : numeric ? (
           <input
-            className="h-8 w-9 bg-transparent text-center text-sm font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            className="h-8 w-10 bg-transparent text-center text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             value={draft}
             placeholder={holiday ? "H" : ""}
             inputMode="numeric"
             onChange={(event) => {
               const next = event.target.value.replace(/[^\d.]/g, "");
-              setDraft(next ? String(Math.min(24, Number(next))) : "");
+              setDraft(next ? `${Math.min(24, Number(next))}h` : "");
             }}
             onBlur={() => commit()}
             onKeyDown={(event) => {
@@ -1197,8 +1329,39 @@ function individualHeaderStats(table: IndividualTableData) {
   };
 }
 
+function employeeMatchKey(row: IndividualRow) {
+  const id = row.identificationNumber.trim().toLowerCase();
+  if (id) return `id:${id}`;
+  return [
+    row.name,
+    row.company,
+    row.department,
+    row.position
+  ].map((item) => item.trim().toLowerCase()).join("|") || `row:${row.id}`;
+}
+
+function mergeEmployeeRows(rows: IndividualRow[]) {
+  const merged: IndividualRow[] = [];
+  rows.filter(individualRowHasContent).forEach((row) => {
+    const key = employeeMatchKey(row);
+    const existingIndex = merged.findIndex((item) => item.id === row.id || employeeMatchKey(item) === key);
+    if (existingIndex >= 0) merged[existingIndex] = { ...merged[existingIndex], ...row };
+    else merged.push(row);
+  });
+  return merged;
+}
+
+function findActiveEmployeeRow(rows: IndividualRow[], employee: IndividualRow) {
+  const key = employeeMatchKey(employee);
+  return rows.find((row) => row.id === employee.id || employeeMatchKey(row) === key);
+}
+
+function rowHasRecordedData(rowId: string, table: IndividualTableData) {
+  return Object.keys(table.entries[rowId] || {}).length > 0;
+}
+
 function inputClass(extra = "") {
-  return `h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-950 dark:text-white ${extra}`;
+  return `h-8 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-950 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-950 dark:text-white ${extra}`;
 }
 
 function selectClass() {
@@ -1206,7 +1369,7 @@ function selectClass() {
 }
 
 function primaryButtonClass(extra = "") {
-  return `inline-flex h-9 items-center justify-center rounded-lg border border-teal-700 bg-teal-700 px-3 text-xs font-black text-white shadow-sm shadow-teal-700/15 transition hover:border-teal-800 hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 ${extra}`;
+  return `inline-flex h-8 items-center justify-center rounded-lg border border-teal-700 bg-teal-700 px-3 text-xs font-black text-white shadow-sm shadow-teal-700/15 transition hover:border-teal-800 hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 ${extra}`;
 }
 
 function primaryDarkButtonClass(extra = "") {
@@ -1214,7 +1377,7 @@ function primaryDarkButtonClass(extra = "") {
 }
 
 function secondaryButtonClass(extra = "") {
-  return `inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+  return `inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
 }
 
 function tableInputClass(extra = "") {

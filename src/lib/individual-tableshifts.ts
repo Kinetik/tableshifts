@@ -35,6 +35,7 @@ export type IndividualTableData = {
   month: string;
   normalHours: number;
   rows: IndividualRow[];
+  employeePool?: IndividualRow[];
   entries: Record<string, Record<string, IndividualEntry>>;
   holidays: IndividualHoliday[];
   columnWidths?: IndividualColumnWidths;
@@ -87,6 +88,7 @@ export function createIndividualTable(id = makeIndividualId()): IndividualTableD
     month: currentMonth(),
     normalHours: 8,
     rows: [defaultIndividualRow()],
+    employeePool: [],
     entries: {},
     holidays: [],
     columnWidths: {}
@@ -111,18 +113,13 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
   }
   if (typeof value !== "object" || value === null) return null;
   const data = value as Partial<IndividualTableData>;
+  const rows = Array.isArray(data.rows) && data.rows.length ? data.rows.map(sanitizeIndividualRow) : [defaultIndividualRow()];
   return {
     id: data.id || id,
     month: data.month || currentMonth(),
     normalHours: sanitizeIndividualNormalHours(data.normalHours),
-    rows: Array.isArray(data.rows) && data.rows.length ? data.rows.map((row) => ({
-      id: row.id || makeIndividualId("row"),
-      name: row.name || "",
-      company: row.company || "",
-      department: row.department || "",
-      identificationNumber: row.identificationNumber || "",
-      position: row.position || ""
-    })) : [defaultIndividualRow()],
+    rows,
+    employeePool: Array.isArray(data.employeePool) ? data.employeePool.map(sanitizeIndividualRow) : rows.filter(individualRowHasContent),
     entries: data.entries && typeof data.entries === "object" ? data.entries : {},
     holidays: Array.isArray(data.holidays) ? data.holidays.map((holiday) => ({
       date: holiday.date || "",
@@ -131,6 +128,21 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
     })).filter((holiday) => holiday.date) : [],
     columnWidths: sanitizeIndividualColumnWidths(data.columnWidths)
   };
+}
+
+export function sanitizeIndividualRow(row: Partial<IndividualRow>): IndividualRow {
+  return {
+    id: row.id || makeIndividualId("row"),
+    name: row.name || "",
+    company: row.company || "",
+    department: row.department || "",
+    identificationNumber: row.identificationNumber || "",
+    position: row.position || ""
+  };
+}
+
+export function individualRowHasContent(row: IndividualRow) {
+  return Boolean(`${row.name}${row.company}${row.department}${row.identificationNumber}${row.position}`.trim());
 }
 
 export function sanitizeIndividualColumnWidths(value: unknown): IndividualColumnWidths {
