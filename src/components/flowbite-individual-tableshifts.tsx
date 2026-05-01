@@ -782,7 +782,7 @@ const INDIVIDUAL_COLUMN_LIMITS: Record<IndividualWidthKey, { min: number; max: n
   position: { min: 96, max: 300 }
 };
 
-const DAY_COLUMN_WIDTH = 39;
+const DAY_COLUMN_WIDTH = 38;
 
 function resolvedIndividualColumnWidths(widths?: IndividualColumnWidths): Record<IndividualWidthKey, number> {
   return {
@@ -898,12 +898,15 @@ function DesktopIndividualTable({
                   <ResizableHeader label="Position" widthKey="position" width={draftWidths.position} onResize={resizeColumn} onCommit={commitColumnWidth} />
                 </>
               ) : null}
-              {days.map((day) => (
-                <th key={day.iso} className="border-b border-r border-slate-200 px-0.5 py-1 text-center dark:border-slate-700" style={{ width: `${DAY_COLUMN_WIDTH}px` }}>
-                  <span className="block text-sm font-black text-slate-950 dark:text-white">{day.day}</span>
-                  <span className="text-[9px] font-bold uppercase">{day.weekday.slice(0, 3)}</span>
-                </th>
-              ))}
+              {days.map((day) => {
+                const headerTone = holidaysByDate.has(day.iso) ? "holiday" : day.weekdayIndex === 0 || day.weekdayIndex === 6 ? "weekend" : "workday";
+                return (
+                  <th key={day.iso} className={`border-b border-r px-0.5 py-1 text-center ${dayHeaderClass(headerTone)}`} style={{ width: `${DAY_COLUMN_WIDTH}px` }}>
+                    <span className="block text-sm font-black text-current">{day.day}</span>
+                    <span className="text-[9px] font-bold uppercase text-current/70">{day.weekday.slice(0, 3)}</span>
+                  </th>
+                );
+              })}
               <th className="border-b border-r border-slate-200 px-2 py-2 text-center text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-700">Worked</th>
               <th className="border-b border-r border-slate-200 px-1 py-2 text-center dark:border-slate-700">
                 <button type="button" className={compactToggleClass()} onClick={onToggleTotalColumns}>{totalColumnsOpen ? "Less" : "More"}</button>
@@ -1331,6 +1334,7 @@ function individualHeaderStats(table: IndividualTableData) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
   const normal = individualNormalHours(table);
+  const rowsWithChartInput = table.rows.filter((row) => individualRowHasContent(row) || days.some((day) => table.entries[row.id]?.[day.iso]));
   const totals = table.rows.reduce(
     (sum, row) => {
       const rowTotals = individualTotals(row, table);
@@ -1359,11 +1363,11 @@ function individualHeaderStats(table: IndividualTableData) {
     daily: days
       .filter((day) => isIndividualWorkDay(day, holidaysByDate))
       .map((day) => {
-        const worked = table.rows.reduce((sum, row) => {
+        const worked = rowsWithChartInput.reduce((sum, row) => {
           const entry = table.entries[row.id]?.[day.iso];
           return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
         }, 0);
-        const norm = table.rows.length * normal;
+        const norm = rowsWithChartInput.length * normal;
         return { day: day.day, worked, variance: worked - norm };
       })
   };
@@ -1445,6 +1449,12 @@ function compactToggleClass(extra = "") {
 
 function menuItemClass(extra = "") {
   return `block w-full rounded-md px-2 py-1.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function dayHeaderClass(tone: "workday" | "weekend" | "holiday") {
+  if (tone === "holiday") return "border-yellow-200 bg-yellow-100/80 text-yellow-900 dark:border-yellow-900/70 dark:bg-yellow-950/45 dark:text-yellow-100";
+  if (tone === "weekend") return "border-sky-200 bg-sky-100/80 text-sky-900 dark:border-sky-900/60 dark:bg-sky-950/35 dark:text-sky-100";
+  return "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
 }
 
 function individualCellClass(type: string) {
