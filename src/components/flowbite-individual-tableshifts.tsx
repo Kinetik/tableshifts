@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { Toaster, toast } from "sonner";
 import { daysInMonth, formatNumber, monthOptions } from "@/lib/tableshifts";
@@ -425,14 +426,14 @@ function IndividualTableWorkspace({
               <h1 className="mt-1 truncate text-2xl font-black tracking-tight">Individual TableShifts</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <button type="button" className={toolButtonClass()} onClick={copyLink}>Copy Link</button>
-              <button type="button" className={toolButtonClass()} onClick={() => setLayoutMode(layoutMode === "desktop" ? "mobile" : "desktop")}>
+              <button type="button" className={secondaryButtonClass()} onClick={copyLink}>Copy Link</button>
+              <button type="button" className={secondaryButtonClass()} onClick={() => setLayoutMode(layoutMode === "desktop" ? "mobile" : "desktop")}>
                 {layoutMode === "desktop" ? "Desktop" : "Mobile"}
               </button>
-              <button type="button" className={toolButtonClass()} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+              <button type="button" className={secondaryButtonClass()} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
                 {theme === "dark" ? "Light" : "Dark"}
               </button>
-              <button type="button" className={toolButtonClass("border-transparent bg-slate-950 text-white hover:bg-slate-800 dark:bg-white dark:text-slate-950")} onClick={onBack}>
+              <button type="button" className={primaryDarkButtonClass()} onClick={onBack}>
                 Login
               </button>
             </div>
@@ -440,56 +441,62 @@ function IndividualTableWorkspace({
         </header>
 
         <section className="border-b border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[180px_92px_130px_82px_auto_auto_auto_auto_auto_auto] lg:items-end">
-              <Field label="Month">
-                <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
-                  {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
-              </Field>
-              <Field label="Shifts">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+            <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_minmax(260px,1fr)_minmax(320px,1.2fr)]">
+              <ToolbarGroup label="Table Setup">
+                <Field label="Month">
+                  <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
+                    {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </Field>
+                <Field label="Shifts">
+                  <input
+                    className={inputClass("text-center")}
+                    inputMode="numeric"
+                    min={1}
+                    max={24}
+                    type="number"
+                    value={individualNormalHours(table)}
+                    onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
+                  />
+                </Field>
+                <button type="button" className={primaryButtonClass()} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
+                  Add Row
+                </button>
+              </ToolbarGroup>
+              <ToolbarGroup label="Holidays">
+                <Field label="Country">
+                  <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
+                    {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+                  </select>
+                </Field>
+                <Field label="Year">
+                  <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+                </Field>
+                <button type="button" className={secondaryButtonClass("h-9")} onClick={addPublicHolidays}>Load</button>
+              </ToolbarGroup>
+              <ToolbarGroup label="Files & Share">
+                <button type="button" className={secondaryButtonClass("h-9")} onClick={() => fileInputRef.current?.click()}>Import</button>
+                <button type="button" className={secondaryButtonClass("h-9")} onClick={downloadIndividualTemplate}>Template</button>
+                <button
+                  type="button"
+                  className={secondaryButtonClass("h-9")}
+                  onClick={() => {
+                    exportIndividualCsv(table);
+                    toast.success("CSV exported.");
+                  }}
+                >
+                  Export
+                </button>
+                <button type="button" className={secondaryButtonClass("h-9")} onClick={copyLink}>Share</button>
                 <input
-                  className={inputClass("text-center")}
-                  inputMode="numeric"
-                  min={1}
-                  max={24}
-                  type="number"
-                  value={individualNormalHours(table)}
-                  onChange={(event) => updateTable({ normalHours: Math.max(1, Math.min(24, Number(event.target.value) || 8)) })}
+                  ref={fileInputRef}
+                  className="hidden"
+                  type="file"
+                  accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
                 />
-              </Field>
-              <Field label="Holiday Country">
-                <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
-                  {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-                </select>
-              </Field>
-              <Field label="Year">
-                <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
-              </Field>
-              <button type="button" className={commandButtonClass("bg-teal-700 text-white hover:bg-teal-800")} onClick={() => onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] })}>
-                Add Row
-              </button>
-              <button type="button" className={commandButtonClass()} onClick={addPublicHolidays}>Holidays</button>
-              <button type="button" className={commandButtonClass()} onClick={() => fileInputRef.current?.click()}>Import</button>
-              <button type="button" className={commandButtonClass()} onClick={downloadIndividualTemplate}>Template</button>
-              <button
-                type="button"
-                className={commandButtonClass()}
-                onClick={() => {
-                  exportIndividualCsv(table);
-                  toast.success("CSV exported.");
-                }}
-              >
-                Export
-              </button>
-              <button type="button" className={commandButtonClass()} onClick={copyLink}>Share</button>
-              <input
-                ref={fileInputRef}
-                className="hidden"
-                type="file"
-                accept=".xlsx,.xls,.csv,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
-              />
+              </ToolbarGroup>
             </div>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 xl:w-[540px]">
               <Kpi label="People" value={String(stats.people)} />
@@ -542,6 +549,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</span>
       {children}
     </label>
+  );
+}
+
+function ToolbarGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+      <p className="mb-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">{label}</p>
+      <div className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[repeat(auto-fit,minmax(82px,1fr))]">
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -739,9 +757,9 @@ function MobileIndividualTable({
               ))}
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" className={commandButtonClass()} onClick={() => onFillRow(row)}>Fill Row</button>
-              <button type="button" className={commandButtonClass()} onClick={() => onClearRow(row)}>Clear Row</button>
-              <button type="button" className={commandButtonClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
+              <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onFillRow(row)}>Fill Row</button>
+              <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onClearRow(row)}>Clear Row</button>
+              <button type="button" className={secondaryButtonClass("h-9 text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
             </div>
           </article>
         );
@@ -765,10 +783,15 @@ function MobileDayButton({
   entry?: IndividualEntry;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
 }) {
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
   const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
+  function openMenu(event: React.MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  }
   return (
     <div className="relative">
       <button
@@ -777,21 +800,20 @@ function MobileDayButton({
         className={`h-14 w-full rounded-lg border border-slate-200 text-center text-[11px] font-black dark:border-slate-800 ${individualCellClass(type)}`}
         onClick={() => {
           if (!entry && workDay) onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
-          else setMenuOpen(true);
+          else setMenuPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
         }}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          setMenuOpen(true);
-        }}
+        onContextMenu={openMenu}
       >
         <span className="block text-[10px] text-current/70">{day.day}</span>
         <span>{entry ? (["normal", "overtime"].includes(entry.type) ? `${formatNumber(entry.hours)}h` : individualEntryCode(entry.type)) : holiday ? "H" : workDay ? "+" : "-"}</span>
       </button>
-      {menuOpen ? (
+      {menuPosition ? (
         <CellActionPopover
-          onClose={() => setMenuOpen(false)}
+          x={menuPosition.x}
+          y={menuPosition.y}
+          onClose={() => setMenuPosition(null)}
           onApply={(type, reason) => {
-            setMenuOpen(false);
+            setMenuPosition(null);
             if (type === "clear") onSetEntry(row.id, day.iso, null);
             else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
             else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
@@ -817,13 +839,19 @@ function DayCell({
   entry?: IndividualEntry;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
 }) {
-  const [menuOpen, setMenuOpen] = React.useState(false);
+  const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
   const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const numeric = !entry || ["normal", "overtime"].includes(entry.type);
   const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
   const [draft, setDraft] = React.useState(value);
   React.useEffect(() => setDraft(value), [value]);
+
+  function openMenu(event: React.MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  }
 
   function commit(nextValue = draft) {
     const trimmed = nextValue.trim();
@@ -838,15 +866,28 @@ function DayCell({
 
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
   return (
-    <td className={`relative h-10 border-r border-slate-100 p-0 text-center dark:border-slate-800 ${individualCellClass(type)}`}>
-      <button
-        type="button"
-        aria-label="Open cell actions"
-        className="absolute right-0 top-0 z-10 h-3 w-3 rounded-bl bg-black/5 opacity-0 transition hover:bg-black/10 group-hover:opacity-100 dark:bg-white/10"
-        onClick={() => setMenuOpen((open) => !open)}
-      />
+    <td
+      className={`relative h-10 border-r border-slate-100 p-0 text-center dark:border-slate-800 ${individualCellClass(type)}`}
+      onContextMenu={openMenu}
+    >
       <div title={individualTooltipText(entry, holiday, workDay, normalHours)} className="grid h-10 place-items-center">
-        {numeric ? (
+        {!entry && workDay ? (
+          <button
+            type="button"
+            className="grid h-full w-full place-items-center text-base font-black text-teal-700 transition hover:bg-teal-100/70 dark:text-teal-300 dark:hover:bg-teal-900/40"
+            onClick={() => onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours })}
+          >
+            +
+          </button>
+        ) : !entry ? (
+          <button
+            type="button"
+            className="grid h-full w-full place-items-center text-[11px] font-black text-current/60 transition hover:bg-slate-100/60 dark:hover:bg-slate-800/60"
+            onClick={openMenu}
+          >
+            {holiday ? "H" : "-"}
+          </button>
+        ) : numeric ? (
           <input
             className="h-8 w-9 bg-transparent text-center text-sm font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
             value={draft}
@@ -865,29 +906,27 @@ function DayCell({
               }
             }}
             onContextMenu={(event) => {
-              event.preventDefault();
-              setMenuOpen(true);
+              openMenu(event);
             }}
           />
         ) : (
           <button
             type="button"
             className="h-full w-full text-[11px] font-black"
-            onClick={() => setMenuOpen(true)}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              setMenuOpen(true);
-            }}
+            onClick={openMenu}
+            onContextMenu={openMenu}
           >
             {individualEntryCode(entry?.type || "holiday")}
           </button>
         )}
       </div>
-      {menuOpen ? (
+      {menuPosition ? (
         <CellActionPopover
-          onClose={() => setMenuOpen(false)}
+          x={menuPosition.x}
+          y={menuPosition.y}
+          onClose={() => setMenuPosition(null)}
           onApply={(type, reason) => {
-            setMenuOpen(false);
+            setMenuPosition(null);
             if (type === "clear") onSetEntry(row.id, day.iso, null);
             else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
             else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
@@ -899,14 +938,24 @@ function DayCell({
 }
 
 function CellActionPopover({
+  x,
+  y,
   onClose,
   onApply
 }: {
+  x: number;
+  y: number;
   onClose: () => void;
   onApply: (type: string, reason?: string) => void;
 }) {
-  return (
-    <div className="absolute left-8 top-6 z-50 w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900">
+  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 196));
+  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 340));
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
+      style={{ left, top }}
+    >
       <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
       <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
       <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
@@ -921,7 +970,8 @@ function CellActionPopover({
       </details>
       <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
       <button type="button" className={menuItemClass("text-slate-500")} onClick={onClose}>Close</button>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -982,12 +1032,16 @@ function selectClass() {
   return inputClass("appearance-none");
 }
 
-function toolButtonClass(extra = "") {
-  return `inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+function primaryButtonClass(extra = "") {
+  return `inline-flex h-9 items-center justify-center rounded-lg border border-teal-700 bg-teal-700 px-3 text-xs font-black text-white shadow-sm shadow-teal-700/15 transition hover:border-teal-800 hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 ${extra}`;
 }
 
-function commandButtonClass(extra = "") {
-  return `h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+function primaryDarkButtonClass(extra = "") {
+  return `inline-flex h-9 items-center justify-center rounded-lg border border-slate-950 bg-slate-950 px-3 text-xs font-black text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-950 dark:hover:bg-slate-200 ${extra}`;
+}
+
+function secondaryButtonClass(extra = "") {
+  return `inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
 }
 
 function tableInputClass(extra = "") {
