@@ -499,6 +499,9 @@ function IndividualTableWorkspace({
                   </select>
                 </CompactField>
                 <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
+                <div className="hidden h-8 items-center rounded-md bg-slate-100 px-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:bg-slate-800 dark:text-slate-300 sm:flex">
+                  Holidays
+                </div>
                 <CompactField label="Country" className="w-[158px]">
                   <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
                     {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
@@ -509,7 +512,7 @@ function IndividualTableWorkspace({
                 </CompactField>
                 <button type="button" className={secondaryButtonClass("h-8 px-4")} onClick={addPublicHolidays}>Load</button>
               </div>
-              <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-800 dark:bg-slate-900 xl:flex-nowrap">
+              <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-900 xl:flex-nowrap">
                 <Metric label="People" value={String(stats.people)} />
                 <Metric label="Worked" value={`${formatNumber(stats.worked)}h`} />
                 <Metric label="Norm" value={`${formatNumber(stats.norm)}h`} />
@@ -605,7 +608,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 function CompactField({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
   return (
     <label className={`grid gap-1 ${className}`}>
-      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="text-center text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
       {children}
     </label>
   );
@@ -730,9 +733,9 @@ function Kpi({ label, value, tone = "neutral" }: { label: string; value: string;
 
 function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
-    <div className="min-w-[48px] px-1.5 text-center">
-      <p className="text-[7px] font-black uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">{label}</p>
-      <p className={`text-[13px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-slate-950 dark:text-white"}`}>{value}</p>
+    <div className="min-w-[54px] px-1.5 text-center">
+      <p className="text-[8px] font-black uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{label}</p>
+      <p className={`text-[15px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-slate-950 dark:text-white"}`}>{value}</p>
     </div>
   );
 }
