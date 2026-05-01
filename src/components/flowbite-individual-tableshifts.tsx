@@ -782,6 +782,8 @@ const INDIVIDUAL_COLUMN_LIMITS: Record<IndividualWidthKey, { min: number; max: n
   position: { min: 96, max: 300 }
 };
 
+const DAY_COLUMN_WIDTH = 39;
+
 function resolvedIndividualColumnWidths(widths?: IndividualColumnWidths): Record<IndividualWidthKey, number> {
   return {
     employee: clampIndividualColumnWidth("employee", widths?.employee ?? DEFAULT_INDIVIDUAL_COLUMN_WIDTHS.employee),
@@ -830,7 +832,7 @@ function DesktopIndividualTable({
   const tableMinWidth = draftWidths.employee
     + 64
     + (detailColumnsOpen ? draftWidths.company + draftWidths.department + draftWidths.identificationNumber + draftWidths.position : 0)
-    + days.length * 44
+    + days.length * DAY_COLUMN_WIDTH
     + 64
     + (totalColumnsOpen ? 7 * 64 : 64)
     + 160;
@@ -859,7 +861,7 @@ function DesktopIndividualTable({
                 <col style={{ width: `${draftWidths.position}px` }} />
               </>
             ) : null}
-            {days.map((day) => <col key={day.iso} className="w-11" />)}
+            {days.map((day) => <col key={day.iso} style={{ width: `${DAY_COLUMN_WIDTH}px` }} />)}
             <col className="w-16" />
             <col className="w-16" />
             {totalColumnsOpen ? (
@@ -897,7 +899,7 @@ function DesktopIndividualTable({
                 </>
               ) : null}
               {days.map((day) => (
-                <th key={day.iso} className="w-11 border-b border-r border-slate-200 px-1 py-1 text-center dark:border-slate-700">
+                <th key={day.iso} className="border-b border-r border-slate-200 px-0.5 py-1 text-center dark:border-slate-700" style={{ width: `${DAY_COLUMN_WIDTH}px` }}>
                   <span className="block text-sm font-black text-slate-950 dark:text-white">{day.day}</span>
                   <span className="text-[9px] font-bold uppercase">{day.weekday.slice(0, 3)}</span>
                 </th>
@@ -1221,9 +1223,10 @@ function DayCell({
             {holiday ? "H" : "-"}
           </button>
         ) : numeric ? (
-          <div className="flex h-8 items-center justify-center gap-0.5">
+          <div className="flex h-8 items-center justify-center gap-px">
             <input
-              className="h-8 w-5 bg-transparent p-0 text-right text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              className="h-8 min-w-[1ch] bg-transparent p-0 text-center text-[13px] font-black outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              style={{ width: `${Math.max(1, draft.length || 1)}ch` }}
               value={draft}
               placeholder={holiday ? "H" : ""}
               inputMode="numeric"
