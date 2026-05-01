@@ -483,45 +483,44 @@ function IndividualTableWorkspace({
         </header>
 
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
-          <div className="grid gap-3 xl:grid-cols-[auto_620px] xl:items-start xl:justify-between">
-            <div className="flex flex-wrap gap-2">
-              <ToolbarGroup label="Table Setup" className="w-full sm:w-[316px]" contentClassName="grid-cols-[200px_78px]">
-                <Field label="Month">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 shadow-sm shadow-slate-200/30 dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-black/10">
+            <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex flex-wrap items-end gap-2.5">
+                <CompactField label="Month" className="w-[152px]">
                   <select className={selectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
-                </Field>
-                <Field label="Shifts">
+                </CompactField>
+                <CompactField label="Shift" className="w-[74px]">
                   <select className={selectClass("text-center")} value={individualNormalHours(table)} onChange={(event) => updateTable({ normalHours: Number(event.target.value) })}>
                     {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
                       <option key={hour} value={hour}>{hour}h</option>
                     ))}
                   </select>
-                </Field>
-              </ToolbarGroup>
-              <ToolbarGroup label="Holidays" className="w-full sm:w-[468px]" contentClassName="grid-cols-[250px_86px_78px]">
-                <Field label="Country">
+                </CompactField>
+                <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
+                <CompactField label="Country" className="w-[158px]">
                   <select className={selectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
                     {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
                   </select>
-                </Field>
-                <Field label="Year">
+                </CompactField>
+                <CompactField label="Year" className="w-[76px]">
                   <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
-                </Field>
-                <button type="button" className={secondaryButtonClass("h-8")} onClick={addPublicHolidays}>Load</button>
-              </ToolbarGroup>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5 xl:w-[620px] xl:grid-cols-10 xl:justify-self-end">
-              <Kpi label="People" value={String(stats.people)} />
-              <Kpi label="Worked" value={`${formatNumber(stats.worked)}h`} />
-              <Kpi label="Norm" value={`${formatNumber(stats.norm)}h`} />
-              <Kpi label="Diff" value={`${stats.diff > 0 ? "+" : ""}${formatNumber(stats.diff)}h`} tone={stats.diff < 0 ? "bad" : "good"} />
-              <Kpi label="OT" value={`${formatNumber(stats.ot)}h`} />
-              <Kpi label="CO" value={`${stats.co}d`} />
-              <Kpi label="CM" value={`${stats.cm}d`} />
-              <Kpi label="SE" value={`${stats.se}d`} />
-              <Kpi label="AB" value={`${stats.ab}d`} tone={stats.ab ? "bad" : "neutral"} />
-              <Kpi label="Holidays" value={`${stats.holidays}`} />
+                </CompactField>
+                <button type="button" className={secondaryButtonClass("h-8 px-4")} onClick={addPublicHolidays}>Load</button>
+              </div>
+              <div className="flex min-w-0 flex-wrap items-center justify-start gap-1.5 rounded-lg border border-slate-200 bg-white px-2 py-1 dark:border-slate-800 dark:bg-slate-900 xl:flex-nowrap">
+                <Metric label="People" value={String(stats.people)} />
+                <Metric label="Worked" value={`${formatNumber(stats.worked)}h`} />
+                <Metric label="Norm" value={`${formatNumber(stats.norm)}h`} />
+                <Metric label="Diff" value={`${stats.diff > 0 ? "+" : ""}${formatNumber(stats.diff)}h`} tone={stats.diff < 0 ? "bad" : "good"} />
+                <Metric label="OT" value={`${formatNumber(stats.ot)}h`} />
+                <Metric label="CO" value={`${stats.co}d`} />
+                <Metric label="CM" value={`${stats.cm}d`} />
+                <Metric label="SE" value={`${stats.se}d`} />
+                <Metric label="AB" value={`${stats.ab}d`} tone={stats.ab ? "bad" : "neutral"} />
+                <Metric label="Holidays" value={`${stats.holidays}`} />
+              </div>
             </div>
           </div>
           <DailyBarStrip days={stats.daily} />
@@ -598,6 +597,15 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return (
     <label className="grid gap-1">
       <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function CompactField({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <label className={`grid gap-1 ${className}`}>
+      <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">{label}</span>
       {children}
     </label>
   );
@@ -716,6 +724,15 @@ function Kpi({ label, value, tone = "neutral" }: { label: string; value: string;
     <div className="flex min-h-11 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-center dark:border-slate-800 dark:bg-slate-950">
       <p className="text-[7px] font-black uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">{label}</p>
       <p className={`text-[13px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : ""}`}>{value}</p>
+    </div>
+  );
+}
+
+function Metric({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
+  return (
+    <div className="min-w-[48px] px-1.5 text-center">
+      <p className="text-[7px] font-black uppercase tracking-[0.1em] text-slate-400 dark:text-slate-500">{label}</p>
+      <p className={`text-[13px] font-black leading-tight ${tone === "good" ? "text-teal-700 dark:text-teal-300" : tone === "bad" ? "text-rose-700 dark:text-rose-300" : "text-slate-950 dark:text-white"}`}>{value}</p>
     </div>
   );
 }
