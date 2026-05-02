@@ -2412,7 +2412,7 @@ function centeredSelectClass(extra = "") {
 }
 
 function primaryButtonClass(extra = "") {
-  return `inline-flex h-8 items-center justify-center rounded-lg border border-teal-700 bg-teal-700 px-3 text-xs font-black text-white shadow-sm shadow-teal-700/15 transition hover:border-teal-800 hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 ${extra}`;
+  return `inline-flex h-8 items-center justify-center rounded-lg border border-teal-700 bg-teal-700 px-3 text-xs font-black text-white transition hover:border-teal-800 hover:bg-teal-800 dark:border-teal-500 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 ${extra}`;
 }
 
 function primaryDarkButtonClass(extra = "") {
