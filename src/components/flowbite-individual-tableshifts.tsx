@@ -342,8 +342,10 @@ function IndividualTableWorkspace({
   const [employeesOpen, setEmployeesOpen] = React.useState(false);
   const [holidaysOpen, setHolidaysOpen] = React.useState(false);
   const [activeCompanyId, setActiveCompanyId] = React.useState("");
+  const [speedDialSpotlightTableId, setSpeedDialSpotlightTableId] = React.useState<string | null>(null);
   const employeesButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const speedDialButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const markedSpotlightTableRef = React.useRef("");
   const organizations = React.useMemo(() => resolvedOrganizations(table), [table]);
   const activeCompany = organizations.find((company) => company.id === activeCompanyId) || organizations[0];
   const activeDepartment = activeCompany?.departments[0];
@@ -353,6 +355,13 @@ function IndividualTableWorkspace({
     if (!organizations.length) return;
     if (!organizations.some((company) => company.id === activeCompanyId)) setActiveCompanyId(organizations[0].id);
   }, [activeCompanyId, organizations]);
+
+  React.useEffect(() => {
+    if (table.speedDialSpotlightSeenAt || markedSpotlightTableRef.current === table.id) return;
+    markedSpotlightTableRef.current = table.id;
+    setSpeedDialSpotlightTableId(table.id);
+    onSave({ ...table, speedDialSpotlightSeenAt: new Date().toISOString() });
+  }, [table, onSave]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
@@ -759,6 +768,8 @@ function IndividualTableWorkspace({
         </section>
         <OrganizationSpeedDial
           buttonRef={speedDialButtonRef}
+          spotlight={speedDialSpotlightTableId === table.id}
+          onSpotlightDone={() => setSpeedDialSpotlightTableId((id) => id === table.id ? null : id)}
           onAddCompany={addCompany}
           onAddDepartment={() => addDepartment(activeCompany?.id)}
           onAddHolidays={() => {
@@ -1036,24 +1047,33 @@ function OrganizationBar({
 
 function OrganizationSpeedDial({
   buttonRef,
+  spotlight,
+  onSpotlightDone,
   onAddCompany,
   onAddDepartment,
   onAddHolidays
 }: {
   buttonRef: React.RefObject<HTMLButtonElement | null>;
+  spotlight: boolean;
+  onSpotlightDone: () => void;
   onAddCompany: () => void;
   onAddDepartment: () => void;
   onAddHolidays: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
-  const [spotlight, setSpotlight] = React.useState(true);
   React.useEffect(() => {
-    const timer = window.setTimeout(() => setSpotlight(false), 2200);
+    if (!spotlight) return;
+    const timer = window.setTimeout(onSpotlightDone, 2200);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [onSpotlightDone, spotlight]);
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
-      {spotlight ? <span className="pointer-events-none absolute bottom-0 right-0 h-16 w-16 animate-[speedDialSpotlight_2s_ease-out_forwards] rounded-full bg-teal-400/35 blur-sm" /> : null}
+      {spotlight ? (
+        <span
+          className="pointer-events-none absolute bottom-0 right-0 h-16 w-16 rounded-full bg-teal-400/35 blur-sm"
+          style={{ animation: "speedDialSpotlight 2s ease-out forwards" }}
+        />
+      ) : null}
       {open ? (
         <div className="flex flex-col items-end gap-2">
           <SpeedDialAction label="Company" onClick={() => {
@@ -1075,12 +1095,13 @@ function OrganizationSpeedDial({
         type="button"
         aria-label="Organization actions"
         aria-expanded={open}
-        className={`relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 text-4xl font-light leading-none text-white shadow-2xl shadow-teal-950/30 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-200 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 dark:focus:ring-teal-900 ${spotlight ? "animate-[speedDialEntrance_2s_ease-out_forwards]" : ""}`}
+        className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 text-4xl font-light leading-none text-white shadow-2xl shadow-teal-950/30 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-200 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 dark:focus:ring-teal-900"
+        style={spotlight ? { animation: "speedDialEntrance 2s ease-out forwards" } : undefined}
         onClick={() => setOpen((value) => !value)}
       >
         <span className={`transition ${open ? "rotate-45" : ""}`}>+</span>
       </button>
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes speedDialEntrance {
           0% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.55); }
           35% { transform: scale(1.08); box-shadow: 0 0 0 18px rgba(20, 184, 166, 0.18); }
