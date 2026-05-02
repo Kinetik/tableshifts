@@ -7,8 +7,14 @@ import { Toaster, toast } from "sonner";
 import { daysInMonth, formatNumber, monthOptions } from "@/lib/tableshifts";
 import {
   COUNTRY_OPTIONS,
+  DEFAULT_COMPANY_NAME,
+  DEFAULT_DEPARTMENT_NAME,
   SPECIAL_EVENT_REASONS,
+  defaultIndividualCompany,
+  defaultIndividualDepartment,
   type IndividualColumnWidths,
+  type IndividualCompanyGroup,
+  type IndividualDepartmentGroup,
   type IndividualEntry,
   type IndividualHoliday,
   type IndividualRow,
@@ -335,9 +341,18 @@ function IndividualTableWorkspace({
   const [totalColumnsOpen, setTotalColumnsOpen] = React.useState(false);
   const [employeesOpen, setEmployeesOpen] = React.useState(false);
   const [holidaysOpen, setHolidaysOpen] = React.useState(false);
+  const [activeCompanyId, setActiveCompanyId] = React.useState("");
   const employeesButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const holidaysButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const organizations = React.useMemo(() => resolvedOrganizations(table), [table]);
+  const activeCompany = organizations.find((company) => company.id === activeCompanyId) || organizations[0];
+  const activeDepartment = activeCompany?.departments[0];
   const employeeDirectory = React.useMemo(() => mergeEmployeeRows([...(table.employeePool || []), ...table.rows]), [table.employeePool, table.rows]);
+
+  React.useEffect(() => {
+    if (!organizations.length) return;
+    if (!organizations.some((company) => company.id === activeCompanyId)) setActiveCompanyId(organizations[0].id);
+  }, [activeCompanyId, organizations]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
@@ -359,8 +374,21 @@ function IndividualTableWorkspace({
     toast.success("Employee row removed.");
   }
 
-  function addBlankRow() {
-    onSave({ ...table, rows: [...table.rows, defaultIndividualRow()] });
+  function addBlankRow(companyName = activeCompany?.name, departmentName = activeDepartment?.name) {
+    const nextCompany = activeCompany || organizations.find((company) => company.name === companyName) || organizations[0] || defaultIndividualCompany("Company 1");
+    const nextDepartmentName = departmentName || nextCompany.departments[0]?.name || DEFAULT_DEPARTMENT_NAME;
+    onSave({
+      ...table,
+      organizations: ensureOrganizationFor(organizations, nextCompany.name, nextDepartmentName),
+      rows: [
+        ...table.rows,
+        {
+          ...defaultIndividualRow(),
+          company: nextCompany.name,
+          department: nextDepartmentName
+        }
+      ]
+    });
   }
 
   function setEntry(rowId: string, iso: string, entry: IndividualEntry | null) {
@@ -397,7 +425,13 @@ function IndividualTableWorkspace({
         const nextRows = individualRowsFromMatrix(rows);
         if (nextRows.length) {
           const employeePool = mergeEmployeeRows([...(table.employeePool || []), ...nextRows]);
-          onSave({ ...table, employeePool });
+          const nextOrganizations = nextRows.reduce(
+            (current, row) => ensureOrganizationFor(current, row.company || DEFAULT_COMPANY_NAME, row.department || DEFAULT_DEPARTMENT_NAME),
+            organizations
+          );
+          onSave({ ...table, organizations: nextOrganizations, employeePool });
+          const firstCompany = nextOrganizations.find((company) => company.name === (nextRows[0].company || DEFAULT_COMPANY_NAME));
+          if (firstCompany) setActiveCompanyId(firstCompany.id);
           setEmployeesOpen(true);
           toast.success(`${nextRows.length} employees added to the list.`);
         } else {
@@ -416,10 +450,13 @@ function IndividualTableWorkspace({
     if (selected) {
       if (activeRow) return;
       const rows = table.rows.filter((row) => individualRowHasContent(row) || rowHasRecordedData(row.id, table));
+      const nextCompany = employee.company.trim() || activeCompany?.name || DEFAULT_COMPANY_NAME;
+      const nextDepartment = employee.department.trim() || activeDepartment?.name || DEFAULT_DEPARTMENT_NAME;
       onSave({
         ...table,
+        organizations: ensureOrganizationFor(organizations, nextCompany, nextDepartment),
         employeePool: mergeEmployeeRows([...(table.employeePool || []), employee]),
-        rows: [...rows, employee]
+        rows: [...rows, { ...employee, company: nextCompany, department: nextDepartment }]
       });
       return;
     }
@@ -432,6 +469,76 @@ function IndividualTableWorkspace({
       employeePool: mergeEmployeeRows([...(table.employeePool || []), activeRow]),
       rows: table.rows.filter((row) => row.id !== activeRow.id),
       entries
+    });
+  }
+
+  function addCompany() {
+    const name = uniqueOrganizationName(organizations.map((company) => company.name), "Company");
+    const company = defaultIndividualCompany(name, organizations.length);
+    onSave({ ...table, organizations: [...organizations, company] });
+    setActiveCompanyId(company.id);
+  }
+
+  function renameCompany(companyId: string, name: string) {
+    const current = organizations.find((company) => company.id === companyId);
+    if (!current) return;
+    const nextName = name.trim() || current.name;
+    const nextOrganizations = organizations.map((company) => company.id === companyId ? { ...company, name: nextName } : company);
+    const rows = table.rows.map((row) => row.company === current.name ? { ...row, company: nextName } : row);
+    const employeePool = (table.employeePool || []).map((row) => row.company === current.name ? { ...row, company: nextName } : row);
+    onSave({ ...table, organizations: nextOrganizations, rows, employeePool });
+  }
+
+  function addDepartment(companyId = activeCompany?.id || "") {
+    const company = organizations.find((item) => item.id === companyId);
+    if (!company) return;
+    const name = uniqueOrganizationName(company.departments.map((department) => department.name), "Department");
+    const department = defaultIndividualDepartment(name, company.departments.length);
+    onSave({
+      ...table,
+      organizations: organizations.map((item) => item.id === company.id ? { ...item, departments: [...item.departments, department] } : item)
+    });
+  }
+
+  function renameDepartment(companyId: string, departmentId: string, name: string) {
+    const company = organizations.find((item) => item.id === companyId);
+    const department = company?.departments.find((item) => item.id === departmentId);
+    if (!company || !department) return;
+    const nextName = name.trim() || department.name;
+    const nextOrganizations = organizations.map((item) => item.id === companyId ? {
+      ...item,
+      departments: item.departments.map((dept) => dept.id === departmentId ? { ...dept, name: nextName } : dept)
+    } : item);
+    const rows = table.rows.map((row) => row.company === company.name && row.department === department.name ? { ...row, department: nextName } : row);
+    const employeePool = (table.employeePool || []).map((row) => row.company === company.name && row.department === department.name ? { ...row, department: nextName } : row);
+    onSave({ ...table, organizations: nextOrganizations, rows, employeePool });
+  }
+
+  function moveRowToDepartment(rowId: string, companyName: string, departmentName: string, beforeRowId?: string) {
+    const row = table.rows.find((item) => item.id === rowId);
+    if (!row) return;
+    const moved = { ...row, company: companyName, department: departmentName };
+    const remaining = table.rows.filter((item) => item.id !== rowId);
+    let nextRows = remaining;
+    if (beforeRowId) {
+      const insertIndex = remaining.findIndex((item) => item.id === beforeRowId);
+      nextRows = insertIndex >= 0
+        ? [...remaining.slice(0, insertIndex), moved, ...remaining.slice(insertIndex)]
+        : [...remaining, moved];
+    } else {
+      const lastInDepartment = remaining.reduce((lastIndex, item, index) => (
+        item.company === companyName && item.department === departmentName ? index : lastIndex
+      ), -1);
+      nextRows = [
+        ...remaining.slice(0, lastInDepartment + 1),
+        moved,
+        ...remaining.slice(lastInDepartment + 1)
+      ];
+    }
+    onSave({
+      ...table,
+      organizations: ensureOrganizationFor(organizations, companyName, departmentName),
+      rows: nextRows
     });
   }
 
@@ -514,6 +621,7 @@ function IndividualTableWorkspace({
                 <span className="inline-flex h-6 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                   {layoutMode === "desktop" ? "Desktop View" : "Mobile View"}
                 </span>
+                <ExpiryBadge expiresAt={table.expiresAt} />
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -561,7 +669,7 @@ function IndividualTableWorkspace({
           </div>
           <DailyBarStrip days={stats.daily} />
           <div className="mt-2 flex flex-wrap justify-start gap-2">
-            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={addBlankRow}>
+            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={() => addBlankRow()}>
               Add Row
             </button>
             <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
@@ -621,14 +729,26 @@ function IndividualTableWorkspace({
               onClose={() => setHolidaysOpen(false)}
             />
           ) : null}
+          <OrganizationBar
+            companies={organizations}
+            activeCompanyId={activeCompany?.id || ""}
+            onSelectCompany={setActiveCompanyId}
+            onAddCompany={addCompany}
+            onRenameCompany={renameCompany}
+            onAddDepartment={() => addDepartment(activeCompany?.id)}
+          />
         </section>
 
         <section className="min-h-0 flex-1 p-3 lg:p-4">
           {layoutMode === "mobile" ? (
             <MobileIndividualTable
               table={table}
+              company={activeCompany}
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
+              onRenameDepartment={renameDepartment}
+              onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
+              onAddDepartment={() => addDepartment(activeCompany?.id)}
               onSetEntry={setEntry}
               onFillRow={fillRow}
               onClearRow={clearRow}
@@ -636,8 +756,13 @@ function IndividualTableWorkspace({
           ) : (
             <DesktopIndividualTable
               table={table}
+              company={activeCompany}
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
+              onRenameDepartment={renameDepartment}
+              onMoveRowToDepartment={moveRowToDepartment}
+              onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
+              onAddDepartment={() => addDepartment(activeCompany?.id)}
               onSetEntry={setEntry}
               onFillRow={fillRow}
               onClearRow={clearRow}
@@ -883,6 +1008,100 @@ function HolidaysDropdown({
   );
 }
 
+function OrganizationBar({
+  companies,
+  activeCompanyId,
+  onSelectCompany,
+  onAddCompany,
+  onRenameCompany,
+  onAddDepartment
+}: {
+  companies: IndividualCompanyGroup[];
+  activeCompanyId: string;
+  onSelectCompany: (companyId: string) => void;
+  onAddCompany: () => void;
+  onRenameCompany: (companyId: string, name: string) => void;
+  onAddDepartment: () => void;
+}) {
+  const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
+  return (
+    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          {companies.map((company) => {
+            const active = company.id === activeCompany?.id;
+            return (
+              <button
+                key={company.id}
+                type="button"
+                className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-black transition ${active ? "border-teal-600 bg-teal-600 text-white shadow-sm shadow-teal-900/20 dark:border-teal-400 dark:bg-teal-400 dark:text-slate-950" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                onClick={() => onSelectCompany(company.id)}
+              >
+                {company.name}
+              </button>
+            );
+          })}
+          <button type="button" className={secondaryButtonClass("h-8 shrink-0")} onClick={onAddCompany}>+ Company</button>
+        </div>
+        {activeCompany ? (
+          <div className="flex flex-wrap items-end gap-2">
+            <CompactField label="Company" className="w-[180px]">
+              <EditableLabelInput value={activeCompany.name} onCommit={(name) => onRenameCompany(activeCompany.id, name)} />
+            </CompactField>
+            <button type="button" className={primaryButtonClass("h-8 px-3")} onClick={onAddDepartment}>Add Department</button>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EditableLabelInput({ value, onCommit, className = "" }: { value: string; onCommit: (value: string) => void; className?: string }) {
+  const [draft, setDraft] = React.useState(value);
+  React.useEffect(() => setDraft(value), [value]);
+  function commit() {
+    const next = draft.trim();
+    if (!next) {
+      setDraft(value);
+      return;
+    }
+    if (next !== value) onCommit(next);
+  }
+  return (
+    <input
+      className={inputClass(`h-8 text-center font-black ${className}`)}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Escape") {
+          setDraft(value);
+          event.currentTarget.blur();
+        }
+      }}
+    />
+  );
+}
+
+function ExpiryBadge({ expiresAt }: { expiresAt?: string }) {
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const expires = expiresAt && Number.isFinite(Date.parse(expiresAt)) ? Date.parse(expiresAt) : now;
+  const remaining = Math.max(0, expires - now);
+  const days = Math.floor(remaining / 86400000);
+  const hours = Math.floor((remaining % 86400000) / 3600000);
+  const tone = days <= 7 ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300" : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  return (
+    <span className={`inline-flex h-6 items-center rounded-full border px-2.5 text-[10px] font-black uppercase tracking-[0.12em] ${tone}`}>
+      Expires {days}d {hours}h
+    </span>
+  );
+}
+
 function Kpi({ label, value, tone = "neutral" }: { label: string; value: string; tone?: "neutral" | "good" | "bad" }) {
   return (
     <div className="flex min-h-11 flex-col items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-1.5 py-1 text-center dark:border-slate-800 dark:bg-slate-950">
@@ -954,8 +1173,13 @@ function clampIndividualColumnWidth(key: IndividualWidthKey, width: number) {
 
 function DesktopIndividualTable({
   table,
+  company,
   onUpdateRow,
   onRemoveRow,
+  onRenameDepartment,
+  onMoveRowToDepartment,
+  onAddRowToDepartment,
+  onAddDepartment,
   onSetEntry,
   onFillRow,
   onClearRow,
@@ -966,8 +1190,13 @@ function DesktopIndividualTable({
   onColumnWidthsChange
 }: {
   table: IndividualTableData;
+  company?: IndividualCompanyGroup;
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
+  onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onMoveRowToDepartment: (rowId: string, companyName: string, departmentName: string, beforeRowId?: string) => void;
+  onAddRowToDepartment: (companyName: string, departmentName: string) => void;
+  onAddDepartment: () => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
   onClearRow: (row: IndividualRow) => void;
@@ -981,10 +1210,15 @@ function DesktopIndividualTable({
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
   const committedWidths = React.useMemo(() => resolvedIndividualColumnWidths(table.columnWidths), [table.columnWidths]);
   const [draftWidths, setDraftWidths] = React.useState(committedWidths);
+  const [draggingRowId, setDraggingRowId] = React.useState("");
   React.useEffect(() => setDraftWidths(committedWidths), [committedWidths]);
+  const companyName = company?.name || DEFAULT_COMPANY_NAME;
+  const departments = company?.departments.length ? company.departments : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)];
+  const visibleRows = table.rows.filter((row) => row.company === companyName);
+  const fallbackRows = visibleRows.length ? visibleRows : table.rows.filter((row) => !row.company && company === undefined);
   const tableMinWidth = draftWidths.employee
     + 64
-    + (detailColumnsOpen ? draftWidths.company + draftWidths.department + draftWidths.identificationNumber + draftWidths.position : 0)
+    + (detailColumnsOpen ? draftWidths.identificationNumber + draftWidths.position : 0)
     + days.length * DAY_COLUMN_WIDTH
     + 64
     + (totalColumnsOpen ? 7 * 64 : 64)
@@ -999,6 +1233,14 @@ function DesktopIndividualTable({
     onColumnWidthsChange({ [key]: clampIndividualColumnWidth(key, width) });
   }
 
+  function dropOnDepartment(event: React.DragEvent<HTMLElement>, departmentName: string, beforeRowId?: string) {
+    event.preventDefault();
+    const rowId = event.dataTransfer.getData("text/plain") || draggingRowId;
+    if (!rowId) return;
+    onMoveRowToDepartment(rowId, companyName, departmentName, beforeRowId);
+    setDraggingRowId("");
+  }
+
   return (
     <div className="h-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-black/20">
       <div className="h-full overflow-auto">
@@ -1008,8 +1250,6 @@ function DesktopIndividualTable({
             <col className="w-16" />
             {detailColumnsOpen ? (
               <>
-                <col style={{ width: `${draftWidths.company}px` }} />
-                <col style={{ width: `${draftWidths.department}px` }} />
                 <col style={{ width: `${draftWidths.identificationNumber}px` }} />
                 <col style={{ width: `${draftWidths.position}px` }} />
               </>
@@ -1045,8 +1285,6 @@ function DesktopIndividualTable({
               </th>
               {detailColumnsOpen ? (
                 <>
-                  <ResizableHeader label="Company" widthKey="company" width={draftWidths.company} onResize={resizeColumn} onCommit={commitColumnWidth} />
-                  <ResizableHeader label="Department" widthKey="department" width={draftWidths.department} onResize={resizeColumn} onCommit={commitColumnWidth} />
                   <ResizableHeader label="ID" widthKey="identificationNumber" width={draftWidths.identificationNumber} onResize={resizeColumn} onCommit={commitColumnWidth} />
                   <ResizableHeader label="Position" widthKey="position" width={draftWidths.position} onResize={resizeColumn} onCommit={commitColumnWidth} />
                 </>
@@ -1071,73 +1309,128 @@ function DesktopIndividualTable({
             </tr>
           </thead>
           <tbody>
-            {table.rows.map((row) => {
-              const totals = individualTotals(row, table);
+            {departments.map((department) => {
+              const departmentRows = fallbackRows.filter((row) => (row.department || DEFAULT_DEPARTMENT_NAME) === department.name);
+              const colSpan = 1 + 1 + (detailColumnsOpen ? 2 : 0) + days.length + 1 + 1 + (totalColumnsOpen ? 7 : 0) + 1;
               return (
-                <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
-                  <td className="sticky left-0 z-20 border-r border-slate-200 bg-white px-2 py-1 shadow-[12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
-                    <input
-                      className={employeeNameInputClass()}
-                      value={row.name}
-                      placeholder="Employee name"
-                      onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
-                    />
-                  </td>
-                  <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
-                    <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleDetailColumns}>{detailColumnsOpen ? "Less" : "..."}</button>
-                  </td>
-                  {detailColumnsOpen ? (
-                    <>
-                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                        <input className={tableInputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
+                <React.Fragment key={department.id}>
+                  <tr
+                    className="border-b border-slate-200 bg-slate-100/80 dark:border-slate-800 dark:bg-slate-950"
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => dropOnDepartment(event, department.name)}
+                  >
+                    <td colSpan={colSpan} className="px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
+                          <EditableLabelInput
+                            value={department.name}
+                            className="w-[180px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                          />
+                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                            {departmentRows.length} employees
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="hidden text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 sm:inline">Drop rows here to move</span>
+                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Row</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  {departmentRows.length ? departmentRows.map((row) => {
+                    const totals = individualTotals(row, table);
+                    return (
+                      <tr
+                        key={row.id}
+                        draggable
+                        onDragStart={(event) => {
+                          setDraggingRowId(row.id);
+                          event.dataTransfer.setData("text/plain", row.id);
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
+                        onDragEnd={() => setDraggingRowId("")}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => dropOnDepartment(event, department.name, row.id)}
+                        className={`group border-b border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50 ${draggingRowId === row.id ? "opacity-45" : ""}`}
+                      >
+                        <td className="sticky left-0 z-20 border-r border-slate-200 bg-white px-2 py-1 shadow-[12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
+                          <div className="flex items-center gap-1">
+                            <span className="cursor-grab text-sm font-black text-slate-300 dark:text-slate-600" aria-hidden="true">⋮⋮</span>
+                            <input
+                              className={employeeNameInputClass("px-1")}
+                              value={row.name}
+                              placeholder="Employee name"
+                              onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
+                            />
+                          </div>
+                        </td>
+                        <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
+                          <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleDetailColumns}>{detailColumnsOpen ? "Less" : "..."}</button>
+                        </td>
+                        {detailColumnsOpen ? (
+                          <>
+                            <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                              <input className={tableInputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+                            </td>
+                            <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
+                              <input className={tableInputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
+                            </td>
+                          </>
+                        ) : null}
+                        {days.map((day) => (
+                          <DayCell
+                            key={day.iso}
+                            day={day}
+                            row={row}
+                            table={table}
+                            holiday={holidaysByDate.get(day.iso)}
+                            entry={table.entries[row.id]?.[day.iso]}
+                            onSetEntry={onSetEntry}
+                          />
+                        ))}
+                        <TotalCell>{formatNumber(totals.worked)}h</TotalCell>
+                        <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
+                          <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleTotalColumns}>{totalColumnsOpen ? "Less" : "..."}</button>
+                        </td>
+                        {totalColumnsOpen ? (
+                          <>
+                            <TotalCell>{formatNumber(totals.norm)}h</TotalCell>
+                            <TotalCell tone={totals.diff < 0 ? "bad" : "good"}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</TotalCell>
+                            <TotalCell>{formatNumber(totals.ot)}h</TotalCell>
+                            <TotalCell>{totals.co}d</TotalCell>
+                            <TotalCell>{totals.cm}d</TotalCell>
+                            <TotalCell>{totals.se}d</TotalCell>
+                            <TotalCell>{totals.ab}d</TotalCell>
+                          </>
+                        ) : null}
+                        <td className="sticky right-0 z-10 border-l border-r border-slate-200 bg-white px-2 py-1 shadow-[-12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
+                          <div className="flex items-center justify-center gap-1">
+                            <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onFillRow(row)}>Fill</button>
+                            <button type="button" className={tinyActionClass("text-slate-600 dark:text-slate-300")} onClick={() => onClearRow(row)}>Clear</button>
+                            <button type="button" className={tinyActionClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Del</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }) : (
+                    <tr className="border-b border-slate-100 dark:border-slate-800">
+                      <td colSpan={colSpan} className="px-3 py-5 text-center text-xs font-bold text-slate-400">
+                        No employees in this department yet.
                       </td>
-                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                        <input className={tableInputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
-                      </td>
-                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                        <input className={tableInputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
-                      </td>
-                      <td className="border-r border-slate-100 px-1 py-1 dark:border-slate-800">
-                        <input className={tableInputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
-                      </td>
-                    </>
-                  ) : null}
-                  {days.map((day) => (
-                    <DayCell
-                      key={day.iso}
-                      day={day}
-                      row={row}
-                      table={table}
-                      holiday={holidaysByDate.get(day.iso)}
-                      entry={table.entries[row.id]?.[day.iso]}
-                      onSetEntry={onSetEntry}
-                    />
-                  ))}
-                  <TotalCell>{formatNumber(totals.worked)}h</TotalCell>
-                  <td className="border-r border-slate-100 px-1 py-1 text-center dark:border-slate-800">
-                    <button type="button" className={tinyActionClass("text-slate-500 dark:text-slate-300")} onClick={onToggleTotalColumns}>{totalColumnsOpen ? "Less" : "..."}</button>
-                  </td>
-                  {totalColumnsOpen ? (
-                    <>
-                      <TotalCell>{formatNumber(totals.norm)}h</TotalCell>
-                      <TotalCell tone={totals.diff < 0 ? "bad" : "good"}>{totals.diff > 0 ? "+" : ""}{formatNumber(totals.diff)}h</TotalCell>
-                      <TotalCell>{formatNumber(totals.ot)}h</TotalCell>
-                      <TotalCell>{totals.co}d</TotalCell>
-                      <TotalCell>{totals.cm}d</TotalCell>
-                      <TotalCell>{totals.se}d</TotalCell>
-                      <TotalCell>{totals.ab}d</TotalCell>
-                    </>
-                  ) : null}
-                  <td className="sticky right-0 z-10 border-l border-r border-slate-200 bg-white px-2 py-1 shadow-[-12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
-                    <div className="flex items-center justify-center gap-1">
-                      <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onFillRow(row)}>Fill</button>
-                      <button type="button" className={tinyActionClass("text-slate-600 dark:text-slate-300")} onClick={() => onClearRow(row)}>Clear</button>
-                      <button type="button" className={tinyActionClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Del</button>
-                    </div>
-                  </td>
-                </tr>
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
+            {!departments.length ? (
+              <tr>
+                <td colSpan={1 + 1 + days.length + 1 + 1 + 1} className="px-3 py-8 text-center">
+                  <button type="button" className={primaryButtonClass()} onClick={onAddDepartment}>Add Department</button>
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
@@ -1200,95 +1493,135 @@ function ResizableHeader({
 
 function MobileIndividualTable({
   table,
+  company,
   onUpdateRow,
   onRemoveRow,
+  onRenameDepartment,
+  onAddRowToDepartment,
+  onAddDepartment,
   onSetEntry,
   onFillRow,
   onClearRow
 }: {
   table: IndividualTableData;
+  company?: IndividualCompanyGroup;
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
+  onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onAddRowToDepartment: (companyName: string, departmentName: string) => void;
+  onAddDepartment: () => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
   onClearRow: (row: IndividualRow) => void;
 }) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-  const [openRowId, setOpenRowId] = React.useState(table.rows[0]?.id || "");
+  const companyName = company?.name || DEFAULT_COMPANY_NAME;
+  const departments = company?.departments.length ? company.departments : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)];
+  const visibleRows = table.rows.filter((row) => row.company === companyName);
+  const [openRowId, setOpenRowId] = React.useState(visibleRows[0]?.id || "");
   React.useEffect(() => {
-    if (!table.rows.length) {
+    if (!visibleRows.length) {
       setOpenRowId("");
       return;
     }
-    if (!table.rows.some((row) => row.id === openRowId)) setOpenRowId(table.rows[0].id);
-  }, [openRowId, table.rows]);
+    if (!visibleRows.some((row) => row.id === openRowId)) setOpenRowId(visibleRows[0].id);
+  }, [openRowId, visibleRows]);
 
   return (
     <div className="grid gap-2">
-      {table.rows.map((row, index) => {
-        const totals = individualTotals(row, table);
-        const expanded = row.id === openRowId;
+      {departments.map((department) => {
+        const departmentRows = visibleRows.filter((row) => (row.department || DEFAULT_DEPARTMENT_NAME) === department.name);
         return (
-          <article key={row.id} className={`overflow-hidden rounded-xl border bg-white shadow-lg shadow-slate-200/60 transition dark:bg-slate-900 dark:shadow-black/20 ${expanded ? "border-teal-200 dark:border-teal-800" : "border-slate-200 dark:border-slate-800"}`}>
-            <button
-              type="button"
-              className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${expanded ? "bg-teal-50/70 dark:bg-teal-950/30" : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70"}`}
-              onClick={() => setOpenRowId(row.id)}
-              aria-expanded={expanded}
-            >
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-300">{index + 1}</span>
-                  <span className="truncate text-base font-black text-slate-950 dark:text-white">{row.name || "Employee name"}</span>
-                </div>
-                <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
-                  {[row.department, row.position].filter(Boolean).join(" / ") || row.company || row.identificationNumber || "No details yet"}
-                </p>
+          <section key={department.id} className="overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-lg shadow-slate-200/50 dark:border-slate-800 dark:bg-slate-950 dark:shadow-black/20">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
+                <EditableLabelInput
+                  value={department.name}
+                  className="w-[170px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                  onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                />
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="text-xs font-black text-slate-500 dark:text-slate-300">{formatNumber(totals.worked)}h</span>
-                <span className={`text-lg leading-none text-slate-400 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
+                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length}</span>
+                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Row</button>
               </div>
-            </button>
-            {expanded ? (
-              <div className="p-3">
-                <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
-                  <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
-                  <input className={inputClass()} value={row.company} placeholder="Company" onChange={(event) => onUpdateRow(row.id, { company: event.target.value })} />
-                  <input className={inputClass()} value={row.department} placeholder="Department" onChange={(event) => onUpdateRow(row.id, { department: event.target.value })} />
-                  <input className={inputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
-                  <input className={inputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
-                  <div className="grid grid-cols-4 gap-1">
-                    <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
-                    <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
-                    <Kpi label="CO" value={`${totals.co}d`} />
-                    <Kpi label="AB" value={`${totals.ab}d`} tone={totals.ab ? "bad" : "neutral"} />
-                  </div>
+            </div>
+            <div className="grid gap-2 p-2">
+              {departmentRows.length ? departmentRows.map((row, index) => {
+                const totals = individualTotals(row, table);
+                const expanded = row.id === openRowId;
+                return (
+                  <article key={row.id} className={`overflow-hidden rounded-xl border bg-white transition dark:bg-slate-900 ${expanded ? "border-teal-200 dark:border-teal-800" : "border-slate-200 dark:border-slate-800"}`}>
+                    <button
+                      type="button"
+                      className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${expanded ? "bg-teal-50/70 dark:bg-teal-950/30" : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70"}`}
+                      onClick={() => setOpenRowId(row.id)}
+                      aria-expanded={expanded}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-300">{index + 1}</span>
+                          <span className="truncate text-base font-black text-slate-950 dark:text-white">{row.name || "Employee name"}</span>
+                        </div>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
+                          {[row.position, row.identificationNumber].filter(Boolean).join(" / ") || "No details yet"}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="text-xs font-black text-slate-500 dark:text-slate-300">{formatNumber(totals.worked)}h</span>
+                        <span className={`text-lg leading-none text-slate-400 transition ${expanded ? "rotate-180" : ""}`}>⌄</span>
+                      </div>
+                    </button>
+                    {expanded ? (
+                      <div className="p-3">
+                        <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
+                          <input className={inputClass("font-black")} value={row.name} placeholder="Employee name" onChange={(event) => onUpdateRow(row.id, { name: event.target.value })} />
+                          <select className={selectClass()} value={row.department || department.name} onChange={(event) => onUpdateRow(row.id, { company: companyName, department: event.target.value })}>
+                            {departments.map((item) => <option key={item.id} value={item.name}>{item.name}</option>)}
+                          </select>
+                          <input className={inputClass()} value={row.identificationNumber} placeholder="ID" onChange={(event) => onUpdateRow(row.id, { identificationNumber: event.target.value })} />
+                          <input className={inputClass()} value={row.position} placeholder="Position" onChange={(event) => onUpdateRow(row.id, { position: event.target.value })} />
+                          <div className="grid grid-cols-4 gap-1">
+                            <Kpi label="Worked" value={`${formatNumber(totals.worked)}h`} />
+                            <Kpi label="Diff" value={`${totals.diff > 0 ? "+" : ""}${formatNumber(totals.diff)}h`} tone={totals.diff < 0 ? "bad" : "good"} />
+                            <Kpi label="CO" value={`${totals.co}d`} />
+                            <Kpi label="AB" value={`${totals.ab}d`} tone={totals.ab ? "bad" : "neutral"} />
+                          </div>
+                        </div>
+                        <div className="mt-3 grid grid-cols-7 gap-1">
+                          {days.map((day) => (
+                            <MobileDayButton
+                              key={day.iso}
+                              day={day}
+                              row={row}
+                              table={table}
+                              holiday={holidaysByDate.get(day.iso)}
+                              entry={table.entries[row.id]?.[day.iso]}
+                              onSetEntry={onSetEntry}
+                            />
+                          ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onFillRow(row)}>Fill Row</button>
+                          <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onClearRow(row)}>Clear Row</button>
+                          <button type="button" className={secondaryButtonClass("h-9 text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              }) : (
+                <div className="rounded-xl border border-dashed border-slate-200 px-3 py-5 text-center text-xs font-bold text-slate-400 dark:border-slate-800">
+                  No employees in this department yet.
                 </div>
-                <div className="mt-3 grid grid-cols-7 gap-1">
-                  {days.map((day) => (
-                    <MobileDayButton
-                      key={day.iso}
-                      day={day}
-                      row={row}
-                      table={table}
-                      holiday={holidaysByDate.get(day.iso)}
-                      entry={table.entries[row.id]?.[day.iso]}
-                      onSetEntry={onSetEntry}
-                    />
-                  ))}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onFillRow(row)}>Fill Row</button>
-                  <button type="button" className={secondaryButtonClass("h-9")} onClick={() => onClearRow(row)}>Clear Row</button>
-                  <button type="button" className={secondaryButtonClass("h-9 text-rose-700 dark:text-rose-300")} onClick={() => onRemoveRow(row.id)}>Delete</button>
-                </div>
-              </div>
-            ) : null}
-          </article>
+              )}
+            </div>
+          </section>
         );
       })}
+      <button type="button" className={secondaryButtonClass("h-10")} onClick={onAddDepartment}>Add Department</button>
     </div>
   );
 }
@@ -1653,6 +1986,45 @@ function sortIndividualHolidays(holidays: IndividualHoliday[]) {
 
 function monthLabel(month: string) {
   return monthOptions(month).find((option) => option.value === month)?.label || month;
+}
+
+function resolvedOrganizations(table: IndividualTableData) {
+  const seeded = table.organizations?.length ? table.organizations : [defaultIndividualCompany("Company 1")];
+  return table.rows.reduce((companies, row) => (
+    ensureOrganizationFor(companies, row.company || DEFAULT_COMPANY_NAME, row.department || DEFAULT_DEPARTMENT_NAME)
+  ), seeded).toSorted((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+
+function ensureOrganizationFor(organizations: IndividualCompanyGroup[], companyName: string, departmentName: string) {
+  const cleanCompany = companyName.trim() || DEFAULT_COMPANY_NAME;
+  const cleanDepartment = departmentName.trim() || DEFAULT_DEPARTMENT_NAME;
+  const companyIndex = organizations.findIndex((company) => company.name.trim().toLowerCase() === cleanCompany.toLowerCase());
+  if (companyIndex < 0) {
+    return [
+      ...organizations,
+      {
+        ...defaultIndividualCompany(cleanCompany, organizations.length),
+        departments: [defaultIndividualDepartment(cleanDepartment, 0)]
+      }
+    ];
+  }
+  const company = organizations[companyIndex];
+  if (company.departments.some((department) => department.name.trim().toLowerCase() === cleanDepartment.toLowerCase())) return organizations;
+  return organizations.map((item, index) => index === companyIndex ? {
+    ...item,
+    departments: [...item.departments, defaultIndividualDepartment(cleanDepartment, item.departments.length)]
+  } : item);
+}
+
+function uniqueOrganizationName(existingNames: string[], base: string) {
+  const normalized = new Set(existingNames.map((name) => name.trim().toLowerCase()));
+  let index = existingNames.length + 1;
+  let next = `${base} ${index}`;
+  while (normalized.has(next.toLowerCase())) {
+    index += 1;
+    next = `${base} ${index}`;
+  }
+  return next;
 }
 
 function employeeMatchKey(row: IndividualRow) {

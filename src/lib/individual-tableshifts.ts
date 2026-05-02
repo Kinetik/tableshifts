@@ -16,6 +16,19 @@ export type IndividualRow = {
   position: string;
 };
 
+export type IndividualDepartmentGroup = {
+  id: string;
+  name: string;
+  order: number;
+};
+
+export type IndividualCompanyGroup = {
+  id: string;
+  name: string;
+  order: number;
+  departments: IndividualDepartmentGroup[];
+};
+
 export type IndividualHoliday = {
   date: string;
   name: string;
@@ -34,6 +47,9 @@ export type IndividualTableData = {
   id: string;
   month: string;
   normalHours: number;
+  createdAt?: string;
+  expiresAt?: string;
+  organizations?: IndividualCompanyGroup[];
   rows: IndividualRow[];
   employeePool?: IndividualRow[];
   entries: Record<string, Record<string, IndividualEntry>>;
@@ -64,6 +80,10 @@ export const COUNTRY_OPTIONS = [
   ["US", "United States"]
 ] as const;
 
+export const INDIVIDUAL_TABLE_TTL_DAYS = 90;
+export const DEFAULT_COMPANY_NAME = "Company";
+export const DEFAULT_DEPARTMENT_NAME = "Department";
+
 export function makeIndividualId(prefix = "table") {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID().slice(0, 8)
@@ -82,17 +102,47 @@ export function defaultIndividualRow(): IndividualRow {
   };
 }
 
+export function defaultIndividualDepartment(name = DEFAULT_DEPARTMENT_NAME, order = 0): IndividualDepartmentGroup {
+  return {
+    id: makeIndividualId("dept"),
+    name,
+    order
+  };
+}
+
+export function defaultIndividualCompany(name = DEFAULT_COMPANY_NAME, order = 0): IndividualCompanyGroup {
+  return {
+    id: makeIndividualId("company"),
+    name,
+    order,
+    departments: [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)]
+  };
+}
+
 export function createIndividualTable(id = makeIndividualId()): IndividualTableData {
+  const company = defaultIndividualCompany("Company 1");
+  const department = company.departments[0];
+  const createdAt = new Date().toISOString();
+  const row = { ...defaultIndividualRow(), company: company.name, department: department.name };
   return {
     id,
     month: currentMonth(),
     normalHours: 8,
-    rows: [defaultIndividualRow()],
+    createdAt,
+    expiresAt: individualExpiryFromCreatedAt(createdAt),
+    organizations: [company],
+    rows: [row],
     employeePool: [],
     entries: {},
     holidays: [],
     columnWidths: {}
   };
+}
+
+export function individualExpiryFromCreatedAt(createdAt: string) {
+  const started = Number.isFinite(Date.parse(createdAt)) ? new Date(createdAt) : new Date();
+  started.setDate(started.getDate() + INDIVIDUAL_TABLE_TTL_DAYS);
+  return started.toISOString();
 }
 
 export function sanitizeIndividualNormalHours(value: unknown) {
@@ -113,13 +163,25 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
   }
   if (typeof value !== "object" || value === null) return null;
   const data = value as Partial<IndividualTableData>;
+  const createdAt = typeof data.createdAt === "string" && Number.isFinite(Date.parse(data.createdAt)) ? data.createdAt : new Date().toISOString();
   const rows = Array.isArray(data.rows) && data.rows.length ? data.rows.map(sanitizeIndividualRow) : [defaultIndividualRow()];
+  const organizations = sanitizeIndividualOrganizations(data.organizations, rows);
+  const firstCompany = organizations[0] || defaultIndividualCompany("Company 1");
+  const firstDepartment = firstCompany.departments[0] || defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0);
+  const normalizedRows = rows.map((row) => ({
+    ...row,
+    company: row.company.trim() || firstCompany.name,
+    department: row.department.trim() || firstDepartment.name
+  }));
   return {
     id: data.id || id,
     month: data.month || currentMonth(),
     normalHours: sanitizeIndividualNormalHours(data.normalHours),
-    rows,
-    employeePool: Array.isArray(data.employeePool) ? data.employeePool.map(sanitizeIndividualRow) : rows.filter(individualRowHasContent),
+    createdAt,
+    expiresAt: typeof data.expiresAt === "string" && Number.isFinite(Date.parse(data.expiresAt)) ? data.expiresAt : individualExpiryFromCreatedAt(createdAt),
+    organizations: sanitizeIndividualOrganizations(organizations, normalizedRows),
+    rows: normalizedRows,
+    employeePool: Array.isArray(data.employeePool) ? data.employeePool.map(sanitizeIndividualRow) : normalizedRows.filter(individualRowHasContent),
     entries: data.entries && typeof data.entries === "object" ? data.entries : {},
     holidays: Array.isArray(data.holidays) ? data.holidays.map((holiday) => ({
       date: holiday.date || "",
@@ -161,6 +223,70 @@ function sanitizeColumnWidth(value: unknown, min: number, max: number) {
   const width = Number(value);
   if (!Number.isFinite(width)) return undefined;
   return Math.max(min, Math.min(max, Math.round(width)));
+}
+
+export function sanitizeIndividualOrganizations(value: unknown, rows: IndividualRow[] = []): IndividualCompanyGroup[] {
+  const fromData = Array.isArray(value)
+    ? value.map((company, index) => sanitizeIndividualCompany(company as Partial<IndividualCompanyGroup>, index))
+    : [];
+  const companies = new Map<string, IndividualCompanyGroup>();
+
+  fromData.forEach((company) => {
+    companies.set(company.name.trim().toLowerCase(), company);
+  });
+
+  rows.forEach((row) => {
+    const companyName = row.company.trim() || DEFAULT_COMPANY_NAME;
+    const departmentName = row.department.trim() || DEFAULT_DEPARTMENT_NAME;
+    const companyKey = companyName.toLowerCase();
+    const existingCompany = companies.get(companyKey);
+    if (!existingCompany) {
+      companies.set(companyKey, {
+        id: makeIndividualId("company"),
+        name: companyName,
+        order: companies.size,
+        departments: [defaultIndividualDepartment(departmentName, 0)]
+      });
+      return;
+    }
+    const hasDepartment = existingCompany.departments.some((department) => department.name.trim().toLowerCase() === departmentName.toLowerCase());
+    if (!hasDepartment) {
+      existingCompany.departments.push(defaultIndividualDepartment(departmentName, existingCompany.departments.length));
+    }
+  });
+
+  if (!companies.size) {
+    const company = defaultIndividualCompany("Company 1");
+    companies.set(company.name.toLowerCase(), company);
+  }
+
+  return Array.from(companies.values())
+    .map((company, index) => ({
+      ...company,
+      order: Number.isFinite(company.order) ? company.order : index,
+      departments: company.departments.length ? company.departments : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)]
+    }))
+    .toSorted((a, b) => a.order - b.order || a.name.localeCompare(b.name));
+}
+
+function sanitizeIndividualCompany(company: Partial<IndividualCompanyGroup>, index: number): IndividualCompanyGroup {
+  const name = typeof company.name === "string" && company.name.trim() ? company.name.trim() : `${DEFAULT_COMPANY_NAME} ${index + 1}`;
+  return {
+    id: company.id || makeIndividualId("company"),
+    name,
+    order: Number.isFinite(Number(company.order)) ? Number(company.order) : index,
+    departments: Array.isArray(company.departments)
+      ? company.departments.map((department, departmentIndex) => sanitizeIndividualDepartment(department, departmentIndex))
+      : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)]
+  };
+}
+
+function sanitizeIndividualDepartment(department: Partial<IndividualDepartmentGroup>, index: number): IndividualDepartmentGroup {
+  return {
+    id: department.id || makeIndividualId("dept"),
+    name: typeof department.name === "string" && department.name.trim() ? department.name.trim() : `${DEFAULT_DEPARTMENT_NAME} ${index + 1}`,
+    order: Number.isFinite(Number(department.order)) ? Number(department.order) : index
+  };
 }
 
 export function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {

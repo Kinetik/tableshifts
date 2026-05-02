@@ -183,9 +183,13 @@ create table if not exists public.individual_tables (
   id uuid primary key default gen_random_uuid(),
   share_token text not null unique,
   table_data jsonb not null default '{}'::jsonb,
+  expires_at timestamptz not null default (now() + interval '90 days'),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.individual_tables
+add column if not exists expires_at timestamptz not null default (now() + interval '90 days');
 
 create index if not exists idx_profiles_environment on public.profiles(environment_id);
 create index if not exists idx_companies_environment on public.companies(environment_id);
@@ -197,6 +201,7 @@ create index if not exists idx_holidays_scope on public.national_holidays(enviro
 create index if not exists idx_documents_environment on public.documents(environment_id);
 create index if not exists idx_audit_environment_created on public.audit_logs(environment_id, created_at desc);
 create index if not exists idx_individual_tables_share_token on public.individual_tables(share_token);
+create index if not exists idx_individual_tables_expires_at on public.individual_tables(expires_at);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -688,15 +693,25 @@ for update using (false) with check (false);
 
 create or replace function public.get_individual_table(token_value text)
 returns jsonb
-language sql
+language plpgsql
 security definer
 set search_path = public
-stable
 as $$
+declare
+  result jsonb;
+begin
+  delete from public.individual_tables
+  where expires_at <= now();
+
   select table_data
+  into result
   from public.individual_tables
   where share_token = token_value
-  limit 1
+    and expires_at > now()
+  limit 1;
+
+  return result;
+end;
 $$;
 
 create or replace function public.save_individual_table(token_value text, data_value jsonb)
@@ -705,12 +720,35 @@ language plpgsql
 security definer
 set search_path = public
 as $$
+declare
+  next_expires_at timestamptz := coalesce((data_value->>'expiresAt')::timestamptz, now() + interval '90 days');
 begin
-  insert into public.individual_tables (share_token, table_data)
-  values (token_value, data_value)
+  delete from public.individual_tables
+  where expires_at <= now();
+
+  insert into public.individual_tables (share_token, table_data, expires_at)
+  values (token_value, data_value, next_expires_at)
   on conflict (share_token) do update
   set table_data = excluded.table_data,
+      expires_at = excluded.expires_at,
       updated_at = now();
+end;
+$$;
+
+create or replace function public.delete_expired_individual_tables()
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  deleted_count integer;
+begin
+  delete from public.individual_tables
+  where expires_at <= now();
+
+  get diagnostics deleted_count = row_count;
+  return deleted_count;
 end;
 $$;
 
