@@ -363,6 +363,13 @@ function IndividualTableWorkspace({
     onSave({ ...table, ...patch });
   }
 
+  function changeMonth(nextMonth: string) {
+    if (nextMonth === table.month) return;
+    if (!window.confirm(`Change this table to ${monthLabel(nextMonth)}? This clears all daily entries and holidays, while keeping companies, departments, and employees.`)) return;
+    onSave({ ...table, month: nextMonth, entries: {}, holidays: [] });
+    toast.success(`Month set to ${monthLabel(nextMonth)}.`);
+  }
+
   function updateRow(rowId: string, patch: Partial<IndividualRow>) {
     const rows = table.rows.map((row) => row.id === rowId ? { ...row, ...patch } : row);
     onSave({ ...table, rows });
@@ -693,7 +700,7 @@ function IndividualTableWorkspace({
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
               <div className="flex flex-wrap items-end gap-2.5">
                 <CompactField label="Month" className="w-[152px]">
-                  <select className={centeredSelectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
+                  <select className={centeredSelectClass()} value={table.month} onChange={(event) => changeMonth(event.target.value)}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </CompactField>
@@ -2389,7 +2396,7 @@ function themeLabel(theme: ThemeMode) {
 
 function ThemeModeIcon({ theme }: { theme: ThemeMode }) {
   const Icon = theme === "auto" ? Monitor : theme === "dark" ? Moon : Sun;
-  return <Icon className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />;
+  return <Icon className="h-5 w-5" aria-hidden="true" strokeWidth={2.35} />;
 }
 
 function inputClass(extra = "") {
