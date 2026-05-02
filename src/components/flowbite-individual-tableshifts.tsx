@@ -1275,9 +1275,9 @@ function EditableLabelInput({
 
 function DepartmentShiftSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   return (
-    <div className="flex shrink-0 items-center gap-2">
+    <div className="flex shrink-0 items-center gap-1.5">
       <select
-        className="h-8 w-[56px] shrink-0 appearance-none rounded-lg border border-slate-200 bg-white px-1 text-center text-sm font-black text-slate-950 shadow-sm shadow-slate-200/40 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:shadow-black/20"
+        className="h-8 w-[48px] shrink-0 appearance-none rounded-lg border border-slate-200 bg-white px-0 text-center text-sm font-black text-slate-950 shadow-sm shadow-slate-200/40 outline-none [text-align-last:center] focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:shadow-black/20"
         value={value}
         title="Department shift"
         aria-label="Department shift"
@@ -1536,8 +1536,8 @@ function DesktopIndividualTable({
                           <EditableLabelInput
                             value={department.name}
                             autoSize
-                            minCh={12}
-                            maxCh={28}
+                            minCh={18}
+                            maxCh={34}
                             className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
