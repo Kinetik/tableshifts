@@ -359,10 +359,6 @@ function IndividualTableWorkspace({
     if (!organizations.some((company) => company.id === activeCompanyId)) setActiveCompanyId(organizations[0].id);
   }, [activeCompanyId, organizations]);
 
-  function updateTable(patch: Partial<IndividualTableData>) {
-    onSave({ ...table, ...patch });
-  }
-
   function changeMonth(nextMonth: string) {
     if (nextMonth === table.month) return;
     if (!window.confirm(`Change this table to ${monthLabel(nextMonth)}? This clears all daily entries and holidays, while keeping companies, departments, and employees.`)) return;
@@ -495,6 +491,11 @@ function IndividualTableWorkspace({
     const current = organizations.find((company) => company.id === companyId);
     if (!current) return;
     const nextName = name.trim() || current.name;
+    const duplicate = organizations.some((company) => company.id !== companyId && company.name.trim().toLowerCase() === nextName.toLowerCase());
+    if (duplicate) {
+      toast.error(`${nextName} already exists.`);
+      return;
+    }
     const nextOrganizations = organizations.map((company) => company.id === companyId ? { ...company, name: nextName } : company);
     const rows = table.rows.map((row) => row.company === current.name ? { ...row, company: nextName } : row);
     const employeePool = (table.employeePool || []).map((row) => row.company === current.name ? { ...row, company: nextName } : row);
@@ -539,6 +540,11 @@ function IndividualTableWorkspace({
     const department = company?.departments.find((item) => item.id === departmentId);
     if (!company || !department) return;
     const nextName = name.trim() || department.name;
+    const duplicate = company.departments.some((item) => item.id !== departmentId && item.name.trim().toLowerCase() === nextName.toLowerCase());
+    if (duplicate) {
+      toast.error(`${nextName} already exists in ${company.name}.`);
+      return;
+    }
     const nextOrganizations = organizations.map((item) => item.id === companyId ? {
       ...item,
       departments: item.departments.map((dept) => dept.id === departmentId ? { ...dept, name: nextName } : dept)

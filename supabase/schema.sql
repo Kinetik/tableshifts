@@ -721,8 +721,15 @@ security definer
 set search_path = public
 as $$
 declare
-  next_expires_at timestamptz := coalesce((data_value->>'expiresAt')::timestamptz, now() + interval '90 days');
+  next_expires_at timestamptz;
 begin
+  begin
+    next_expires_at := nullif(data_value->>'expiresAt', '')::timestamptz;
+  exception when others then
+    next_expires_at := null;
+  end;
+  next_expires_at := coalesce(next_expires_at, now() + interval '90 days');
+
   delete from public.individual_tables
   where expires_at <= now();
 
@@ -730,7 +737,7 @@ begin
   values (token_value, data_value, next_expires_at)
   on conflict (share_token) do update
   set table_data = excluded.table_data,
-      expires_at = excluded.expires_at,
+      expires_at = public.individual_tables.expires_at,
       updated_at = now();
 end;
 $$;

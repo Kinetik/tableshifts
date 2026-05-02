@@ -292,10 +292,6 @@ function sanitizeIndividualDepartment(department: Partial<IndividualDepartmentGr
   };
 }
 
-export function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {
-  return sanitizeIndividualNormalHours(table.normalHours);
-}
-
 export function individualDepartmentNormalHours(department: Pick<IndividualDepartmentGroup, "normalHours"> | undefined, table: Pick<IndividualTableData, "normalHours">) {
   return sanitizeIndividualNormalHours(department?.normalHours ?? table.normalHours);
 }
@@ -393,17 +389,6 @@ export function exportIndividualXlsx(table: IndividualTableData) {
   downloadXlsx(`individual-tableshifts-${table.month}.xlsx`, "Individual TableShift", rows);
 }
 
-export function downloadCsv(filename: string, rows: Array<Array<string | number>>) {
-  const csv = rows.map((row) => row.map((cell) => `"${String(cell ?? "").replaceAll("\"", "\"\"")}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
 export function downloadXlsx(filename: string, sheetName: string, rows: Array<Array<string | number>>) {
   const worksheet = XLSX.utils.aoa_to_sheet(rows);
   const workbook = XLSX.utils.book_new();
@@ -448,35 +433,4 @@ export function individualRowsFromMatrix(rows: string[][]) {
       position: positionIndex >= 0 ? row[positionIndex] || "" : ""
     }))
     .filter((row) => row.name.trim());
-}
-
-export function parseCsv(text: string) {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-  for (let index = 0; index < text.length; index += 1) {
-    const char = text[index];
-    const next = text[index + 1];
-    if (char === "\"" && quoted && next === "\"") {
-      cell += "\"";
-      index += 1;
-    } else if (char === "\"") {
-      quoted = !quoted;
-    } else if (char === "," && !quoted) {
-      row.push(cell);
-      cell = "";
-    } else if ((char === "\n" || char === "\r") && !quoted) {
-      if (char === "\r" && next === "\n") index += 1;
-      row.push(cell);
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-  row.push(cell);
-  rows.push(row);
-  return rows.filter((items) => items.some((item) => item.trim()));
 }
