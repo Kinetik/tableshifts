@@ -618,9 +618,6 @@ function IndividualTableWorkspace({
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <h1 className="truncate text-2xl font-black tracking-tight">Individual TableShifts</h1>
-                <span className="inline-flex h-6 items-center rounded-full border border-slate-200 bg-slate-50 px-2.5 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                  {layoutMode === "desktop" ? "Desktop View" : "Mobile View"}
-                </span>
                 <ExpiryBadge expiresAt={table.expiresAt} />
               </div>
             </div>
@@ -731,7 +728,6 @@ function IndividualTableWorkspace({
             onSelectCompany={setActiveCompanyId}
             onAddCompany={addCompany}
             onRenameCompany={renameCompany}
-            onAddDepartment={() => addDepartment(activeCompany?.id)}
           />
         </section>
 
@@ -1011,46 +1007,70 @@ function OrganizationBar({
   activeCompanyId,
   onSelectCompany,
   onAddCompany,
-  onRenameCompany,
-  onAddDepartment
+  onRenameCompany
 }: {
   companies: IndividualCompanyGroup[];
   activeCompanyId: string;
   onSelectCompany: (companyId: string) => void;
   onAddCompany: () => void;
   onRenameCompany: (companyId: string, name: string) => void;
-  onAddDepartment: () => void;
 }) {
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
   return (
     <div className="mt-3 rounded-t-xl border-x border-t border-slate-200 bg-slate-100 px-2 pt-2 dark:border-slate-800 dark:bg-slate-950">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
-          {companies.map((company) => {
-            const active = company.id === activeCompany?.id;
-            return (
-              <button
-                key={company.id}
-                type="button"
-                className={`relative -mb-px shrink-0 rounded-t-lg border px-4 py-2 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`}
-                onClick={() => onSelectCompany(company.id)}
-              >
-                {company.name}
-              </button>
-            );
-          })}
-          <button type="button" className={secondaryButtonClass("h-8 shrink-0 rounded-t-lg rounded-b-none")} onClick={onAddCompany}>+ Company</button>
-        </div>
-        {activeCompany ? (
-          <div className="mb-2 flex flex-wrap items-end gap-2">
-            <CompactField label="Company" className="w-[180px]">
-              <EditableLabelInput value={activeCompany.name} onCommit={(name) => onRenameCompany(activeCompany.id, name)} />
-            </CompactField>
-            <button type="button" className={primaryButtonClass("h-8 px-3")} onClick={onAddDepartment}>Add Department</button>
-          </div>
-        ) : null}
+      <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+        {companies.map((company) => {
+          const active = company.id === activeCompany?.id;
+          return (
+            <CompanyTab
+              key={company.id}
+              company={company}
+              active={active}
+              onSelect={() => onSelectCompany(company.id)}
+              onRename={(name) => onRenameCompany(company.id, name)}
+            />
+          );
+        })}
+        <button type="button" className={secondaryButtonClass("h-8 shrink-0 rounded-t-lg rounded-b-none")} onClick={onAddCompany}>+ Company</button>
       </div>
     </div>
+  );
+}
+
+function CompanyTab({
+  company,
+  active,
+  onSelect,
+  onRename
+}: {
+  company: IndividualCompanyGroup;
+  active: boolean;
+  onSelect: () => void;
+  onRename: (name: string) => void;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const tabClass = `relative -mb-px shrink-0 rounded-t-lg border px-4 py-2 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
+  if (editing) {
+    return (
+      <EditableLabelInput
+        value={company.name}
+        className={`${tabClass} h-auto w-[140px] rounded-b-none border-b-white bg-white px-3 py-2 text-center dark:border-b-slate-900 dark:bg-slate-900`}
+        onCommit={(name) => {
+          onRename(name);
+          setEditing(false);
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={tabClass}
+      onClick={onSelect}
+      onDoubleClick={() => setEditing(true)}
+    >
+      {company.name}
+    </button>
   );
 }
 
@@ -1323,7 +1343,7 @@ function DesktopIndividualTable({
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
-                            className="w-[180px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            className="w-[124px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
                           <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -1333,6 +1353,7 @@ function DesktopIndividualTable({
                         <span className="hidden flex-1 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
                         <div className="flex flex-1 items-center justify-end gap-2">
                           <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
+                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
                         </div>
                       </div>
                     </td>
@@ -1537,13 +1558,14 @@ function MobileIndividualTable({
                 <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                 <EditableLabelInput
                   value={department.name}
-                  className="w-[170px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                  className="w-[132px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length}</span>
                 <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
+                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
               </div>
             </div>
             <div className="grid gap-2 p-2">
