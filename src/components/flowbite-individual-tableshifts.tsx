@@ -1338,12 +1338,12 @@ function DesktopIndividualTable({
                     onDrop={(event) => dropOnDepartment(event, department.name)}
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
-                      <div className="grid grid-cols-[minmax(170px,220px)_1fr_auto] items-center gap-2">
+                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(190px,240px)_1fr_auto] items-center gap-2">
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
-                            className="w-[96px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            className="w-[120px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
                           <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
@@ -1558,7 +1558,7 @@ function MobileIndividualTable({
                 <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                 <EditableLabelInput
                   value={department.name}
-                  className="w-[104px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                  className="w-[130px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                 />
               </div>
