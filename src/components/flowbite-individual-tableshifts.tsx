@@ -1089,6 +1089,26 @@ function CompanyTab({
   onRename: (name: string) => void;
 }) {
   const [editing, setEditing] = React.useState(false);
+  const longPressTimer = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    setEditing(false);
+    return () => {
+      if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    };
+  }, [company.id]);
+
+  function startLongPress(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.pointerType === "mouse") return;
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(() => setEditing(true), 520);
+  }
+
+  function clearLongPress() {
+    if (!longPressTimer.current) return;
+    window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
+
   const tabClass = `relative -mb-px inline-flex h-9 max-w-[170px] shrink-0 items-center justify-center rounded-t-lg border px-4 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
   if (editing) {
     return (
@@ -1106,8 +1126,17 @@ function CompanyTab({
     <button
       type="button"
       className={tabClass}
-      onClick={onSelect}
-      onDoubleClick={() => setEditing(true)}
+      onClick={(event) => {
+        if (event.detail === 1) onSelect();
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        setEditing(true);
+      }}
+      onPointerDown={startLongPress}
+      onPointerUp={clearLongPress}
+      onPointerCancel={clearLongPress}
+      onPointerLeave={clearLongPress}
     >
       <span className="truncate">{company.name}</span>
     </button>
@@ -1376,8 +1405,8 @@ function DesktopIndividualTable({
                     onDrop={(event) => dropOnDepartment(event, department.name)}
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
-                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(190px,240px)_1fr_auto] items-center gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
+                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(190px,240px)_1fr_minmax(190px,240px)] items-center gap-2">
+                        <div className="relative z-10 flex min-w-0 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
@@ -1388,7 +1417,7 @@ function DesktopIndividualTable({
                             {departmentRows.length} Employees
                           </span>
                         </div>
-                        <span className="hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
+                        <span className="pointer-events-none absolute inset-x-0 hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
                         <div />
                       </div>
                     </td>
