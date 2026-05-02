@@ -726,7 +726,6 @@ function IndividualTableWorkspace({
             companies={organizations}
             activeCompanyId={activeCompany?.id || ""}
             onSelectCompany={setActiveCompanyId}
-            onAddCompany={addCompany}
             onRenameCompany={renameCompany}
           />
         </section>
@@ -740,7 +739,6 @@ function IndividualTableWorkspace({
               onRemoveRow={removeRow}
               onRenameDepartment={renameDepartment}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
-              onAddDepartment={() => addDepartment(activeCompany?.id)}
               onSetEntry={setEntry}
               onFillRow={fillRow}
               onClearRow={clearRow}
@@ -754,7 +752,6 @@ function IndividualTableWorkspace({
               onRenameDepartment={renameDepartment}
               onMoveRowToDepartment={moveRowToDepartment}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
-              onAddDepartment={() => addDepartment(activeCompany?.id)}
               onSetEntry={setEntry}
               onFillRow={fillRow}
               onClearRow={clearRow}
@@ -766,6 +763,10 @@ function IndividualTableWorkspace({
             />
           )}
         </section>
+        <OrganizationSpeedDial
+          onAddCompany={addCompany}
+          onAddDepartment={() => addDepartment(activeCompany?.id)}
+        />
       </div>
     </main>
   );
@@ -1006,13 +1007,11 @@ function OrganizationBar({
   companies,
   activeCompanyId,
   onSelectCompany,
-  onAddCompany,
   onRenameCompany
 }: {
   companies: IndividualCompanyGroup[];
   activeCompanyId: string;
   onSelectCompany: (companyId: string) => void;
-  onAddCompany: () => void;
   onRenameCompany: (companyId: string, name: string) => void;
 }) {
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
@@ -1031,9 +1030,50 @@ function OrganizationBar({
             />
           );
         })}
-        <button type="button" className={secondaryButtonClass("h-8 shrink-0 rounded-t-lg rounded-b-none")} onClick={onAddCompany}>+ Company</button>
       </div>
     </div>
+  );
+}
+
+function OrganizationSpeedDial({ onAddCompany, onAddDepartment }: { onAddCompany: () => void; onAddDepartment: () => void }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+      {open ? (
+        <div className="flex flex-col items-end gap-2">
+          <SpeedDialAction label="Company" onClick={() => {
+            onAddCompany();
+            setOpen(false);
+          }} />
+          <SpeedDialAction label="Department" onClick={() => {
+            onAddDepartment();
+            setOpen(false);
+          }} />
+        </div>
+      ) : null}
+      <button
+        type="button"
+        aria-label="Organization actions"
+        aria-expanded={open}
+        className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-teal-700 text-2xl font-light leading-none text-white shadow-xl shadow-teal-950/25 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-200 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 dark:focus:ring-teal-900"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className={`transition ${open ? "rotate-45" : ""}`}>+</span>
+      </button>
+    </div>
+  );
+}
+
+function SpeedDialAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="group flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-lg shadow-slate-950/10 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+      onClick={onClick}
+    >
+      <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-teal-50 text-base text-teal-700 dark:bg-teal-950 dark:text-teal-300">+</span>
+      {label}
+    </button>
   );
 }
 
@@ -1197,7 +1237,6 @@ function DesktopIndividualTable({
   onRenameDepartment,
   onMoveRowToDepartment,
   onAddRowToDepartment,
-  onAddDepartment,
   onSetEntry,
   onFillRow,
   onClearRow,
@@ -1214,7 +1253,6 @@ function DesktopIndividualTable({
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
   onMoveRowToDepartment: (rowId: string, companyName: string, departmentName: string, beforeRowId?: string) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
-  onAddDepartment: () => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
   onClearRow: (row: IndividualRow) => void;
@@ -1351,10 +1389,7 @@ function DesktopIndividualTable({
                           </span>
                         </div>
                         <span className="hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
-                        <div className="flex items-center justify-end gap-2">
-                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
-                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
-                        </div>
+                        <div />
                       </div>
                     </td>
                   </tr>
@@ -1440,16 +1475,23 @@ function DesktopIndividualTable({
                       </td>
                     </tr>
                   )}
+                  <tr className="border-b border-slate-100 dark:border-slate-800">
+                    <td colSpan={colSpan} className="px-3 py-2">
+                      <div className="sticky left-0 flex w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] justify-center">
+                        <button
+                          type="button"
+                          aria-label="Add employee"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-teal-200 bg-white text-base font-black leading-none text-teal-700 shadow-sm shadow-slate-200/50 transition hover:bg-teal-50 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-300 dark:shadow-black/20 dark:hover:bg-teal-950"
+                          onClick={() => onAddRowToDepartment(companyName, department.name)}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
                 </React.Fragment>
               );
             })}
-            {!departments.length ? (
-              <tr>
-                <td colSpan={1 + 1 + days.length + 1 + 1 + 1} className="px-3 py-8 text-center">
-                  <button type="button" className={primaryButtonClass()} onClick={onAddDepartment}>Add Department</button>
-                </td>
-              </tr>
-            ) : null}
           </tbody>
         </table>
       </div>
@@ -1517,7 +1559,6 @@ function MobileIndividualTable({
   onRemoveRow,
   onRenameDepartment,
   onAddRowToDepartment,
-  onAddDepartment,
   onSetEntry,
   onFillRow,
   onClearRow
@@ -1528,7 +1569,6 @@ function MobileIndividualTable({
   onRemoveRow: (rowId: string) => void;
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
-  onAddDepartment: () => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
   onClearRow: (row: IndividualRow) => void;
@@ -1564,8 +1604,6 @@ function MobileIndividualTable({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length} Employees</span>
-                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
-                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
               </div>
             </div>
             <div className="grid gap-2 p-2">
@@ -1637,11 +1675,18 @@ function MobileIndividualTable({
                   No employees in this department yet.
                 </div>
               )}
+              <button
+                type="button"
+                aria-label="Add employee"
+                className="mx-auto inline-flex h-8 w-8 items-center justify-center rounded-full border border-teal-200 bg-white text-lg font-black leading-none text-teal-700 shadow-sm shadow-slate-200/60 transition hover:bg-teal-50 dark:border-teal-800 dark:bg-slate-900 dark:text-teal-300 dark:shadow-black/20 dark:hover:bg-teal-950"
+                onClick={() => onAddRowToDepartment(companyName, department.name)}
+              >
+                +
+              </button>
             </div>
           </section>
         );
       })}
-      <button type="button" className={secondaryButtonClass("h-10")} onClick={onAddDepartment}>Add Department</button>
     </div>
   );
 }
