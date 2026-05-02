@@ -1343,11 +1343,11 @@ function DesktopIndividualTable({
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
-                            className="w-[120px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            className="w-[120px] min-w-[120px] max-w-[120px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
-                          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
-                            {departmentRows.length} employees
+                          <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                            {departmentRows.length} Employees
                           </span>
                         </div>
                         <span className="hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
@@ -1563,7 +1563,7 @@ function MobileIndividualTable({
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length}</span>
+                <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length} Employees</span>
                 <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
                 <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
               </div>
