@@ -698,14 +698,14 @@ function IndividualTableWorkspace({
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 shadow-sm shadow-slate-200/30 dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-black/10">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="grid grid-cols-[minmax(7.75rem,1fr)_auto_auto] items-end gap-2 sm:flex sm:flex-wrap sm:gap-2.5">
-                <CompactField label="Month" className="min-w-0 sm:w-[152px]">
+              <div className="grid grid-cols-3 items-end gap-2 sm:flex sm:flex-wrap sm:gap-2.5">
+                <CompactField label="Month" className="min-w-0">
                   <select className={centeredSelectClass()} value={table.month} onChange={(event) => changeMonth(event.target.value)}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </CompactField>
                 <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
-                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("h-10 px-2.5 text-xs sm:h-8 sm:px-3")} onClick={() => {
+                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("h-10 min-w-0 px-1.5 text-xs sm:h-8 sm:w-auto sm:px-3")} onClick={() => {
                   setHolidaysOpen(false);
                   setEmployeesOpen((open) => !open);
                 }}>
@@ -713,7 +713,7 @@ function IndividualTableWorkspace({
                 </button>
                 <button
                   type="button"
-                  className={secondaryButtonClass("h-10 px-2.5 text-xs sm:h-8 sm:px-3")}
+                  className={secondaryButtonClass("h-10 min-w-0 px-1.5 text-xs sm:h-8 sm:w-auto sm:px-3")}
                   onClick={() => {
                     exportIndividualXlsx(table);
                     toast.success("XLSX exported.");
