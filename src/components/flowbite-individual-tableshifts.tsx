@@ -216,7 +216,7 @@ function PremiumCalmLogin({
               </div>
               <button
                 type="button"
-                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 onClick={() => setTheme(nextThemeMode(theme))}
                 title={`Theme: ${themeLabel(theme)}`}
                 aria-label={`Theme: ${themeLabel(theme)}`}
@@ -681,7 +681,7 @@ function IndividualTableWorkspace({
               <button type="button" className={secondaryButtonClass()} onClick={copyLink}>Copy Link</button>
               <button
                 type="button"
-                className={secondaryButtonClass("h-9 w-9 px-0")}
+                className={secondaryButtonClass("h-10 w-10 px-0")}
                 onClick={() => setTheme(nextThemeMode(theme))}
                 title={`Theme: ${themeLabel(theme)}`}
                 aria-label={`Theme: ${themeLabel(theme)}`}
@@ -698,14 +698,14 @@ function IndividualTableWorkspace({
         <section className="border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900 lg:px-6">
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2 shadow-sm shadow-slate-200/30 dark:border-slate-800 dark:bg-slate-950/55 dark:shadow-black/10">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div className="flex flex-wrap items-end gap-2.5">
-                <CompactField label="Month" className="w-[152px]">
+              <div className="grid grid-cols-[minmax(7.75rem,1fr)_auto_auto] items-end gap-2 sm:flex sm:flex-wrap sm:gap-2.5">
+                <CompactField label="Month" className="min-w-0 sm:w-[152px]">
                   <select className={centeredSelectClass()} value={table.month} onChange={(event) => changeMonth(event.target.value)}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </CompactField>
                 <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
-                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
+                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("h-10 px-2.5 text-xs sm:h-8 sm:px-3")} onClick={() => {
                   setHolidaysOpen(false);
                   setEmployeesOpen((open) => !open);
                 }}>
@@ -713,7 +713,7 @@ function IndividualTableWorkspace({
                 </button>
                 <button
                   type="button"
-                  className={secondaryButtonClass("w-full sm:w-auto")}
+                  className={secondaryButtonClass("h-10 px-2.5 text-xs sm:h-8 sm:px-3")}
                   onClick={() => {
                     exportIndividualXlsx(table);
                     toast.success("XLSX exported.");
@@ -2396,7 +2396,7 @@ function themeLabel(theme: ThemeMode) {
 
 function ThemeModeIcon({ theme }: { theme: ThemeMode }) {
   const Icon = theme === "auto" ? Monitor : theme === "dark" ? Moon : Sun;
-  return <Icon className="h-5 w-5" aria-hidden="true" strokeWidth={2.35} />;
+  return <Icon className="h-6 w-6" aria-hidden="true" strokeWidth={2.35} />;
 }
 
 function inputClass(extra = "") {
