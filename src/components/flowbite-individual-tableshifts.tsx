@@ -1049,12 +1049,12 @@ function CompanyTab({
   onRename: (name: string) => void;
 }) {
   const [editing, setEditing] = React.useState(false);
-  const tabClass = `relative -mb-px shrink-0 rounded-t-lg border px-4 py-2 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
+  const tabClass = `relative -mb-px inline-flex h-9 max-w-[170px] shrink-0 items-center justify-center rounded-t-lg border px-4 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
   if (editing) {
     return (
       <EditableLabelInput
         value={company.name}
-        className={`${tabClass} h-auto w-[140px] rounded-b-none border-b-white bg-white px-3 py-2 text-center dark:border-b-slate-900 dark:bg-slate-900`}
+        className="relative -mb-px h-9 w-[150px] max-w-[150px] shrink-0 rounded-b-none rounded-t-lg border-slate-200 border-b-white bg-white px-3 text-center text-xs font-black text-teal-700 dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300"
         onCommit={(name) => {
           onRename(name);
           setEditing(false);
@@ -1069,7 +1069,7 @@ function CompanyTab({
       onClick={onSelect}
       onDoubleClick={() => setEditing(true)}
     >
-      {company.name}
+      <span className="truncate">{company.name}</span>
     </button>
   );
 }
@@ -1338,20 +1338,20 @@ function DesktopIndividualTable({
                     onDrop={(event) => dropOnDepartment(event, department.name)}
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <div className="grid grid-cols-[minmax(170px,220px)_1fr_auto] items-center gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
-                            className="w-[124px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            className="w-[96px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
                           <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                             {departmentRows.length} employees
                           </span>
                         </div>
-                        <span className="hidden flex-1 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
-                        <div className="flex flex-1 items-center justify-end gap-2">
+                        <span className="hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
+                        <div className="flex items-center justify-end gap-2">
                           <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
                           <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={onAddDepartment}>Add Department</button>
                         </div>
@@ -1558,7 +1558,7 @@ function MobileIndividualTable({
                 <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                 <EditableLabelInput
                   value={department.name}
-                  className="w-[132px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                  className="w-[104px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                 />
               </div>
