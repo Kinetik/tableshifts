@@ -3,7 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { Monitor, Moon, Sun, X } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { daysInMonth, formatNumber, monthOptions } from "@/lib/tableshifts";
 import {
@@ -494,6 +494,28 @@ function IndividualTableWorkspace({
     onSave({ ...table, organizations: nextOrganizations, rows, employeePool });
   }
 
+  function removeCompany(companyId: string) {
+    const company = organizations.find((item) => item.id === companyId);
+    if (!company) return;
+    const rowsToRemove = table.rows.filter((row) => row.company === company.name);
+    const employeeCount = rowsToRemove.length;
+    const label = employeeCount === 1 ? "1 employee" : `${employeeCount} employees`;
+    if (!window.confirm(`Delete ${company.name}? This removes ${label} and all recorded shifts inside this company.`)) return;
+    const entries = { ...table.entries };
+    rowsToRemove.forEach((row) => delete entries[row.id]);
+    const remainingOrganizations = organizations.filter((item) => item.id !== companyId);
+    const nextOrganizations = remainingOrganizations.length ? remainingOrganizations : [defaultIndividualCompany("Company 1", 0)];
+    onSave({
+      ...table,
+      organizations: nextOrganizations,
+      rows: table.rows.filter((row) => row.company !== company.name),
+      employeePool: (table.employeePool || []).filter((row) => row.company !== company.name),
+      entries
+    });
+    if (activeCompanyId === companyId) setActiveCompanyId(nextOrganizations[0]?.id || "");
+    toast.success(`${company.name} removed.`);
+  }
+
   function addDepartment(companyId = activeCompany?.id || "") {
     const company = organizations.find((item) => item.id === companyId);
     if (!company) return;
@@ -517,6 +539,30 @@ function IndividualTableWorkspace({
     const rows = table.rows.map((row) => row.company === company.name && row.department === department.name ? { ...row, department: nextName } : row);
     const employeePool = (table.employeePool || []).map((row) => row.company === company.name && row.department === department.name ? { ...row, department: nextName } : row);
     onSave({ ...table, organizations: nextOrganizations, rows, employeePool });
+  }
+
+  function removeDepartment(companyId: string, departmentId: string) {
+    const company = organizations.find((item) => item.id === companyId);
+    const department = company?.departments.find((item) => item.id === departmentId);
+    if (!company || !department) return;
+    const rowsToRemove = table.rows.filter((row) => row.company === company.name && row.department === department.name);
+    const employeeCount = rowsToRemove.length;
+    const label = employeeCount === 1 ? "1 employee" : `${employeeCount} employees`;
+    if (!window.confirm(`Delete ${department.name}? This removes ${label} and all recorded shifts inside this department.`)) return;
+    const entries = { ...table.entries };
+    rowsToRemove.forEach((row) => delete entries[row.id]);
+    onSave({
+      ...table,
+      organizations: organizations.map((item) => {
+        if (item.id !== companyId) return item;
+        const departments = item.departments.filter((dept) => dept.id !== departmentId);
+        return { ...item, departments: departments.length ? departments : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)] };
+      }),
+      rows: table.rows.filter((row) => !(row.company === company.name && row.department === department.name)),
+      employeePool: (table.employeePool || []).filter((row) => !(row.company === company.name && row.department === department.name)),
+      entries
+    });
+    toast.success(`${department.name} removed.`);
   }
 
   function updateDepartmentHours(companyId: string, departmentId: string, normalHours: number) {
@@ -584,19 +630,6 @@ function IndividualTableWorkspace({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not load public holidays.");
     }
-  }
-
-  function addManualHoliday() {
-    const existingDates = new Set(table.holidays.map((holiday) => holiday.date));
-    const date = days.find((day) => !existingDates.has(day.iso))?.iso || `${table.month}-01`;
-    onSave({
-      ...table,
-      holidays: sortIndividualHolidays([
-        ...table.holidays,
-        { date, name: "Custom holiday", countryCode: holidayCountry }
-      ])
-    });
-    toast.success("Holiday added.");
   }
 
   function updateHoliday(index: number, patch: Partial<IndividualHoliday>) {
@@ -724,7 +757,6 @@ function IndividualTableWorkspace({
               onCountryChange={setHolidayCountry}
               onYearChange={setHolidayYear}
               onLoad={() => void addPublicHolidays()}
-              onAdd={addManualHoliday}
               onClear={clearMonthHolidays}
               onUpdateHoliday={updateHoliday}
               onRemoveHoliday={removeHoliday}
@@ -736,6 +768,7 @@ function IndividualTableWorkspace({
             activeCompanyId={activeCompany?.id || ""}
             onSelectCompany={setActiveCompanyId}
             onRenameCompany={renameCompany}
+            onRemoveCompany={removeCompany}
           />
         </section>
 
@@ -747,6 +780,7 @@ function IndividualTableWorkspace({
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
               onRenameDepartment={renameDepartment}
+              onRemoveDepartment={removeDepartment}
               onUpdateDepartmentHours={updateDepartmentHours}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
               onSetEntry={setEntry}
@@ -760,6 +794,7 @@ function IndividualTableWorkspace({
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
               onRenameDepartment={renameDepartment}
+              onRemoveDepartment={removeDepartment}
               onUpdateDepartmentHours={updateDepartmentHours}
               onMoveRowToDepartment={moveRowToDepartment}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
@@ -926,7 +961,6 @@ function HolidaysDropdown({
   onCountryChange,
   onYearChange,
   onLoad,
-  onAdd,
   onClear,
   onUpdateHoliday,
   onRemoveHoliday,
@@ -939,7 +973,6 @@ function HolidaysDropdown({
   onCountryChange: (country: string) => void;
   onYearChange: (year: string) => void;
   onLoad: () => void;
-  onAdd: () => void;
   onClear: () => void;
   onUpdateHoliday: (index: number, patch: Partial<IndividualHoliday>) => void;
   onRemoveHoliday: (index: number) => void;
@@ -969,7 +1002,6 @@ function HolidaysDropdown({
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{monthLabel(table.month)} calendar exceptions</p>
             </div>
             <div className="flex items-center gap-2">
-              <button type="button" className={secondaryButtonClass("h-8")} onClick={onAdd}>Add</button>
               <button type="button" className={secondaryButtonClass("h-8 text-rose-700 dark:text-rose-300")} onClick={onClear}>Clear</button>
             </div>
           </div>
@@ -1011,7 +1043,7 @@ function HolidaysDropdown({
           ) : (
             <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center dark:border-slate-800">
               <p className="text-sm font-black text-slate-700 dark:text-slate-200">No holidays in {monthLabel(table.month)}.</p>
-              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Load public holidays or add one manually.</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Load public holidays for this month.</p>
             </div>
           )}
         </div>
@@ -1025,12 +1057,14 @@ function OrganizationBar({
   companies,
   activeCompanyId,
   onSelectCompany,
-  onRenameCompany
+  onRenameCompany,
+  onRemoveCompany
 }: {
   companies: IndividualCompanyGroup[];
   activeCompanyId: string;
   onSelectCompany: (companyId: string) => void;
   onRenameCompany: (companyId: string, name: string) => void;
+  onRemoveCompany: (companyId: string) => void;
 }) {
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
   return (
@@ -1045,6 +1079,7 @@ function OrganizationBar({
               active={active}
               onSelect={() => onSelectCompany(company.id)}
               onRename={(name) => onRenameCompany(company.id, name)}
+              onRemove={() => onRemoveCompany(company.id)}
             />
           );
         })}
@@ -1168,12 +1203,14 @@ function CompanyTab({
   company,
   active,
   onSelect,
-  onRename
+  onRename,
+  onRemove
 }: {
   company: IndividualCompanyGroup;
   active: boolean;
   onSelect: () => void;
   onRename: (name: string) => void;
+  onRemove: () => void;
 }) {
   const [editing, setEditing] = React.useState(false);
   const longPressTimer = React.useRef<number | null>(null);
@@ -1196,7 +1233,7 @@ function CompanyTab({
     longPressTimer.current = null;
   }
 
-  const tabClass = `relative -mb-px inline-flex h-9 max-w-[170px] shrink-0 items-center justify-center rounded-t-lg border px-4 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
+  const tabClass = `relative -mb-px inline-flex h-9 max-w-[178px] shrink-0 items-center rounded-t-lg border text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`;
   if (editing) {
     return (
       <EditableLabelInput
@@ -1210,23 +1247,38 @@ function CompanyTab({
     );
   }
   return (
-    <button
-      type="button"
-      className={tabClass}
-      onClick={(event) => {
-        if (event.detail === 1) onSelect();
-      }}
-      onDoubleClick={(event) => {
-        event.preventDefault();
-        setEditing(true);
-      }}
-      onPointerDown={startLongPress}
-      onPointerUp={clearLongPress}
-      onPointerCancel={clearLongPress}
-      onPointerLeave={clearLongPress}
-    >
-      <span className="truncate">{company.name}</span>
-    </button>
+    <div className={tabClass}>
+      <button
+        type="button"
+        className="min-w-0 flex-1 px-4 py-2 text-left"
+        onClick={(event) => {
+          if (event.detail === 1) onSelect();
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          setEditing(true);
+        }}
+        onPointerDown={startLongPress}
+        onPointerUp={clearLongPress}
+        onPointerCancel={clearLongPress}
+        onPointerLeave={clearLongPress}
+      >
+        <span className="block truncate">{company.name}</span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Delete ${company.name}`}
+        title={`Delete ${company.name}`}
+        className="mr-1.5 grid h-4 w-4 shrink-0 place-items-center rounded-full text-slate-400 opacity-45 transition hover:bg-rose-50 hover:text-rose-600 hover:opacity-100 focus:bg-rose-50 focus:text-rose-600 focus:opacity-100 focus:outline-none dark:text-slate-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-300 dark:focus:bg-rose-950/50 dark:focus:text-rose-300"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onRemove();
+        }}
+      >
+        <X className="h-2.5 w-2.5" aria-hidden="true" strokeWidth={3} />
+      </button>
+    </div>
   );
 }
 
@@ -1291,6 +1343,20 @@ function DepartmentShiftSelect({ value, onChange }: { value: number; onChange: (
         Normal Shift Length
       </span>
     </div>
+  );
+}
+
+function TinyDeleteButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-slate-400 opacity-45 transition hover:bg-rose-50 hover:text-rose-600 hover:opacity-100 focus:bg-rose-50 focus:text-rose-600 focus:opacity-100 focus:outline-none dark:text-slate-500 dark:hover:bg-rose-950/50 dark:hover:text-rose-300 dark:focus:bg-rose-950/50 dark:focus:text-rose-300"
+      onClick={onClick}
+    >
+      <X className="h-3 w-3" aria-hidden="true" strokeWidth={3} />
+    </button>
   );
 }
 
@@ -1390,6 +1456,7 @@ function DesktopIndividualTable({
   onUpdateRow,
   onRemoveRow,
   onRenameDepartment,
+  onRemoveDepartment,
   onUpdateDepartmentHours,
   onMoveRowToDepartment,
   onAddRowToDepartment,
@@ -1407,6 +1474,7 @@ function DesktopIndividualTable({
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onRemoveDepartment: (companyId: string, departmentId: string) => void;
   onUpdateDepartmentHours: (companyId: string, departmentId: string, normalHours: number) => void;
   onMoveRowToDepartment: (rowId: string, companyName: string, departmentName: string, beforeRowId?: string) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
@@ -1543,6 +1611,10 @@ function DesktopIndividualTable({
                             maxCh={34}
                             className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                          />
+                          <TinyDeleteButton
+                            label={`Delete ${department.name}`}
+                            onClick={() => company && onRemoveDepartment(company.id, department.id)}
                           />
                           <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                             {departmentRows.length} Employees
@@ -1723,6 +1795,7 @@ function MobileIndividualTable({
   onUpdateRow,
   onRemoveRow,
   onRenameDepartment,
+  onRemoveDepartment,
   onUpdateDepartmentHours,
   onAddRowToDepartment,
   onSetEntry,
@@ -1734,6 +1807,7 @@ function MobileIndividualTable({
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onRemoveDepartment: (companyId: string, departmentId: string) => void;
   onUpdateDepartmentHours: (companyId: string, departmentId: string, normalHours: number) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
@@ -1766,6 +1840,10 @@ function MobileIndividualTable({
                   maxCh={22}
                   className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                />
+                <TinyDeleteButton
+                  label={`Delete ${department.name}`}
+                  onClick={() => company && onRemoveDepartment(company.id, department.id)}
                 />
                 <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length} Employees</span>
               </div>
