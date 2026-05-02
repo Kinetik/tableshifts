@@ -43,7 +43,6 @@ type Props = {
 
 type ThemeMode = "light" | "dark" | "auto";
 type LayoutMode = "desktop" | "mobile";
-const SPEED_DIAL_SPOTLIGHT_VERSION = 2;
 
 export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey }: Props) {
   const supabase = React.useMemo<SupabaseClient | null>(() => {
@@ -347,10 +346,9 @@ function IndividualTableWorkspace({
   const [employeesOpen, setEmployeesOpen] = React.useState(false);
   const [holidaysOpen, setHolidaysOpen] = React.useState(false);
   const [activeCompanyId, setActiveCompanyId] = React.useState("");
-  const [speedDialSpotlightTableId, setSpeedDialSpotlightTableId] = React.useState<string | null>(null);
+  const [speedDialSpotlight, setSpeedDialSpotlight] = React.useState(true);
   const employeesButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const speedDialButtonRef = React.useRef<HTMLButtonElement | null>(null);
-  const markedSpotlightTableRef = React.useRef("");
   const organizations = React.useMemo(() => resolvedOrganizations(table), [table]);
   const activeCompany = organizations.find((company) => company.id === activeCompanyId) || organizations[0];
   const activeDepartment = activeCompany?.departments[0];
@@ -360,17 +358,6 @@ function IndividualTableWorkspace({
     if (!organizations.length) return;
     if (!organizations.some((company) => company.id === activeCompanyId)) setActiveCompanyId(organizations[0].id);
   }, [activeCompanyId, organizations]);
-
-  React.useEffect(() => {
-    if (table.speedDialSpotlightSeenVersion === SPEED_DIAL_SPOTLIGHT_VERSION || markedSpotlightTableRef.current === table.id) return;
-    markedSpotlightTableRef.current = table.id;
-    setSpeedDialSpotlightTableId(table.id);
-    onSave({
-      ...table,
-      speedDialSpotlightSeenAt: new Date().toISOString(),
-      speedDialSpotlightSeenVersion: SPEED_DIAL_SPOTLIGHT_VERSION
-    });
-  }, [table, onSave]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
     onSave({ ...table, ...patch });
@@ -789,8 +776,8 @@ function IndividualTableWorkspace({
         </section>
         <OrganizationSpeedDial
           buttonRef={speedDialButtonRef}
-          spotlight={speedDialSpotlightTableId === table.id}
-          onSpotlightDone={() => setSpeedDialSpotlightTableId((id) => id === table.id ? null : id)}
+          spotlight={speedDialSpotlight}
+          onSpotlightDone={() => setSpeedDialSpotlight(false)}
           onAddCompany={addCompany}
           onAddDepartment={() => addDepartment(activeCompany?.id)}
           onAddHolidays={() => {
@@ -1288,17 +1275,22 @@ function EditableLabelInput({
 
 function DepartmentShiftSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
   return (
-    <select
-      className={centeredSelectClass("h-8 w-[68px] shrink-0 border-slate-200 bg-white px-2 text-sm font-black shadow-sm shadow-slate-200/40 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/20")}
-      value={value}
-      title="Department shift"
-      aria-label="Department shift"
-      onChange={(event) => onChange(Number(event.target.value))}
-    >
-      {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
-        <option key={hour} value={hour}>{hour}h</option>
-      ))}
-    </select>
+    <div className="flex shrink-0 items-center gap-2">
+      <select
+        className="h-8 w-[56px] shrink-0 appearance-none rounded-lg border border-slate-200 bg-white px-1 text-center text-sm font-black text-slate-950 shadow-sm shadow-slate-200/40 outline-none focus:border-teal-700 focus:ring-1 focus:ring-teal-700 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:shadow-black/20"
+        value={value}
+        title="Department shift"
+        aria-label="Department shift"
+        onChange={(event) => onChange(Number(event.target.value))}
+      >
+        {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
+          <option key={hour} value={hour}>{hour}h</option>
+        ))}
+      </select>
+      <span className="hidden whitespace-nowrap text-[10px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400 sm:inline">
+        Normal Shift Length
+      </span>
+    </div>
   );
 }
 
@@ -1538,7 +1530,7 @@ function DesktopIndividualTable({
                     onDrop={(event) => dropOnDepartment(event, department.name)}
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
-                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(280px,420px)_1fr_minmax(190px,240px)] items-center gap-2">
+                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(190px,1fr)_minmax(180px,280px)] items-center gap-2">
                         <div className="relative z-10 flex min-w-0 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
@@ -1549,16 +1541,17 @@ function DesktopIndividualTable({
                             className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                           />
-                          <DepartmentShiftSelect
-                            value={individualDepartmentNormalHours(department, table)}
-                            onChange={(hours) => company && onUpdateDepartmentHours(company.id, department.id, hours)}
-                          />
                           <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                             {departmentRows.length} Employees
                           </span>
                         </div>
                         <span className="pointer-events-none absolute inset-x-0 hidden text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
-                        <div />
+                        <div className="relative z-10 flex justify-end">
+                          <DepartmentShiftSelect
+                            value={individualDepartmentNormalHours(department, table)}
+                            onChange={(hours) => company && onUpdateDepartmentHours(company.id, department.id, hours)}
+                          />
+                        </div>
                       </div>
                     </td>
                   </tr>
@@ -1775,13 +1768,13 @@ function MobileIndividualTable({
                   className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
                 />
+                <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length} Employees</span>
+              </div>
+              <div className="flex shrink-0 justify-end">
                 <DepartmentShiftSelect
                   value={individualDepartmentNormalHours(department, table)}
                   onChange={(hours) => company && onUpdateDepartmentHours(company.id, department.id, hours)}
                 />
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length} Employees</span>
               </div>
             </div>
             <div className="grid gap-2 p-2">

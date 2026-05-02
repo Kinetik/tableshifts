@@ -50,8 +50,6 @@ export type IndividualTableData = {
   normalHours: number;
   createdAt?: string;
   expiresAt?: string;
-  speedDialSpotlightSeenAt?: string;
-  speedDialSpotlightSeenVersion?: number;
   organizations?: IndividualCompanyGroup[];
   rows: IndividualRow[];
   employeePool?: IndividualRow[];
@@ -182,8 +180,6 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
     normalHours: sanitizeIndividualNormalHours(data.normalHours),
     createdAt,
     expiresAt: typeof data.expiresAt === "string" && Number.isFinite(Date.parse(data.expiresAt)) ? data.expiresAt : individualExpiryFromCreatedAt(createdAt),
-    speedDialSpotlightSeenAt: typeof data.speedDialSpotlightSeenAt === "string" && Number.isFinite(Date.parse(data.speedDialSpotlightSeenAt)) ? data.speedDialSpotlightSeenAt : undefined,
-    speedDialSpotlightSeenVersion: Number.isFinite(Number(data.speedDialSpotlightSeenVersion)) ? Number(data.speedDialSpotlightSeenVersion) : undefined,
     organizations: sanitizeIndividualOrganizations(organizations, normalizedRows),
     rows: normalizedRows,
     employeePool: Array.isArray(data.employeePool) ? data.employeePool.map(sanitizeIndividualRow) : normalizedRows.filter(individualRowHasContent),
