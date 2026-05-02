@@ -652,6 +652,36 @@ function IndividualTableWorkspace({
                     ))}
                   </select>
                 </CompactField>
+                <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
+                <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
+                  setHolidaysOpen(false);
+                  setEmployeesOpen((open) => !open);
+                }}>
+                  Import Data
+                </button>
+                <button type="button" ref={holidaysButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
+                  setEmployeesOpen(false);
+                  setHolidaysOpen((open) => !open);
+                }}>
+                  Add Holidays
+                </button>
+                <button
+                  type="button"
+                  className={secondaryButtonClass("w-full sm:w-auto")}
+                  onClick={() => {
+                    exportIndividualXlsx(table);
+                    toast.success("XLSX exported.");
+                  }}
+                >
+                  Export
+                </button>
+                <input
+                  ref={fileInputRef}
+                  className="hidden"
+                  type="file"
+                  accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
+                />
               </div>
               <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-900 xl:flex-nowrap">
                 <Metric label="People" value={String(stats.people)} />
@@ -668,40 +698,6 @@ function IndividualTableWorkspace({
             </div>
           </div>
           <DailyBarStrip days={stats.daily} />
-          <div className="mt-2 flex flex-wrap justify-start gap-2">
-            <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={() => addBlankRow()}>
-              Add Row
-            </button>
-            <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
-              setHolidaysOpen(false);
-              setEmployeesOpen((open) => !open);
-            }}>
-              Add Employees
-            </button>
-            <button type="button" ref={holidaysButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
-              setEmployeesOpen(false);
-              setHolidaysOpen((open) => !open);
-            }}>
-              Add Holidays
-            </button>
-            <button
-              type="button"
-              className={secondaryButtonClass("w-full sm:w-auto")}
-              onClick={() => {
-                exportIndividualXlsx(table);
-                toast.success("XLSX exported.");
-              }}
-            >
-              Export
-            </button>
-            <input
-              ref={fileInputRef}
-              className="hidden"
-              type="file"
-              accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-              onChange={(event) => importEmployeeFile(event.target.files?.[0] || null)}
-            />
-          </div>
           {employeesOpen ? (
             <EmployeeDropdown
               anchorRef={employeesButtonRef}
@@ -837,7 +833,7 @@ function EmployeeDropdown({
 }) {
   if (typeof document === "undefined") return null;
   const rect = anchorRef.current?.getBoundingClientRect();
-  const width = Math.min(680, Math.max(320, window.innerWidth - 24));
+  const width = Math.min(760, Math.max(320, window.innerWidth - 24));
   const left = rect ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) : 12;
   const top = rect ? Math.min(rect.bottom + 8, window.innerHeight - 420) : 96;
 
@@ -851,7 +847,7 @@ function EmployeeDropdown({
       >
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Employees</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Import Data</p>
             <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{employees.length} saved in this table</p>
           </div>
           <div className="flex items-center gap-2">
@@ -860,11 +856,12 @@ function EmployeeDropdown({
           </div>
         </div>
         <div className="max-h-[390px] overflow-auto">
-          <table className="w-full min-w-[620px] border-collapse text-xs">
+          <table className="w-full min-w-[720px] border-collapse text-xs">
             <thead className="sticky top-0 bg-white text-slate-500 dark:bg-slate-900 dark:text-slate-400">
               <tr>
                 <th className="w-14 border-b border-slate-100 px-3 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Select</th>
                 <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Employee</th>
+                <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Company</th>
                 <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Department</th>
                 <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">ID</th>
                 <th className="border-b border-slate-100 px-2 py-2 text-left text-[10px] font-black uppercase tracking-[0.12em] dark:border-slate-800">Position</th>
@@ -884,6 +881,7 @@ function EmployeeDropdown({
                       />
                     </td>
                     <td className="border-b border-slate-100 px-2 py-2 font-black dark:border-slate-800">{employee.name || "Unnamed employee"}</td>
+                    <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.company || "-"}</td>
                     <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.department || "-"}</td>
                     <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.identificationNumber || "-"}</td>
                     <td className="border-b border-slate-100 px-2 py-2 text-slate-600 dark:border-slate-800 dark:text-slate-300">{employee.position || "-"}</td>
@@ -891,7 +889,7 @@ function EmployeeDropdown({
                 );
               }) : (
                 <tr>
-                  <td colSpan={5} className="px-3 py-8 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  <td colSpan={6} className="px-3 py-8 text-center text-sm font-semibold text-slate-500 dark:text-slate-400">
                     Import a template or type an employee in the table to build this list.
                   </td>
                 </tr>
@@ -1025,8 +1023,8 @@ function OrganizationBar({
 }) {
   const activeCompany = companies.find((company) => company.id === activeCompanyId) || companies[0];
   return (
-    <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-2 py-2 dark:border-slate-800 dark:bg-slate-950">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+    <div className="mt-3 rounded-t-xl border-x border-t border-slate-200 bg-slate-100 px-2 pt-2 dark:border-slate-800 dark:bg-slate-950">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           {companies.map((company) => {
             const active = company.id === activeCompany?.id;
@@ -1034,17 +1032,17 @@ function OrganizationBar({
               <button
                 key={company.id}
                 type="button"
-                className={`shrink-0 rounded-lg border px-3 py-1.5 text-xs font-black transition ${active ? "border-teal-600 bg-teal-600 text-white shadow-sm shadow-teal-900/20 dark:border-teal-400 dark:bg-teal-400 dark:text-slate-950" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+                className={`relative -mb-px shrink-0 rounded-t-lg border px-4 py-2 text-xs font-black transition ${active ? "z-10 border-slate-200 border-b-white bg-white text-teal-700 shadow-sm dark:border-slate-800 dark:border-b-slate-900 dark:bg-slate-900 dark:text-teal-300" : "border-slate-200 bg-slate-50 text-slate-500 hover:bg-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400 dark:hover:bg-slate-900"}`}
                 onClick={() => onSelectCompany(company.id)}
               >
                 {company.name}
               </button>
             );
           })}
-          <button type="button" className={secondaryButtonClass("h-8 shrink-0")} onClick={onAddCompany}>+ Company</button>
+          <button type="button" className={secondaryButtonClass("h-8 shrink-0 rounded-t-lg rounded-b-none")} onClick={onAddCompany}>+ Company</button>
         </div>
         {activeCompany ? (
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="mb-2 flex flex-wrap items-end gap-2">
             <CompactField label="Company" className="w-[180px]">
               <EditableLabelInput value={activeCompany.name} onCommit={(name) => onRenameCompany(activeCompany.id, name)} />
             </CompactField>
@@ -1321,7 +1319,7 @@ function DesktopIndividualTable({
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex min-w-0 items-center gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
@@ -1332,9 +1330,9 @@ function DesktopIndividualTable({
                             {departmentRows.length} employees
                           </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="hidden text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 sm:inline">Drop rows here to move</span>
-                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Row</button>
+                        <span className="hidden flex-1 text-center text-[10px] font-bold uppercase tracking-[0.1em] text-slate-400 md:block">Drop rows here to move</span>
+                        <div className="flex flex-1 items-center justify-end gap-2">
+                          <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
                         </div>
                       </div>
                     </td>
@@ -1545,7 +1543,7 @@ function MobileIndividualTable({
               </div>
               <div className="flex shrink-0 items-center gap-2">
                 <span className="rounded-full bg-white px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-500 dark:bg-slate-900 dark:text-slate-400">{departmentRows.length}</span>
-                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Row</button>
+                <button type="button" className={tinyActionClass("text-teal-700 dark:text-teal-300")} onClick={() => onAddRowToDepartment(companyName, department.name)}>Add Employee</button>
               </div>
             </div>
             <div className="grid gap-2 p-2">
