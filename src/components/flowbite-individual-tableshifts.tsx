@@ -334,7 +334,9 @@ function IndividualTableWorkspace({
   const [detailColumnsOpen, setDetailColumnsOpen] = React.useState(false);
   const [totalColumnsOpen, setTotalColumnsOpen] = React.useState(false);
   const [employeesOpen, setEmployeesOpen] = React.useState(false);
+  const [holidaysOpen, setHolidaysOpen] = React.useState(false);
   const employeesButtonRef = React.useRef<HTMLButtonElement | null>(null);
+  const holidaysButtonRef = React.useRef<HTMLButtonElement | null>(null);
   const employeeDirectory = React.useMemo(() => mergeEmployeeRows([...(table.employeePool || []), ...table.rows]), [table.employeePool, table.rows]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
@@ -461,6 +463,42 @@ function IndividualTableWorkspace({
     }
   }
 
+  function addManualHoliday() {
+    const existingDates = new Set(table.holidays.map((holiday) => holiday.date));
+    const date = days.find((day) => !existingDates.has(day.iso))?.iso || `${table.month}-01`;
+    onSave({
+      ...table,
+      holidays: sortIndividualHolidays([
+        ...table.holidays,
+        { date, name: "Custom holiday", countryCode: holidayCountry }
+      ])
+    });
+    toast.success("Holiday added.");
+  }
+
+  function updateHoliday(index: number, patch: Partial<IndividualHoliday>) {
+    const holidays = table.holidays.map((holiday, holidayIndex) => (
+      holidayIndex === index ? { ...holiday, ...patch } : holiday
+    ));
+    onSave({ ...table, holidays: sortIndividualHolidays(holidays) });
+  }
+
+  function removeHoliday(index: number) {
+    onSave({ ...table, holidays: table.holidays.filter((_, holidayIndex) => holidayIndex !== index) });
+    toast.success("Holiday removed.");
+  }
+
+  function clearMonthHolidays() {
+    const count = table.holidays.filter((holiday) => holiday.date.startsWith(`${table.month}-`)).length;
+    if (!count) {
+      toast.message("No holidays in this month.");
+      return;
+    }
+    if (!window.confirm(`Clear ${count} holidays from ${monthLabel(table.month)}?`)) return;
+    onSave({ ...table, holidays: table.holidays.filter((holiday) => !holiday.date.startsWith(`${table.month}-`)) });
+    toast.success("Month holidays cleared.");
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-white">
       <div className="flex min-h-screen flex-col">
@@ -506,19 +544,6 @@ function IndividualTableWorkspace({
                     ))}
                   </select>
                 </CompactField>
-                <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
-                <div className="hidden h-8 items-center rounded-md bg-slate-100 px-2 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:bg-slate-800 dark:text-slate-300 sm:flex">
-                  Holidays
-                </div>
-                <CompactField label="Country" className="w-[158px]">
-                  <select className={centeredSelectClass()} value={holidayCountry} onChange={(event) => setHolidayCountry(event.target.value)}>
-                    {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-                  </select>
-                </CompactField>
-                <CompactField label="Year" className="w-[76px]">
-                  <input className={inputClass("text-center")} value={holidayYear} inputMode="numeric" onChange={(event) => setHolidayYear(event.target.value.replace(/\D/g, "").slice(0, 4))} />
-                </CompactField>
-                <button type="button" className={secondaryButtonClass("h-8 px-4")} onClick={addPublicHolidays}>Load</button>
               </div>
               <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 dark:border-slate-800 dark:bg-slate-900 xl:flex-nowrap">
                 <Metric label="People" value={String(stats.people)} />
@@ -539,8 +564,17 @@ function IndividualTableWorkspace({
             <button type="button" className={primaryButtonClass("w-full sm:w-auto")} onClick={addBlankRow}>
               Add Row
             </button>
-            <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => setEmployeesOpen((open) => !open)}>
+            <button type="button" ref={employeesButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
+              setHolidaysOpen(false);
+              setEmployeesOpen((open) => !open);
+            }}>
               Add Employees
+            </button>
+            <button type="button" ref={holidaysButtonRef} className={primaryButtonClass("w-full sm:w-auto")} onClick={() => {
+              setEmployeesOpen(false);
+              setHolidaysOpen((open) => !open);
+            }}>
+              Add Holidays
             </button>
             <button
               type="button"
@@ -569,6 +603,22 @@ function IndividualTableWorkspace({
               onImport={() => fileInputRef.current?.click()}
               onTemplate={downloadIndividualTemplate}
               onToggleEmployee={toggleEmployee}
+            />
+          ) : null}
+          {holidaysOpen ? (
+            <HolidaysDropdown
+              anchorRef={holidaysButtonRef}
+              table={table}
+              country={holidayCountry}
+              year={holidayYear}
+              onCountryChange={setHolidayCountry}
+              onYearChange={setHolidayYear}
+              onLoad={() => void addPublicHolidays()}
+              onAdd={addManualHoliday}
+              onClear={clearMonthHolidays}
+              onUpdateHoliday={updateHoliday}
+              onRemoveHoliday={removeHoliday}
+              onClose={() => setHolidaysOpen(false)}
             />
           ) : null}
         </section>
@@ -723,6 +773,109 @@ function EmployeeDropdown({
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+
+function HolidaysDropdown({
+  anchorRef,
+  table,
+  country,
+  year,
+  onCountryChange,
+  onYearChange,
+  onLoad,
+  onAdd,
+  onClear,
+  onUpdateHoliday,
+  onRemoveHoliday,
+  onClose
+}: {
+  anchorRef: React.RefObject<HTMLButtonElement | null>;
+  table: IndividualTableData;
+  country: string;
+  year: string;
+  onCountryChange: (country: string) => void;
+  onYearChange: (year: string) => void;
+  onLoad: () => void;
+  onAdd: () => void;
+  onClear: () => void;
+  onUpdateHoliday: (index: number, patch: Partial<IndividualHoliday>) => void;
+  onRemoveHoliday: (index: number) => void;
+  onClose: () => void;
+}) {
+  if (typeof document === "undefined") return null;
+  const rect = anchorRef.current?.getBoundingClientRect();
+  const width = Math.min(560, Math.max(320, window.innerWidth - 24));
+  const left = rect ? Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)) : 12;
+  const top = rect ? Math.min(rect.bottom + 8, window.innerHeight - 430) : 96;
+  const monthHolidays = table.holidays
+    .map((holiday, index) => ({ holiday, index }))
+    .filter(({ holiday }) => holiday.date.startsWith(`${table.month}-`));
+
+  return createPortal(
+    <>
+      <button type="button" aria-label="Close holidays menu" className="fixed inset-0 z-[89] cursor-default bg-transparent" onClick={onClose} />
+      <div
+        className="fixed z-[90] max-h-[min(540px,calc(100vh-7rem))] overflow-hidden rounded-lg border border-slate-200 bg-white text-slate-950 shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+        style={{ left, top: Math.max(12, top), width }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Holidays</p>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{monthLabel(table.month)} calendar exceptions</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" className={secondaryButtonClass("h-8")} onClick={onAdd}>Add</button>
+              <button type="button" className={secondaryButtonClass("h-8 text-rose-700 dark:text-rose-300")} onClick={onClear}>Clear</button>
+            </div>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_92px_auto]">
+            <label className="grid gap-1">
+              <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Country</span>
+              <select className={centeredSelectClass()} value={country} onChange={(event) => onCountryChange(event.target.value)}>
+                {COUNTRY_OPTIONS.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+              </select>
+            </label>
+            <label className="grid gap-1">
+              <span className="text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Year</span>
+              <input className={inputClass("text-center")} value={year} inputMode="numeric" onChange={(event) => onYearChange(event.target.value.replace(/\D/g, "").slice(0, 4))} />
+            </label>
+            <button type="button" className={primaryButtonClass("h-9 self-end px-5")} onClick={onLoad}>Load</button>
+          </div>
+        </div>
+        <div className="max-h-[330px] overflow-auto px-3 py-2">
+          {monthHolidays.length ? (
+            <div className="grid gap-2">
+              {monthHolidays.map(({ holiday, index }) => (
+                <div key={`${holiday.date}-${holiday.name}-${index}`} className="grid grid-cols-[124px_1fr_auto] items-center gap-2 rounded-lg border border-slate-200 bg-white p-2 dark:border-slate-800 dark:bg-slate-950">
+                  <input
+                    type="date"
+                    className={inputClass("h-8 text-center")}
+                    value={holiday.date}
+                    onChange={(event) => onUpdateHoliday(index, { date: event.target.value })}
+                  />
+                  <input
+                    className={inputClass("h-8")}
+                    value={holiday.name}
+                    placeholder="Holiday name"
+                    onChange={(event) => onUpdateHoliday(index, { name: event.target.value })}
+                  />
+                  <button type="button" className={tinyActionClass("text-rose-700 dark:text-rose-300")} onClick={() => onRemoveHoliday(index)}>Del</button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-slate-200 px-4 py-8 text-center dark:border-slate-800">
+              <p className="text-sm font-black text-slate-700 dark:text-slate-200">No holidays in {monthLabel(table.month)}.</p>
+              <p className="mt-1 text-xs font-semibold text-slate-500 dark:text-slate-400">Load public holidays or add one manually.</p>
+            </div>
+          )}
         </div>
       </div>
     </>,
@@ -1492,6 +1645,14 @@ function individualHeaderStats(table: IndividualTableData) {
         return { day: day.day, worked, variance: worked - norm };
       })
   };
+}
+
+function sortIndividualHolidays(holidays: IndividualHoliday[]) {
+  return [...holidays].toSorted((a, b) => a.date.localeCompare(b.date) || a.name.localeCompare(b.name));
+}
+
+function monthLabel(month: string) {
+  return monthOptions(month).find((option) => option.value === month)?.label || month;
 }
 
 function employeeMatchKey(row: IndividualRow) {
