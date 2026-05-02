@@ -924,7 +924,7 @@ function DesktopIndividualTable({
                 <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
                   <td className="sticky left-0 z-20 border-r border-slate-200 bg-white px-2 py-1 shadow-[12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
                     <input
-                      className={tableInputClass("text-sm font-black")}
+                      className={employeeNameInputClass()}
                       value={row.name}
                       placeholder="Employee name"
                       onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
@@ -1155,37 +1155,70 @@ function MobileDayButton({
   entry?: IndividualEntry;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
 }) {
-  const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const [actionSheetOpen, setActionSheetOpen] = React.useState(false);
+  const longPressTimer = React.useRef<number | null>(null);
+  const longPressTriggered = React.useRef(false);
   const normalHours = individualNormalHours(table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
-  function openMenu(event: React.MouseEvent<HTMLElement>) {
+
+  function openSheet() {
+    setActionSheetOpen(true);
+  }
+
+  function startLongPress(event: React.PointerEvent<HTMLButtonElement>) {
+    if (event.pointerType === "mouse") return;
+    longPressTriggered.current = false;
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(() => {
+      longPressTriggered.current = true;
+      openSheet();
+    }, 420);
+  }
+
+  function clearLongPress() {
+    if (!longPressTimer.current) return;
+    window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = null;
+  }
+
+  function handleContextMenu(event: React.MouseEvent<HTMLElement>) {
     event.preventDefault();
     event.stopPropagation();
-    setMenuPosition({ x: event.clientX, y: event.clientY });
+    openSheet();
   }
+
+  React.useEffect(() => () => clearLongPress(), []);
+
   return (
     <div className="relative">
       <button
         type="button"
         title={individualTooltipText(entry, holiday, workDay, normalHours)}
         className={`h-14 w-full rounded-lg border border-slate-200 text-center text-[11px] font-black dark:border-slate-800 ${individualCellClass(type)}`}
-        onClick={() => {
+        onPointerDown={startLongPress}
+        onPointerUp={clearLongPress}
+        onPointerCancel={clearLongPress}
+        onPointerLeave={clearLongPress}
+        onClick={(event) => {
+          if (longPressTriggered.current) {
+            event.preventDefault();
+            longPressTriggered.current = false;
+            return;
+          }
           if (!entry && workDay) onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
-          else setMenuPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+          else openSheet();
         }}
-        onContextMenu={openMenu}
+        onContextMenu={handleContextMenu}
       >
         <span className="block text-[10px] text-current/70">{day.day}</span>
         <span>{entry ? (["normal", "overtime"].includes(entry.type) ? `${formatNumber(entry.hours)}h` : individualEntryCode(entry.type)) : holiday ? "H" : workDay ? "+" : "-"}</span>
       </button>
-      {menuPosition ? (
-        <CellActionPopover
-          x={menuPosition.x}
-          y={menuPosition.y}
-          onClose={() => setMenuPosition(null)}
+      {actionSheetOpen ? (
+        <CellActionSheet
+          onClose={() => setActionSheetOpen(false)}
           onApply={(type, reason) => {
-            setMenuPosition(null);
+            setActionSheetOpen(false);
             if (type === "clear") onSetEntry(row.id, day.iso, null);
             else if (type === "normal") onSetEntry(row.id, day.iso, { type: "normal", hours: normalHours });
             else onSetEntry(row.id, day.iso, { type, hours: 0, reason });
@@ -1325,31 +1358,85 @@ function CellActionPopover({
   onClose: () => void;
   onApply: (type: string, reason?: string) => void;
 }) {
+  const [view, setView] = React.useState<"main" | "special">("main");
   const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 164));
-  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 290));
+  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - (view === "special" ? 260 : 178)));
   if (typeof document === "undefined") return null;
   return createPortal(
     <>
       <button type="button" aria-label="Close cell menu" className="fixed inset-0 z-[99] cursor-default bg-transparent" onClick={onClose} />
       <div
         className="fixed z-[100] w-36 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
-        style={{ left, top }}
+        style={{ left, top, fontSize: 11 }}
         onClick={(event) => event.stopPropagation()}
       >
-        <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
-        <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
-        <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
-        <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
-        <details className="group">
-          <summary className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">Special Event</summary>
-          <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-800">
-            {SPECIAL_EVENT_REASONS.map((reason) => (
-              <button key={reason} type="button" className={menuItemClass("pl-4 text-[10px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
-            ))}
+        {view === "main" ? (
+          <>
+            <button type="button" className={menuItemClass()} onClick={() => onApply("normal")}>Normal shift</button>
+            <button type="button" className={menuItemClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
+            <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
+            <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
+            <button type="button" className={menuItemClass()} onClick={() => setView("special")}>Special Event</button>
+            <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+            <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
+            <button type="button" className={menuItemClass("text-slate-500 dark:text-slate-400")} onClick={onClose}>Close</button>
+          </>
+        ) : (
+          <div className="grid gap-0.5">
+            <div className="mb-1 flex items-center gap-1 border-b border-slate-100 pb-1 dark:border-slate-800">
+              <button type="button" className={menuItemClass("w-auto px-1.5 text-slate-500 dark:text-slate-400")} onClick={() => setView("main")}>Back</button>
+              <span className="truncate text-[10px] font-black uppercase tracking-[0.08em] text-slate-500 dark:text-slate-400">Special</span>
+            </div>
+            <div className="grid max-h-56 gap-0.5 overflow-y-auto pr-0.5">
+              {SPECIAL_EVENT_REASONS.map((reason) => (
+                <button key={reason} type="button" className={menuItemClass()} onClick={() => onApply("special_event", reason)}>{reason}</button>
+              ))}
+            </div>
           </div>
-        </details>
-        <button type="button" className={menuItemClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
-        <button type="button" className={menuItemClass("text-slate-500")} onClick={onClose}>Close</button>
+        )}
+      </div>
+    </>,
+    document.body
+  );
+}
+
+function CellActionSheet({
+  onClose,
+  onApply
+}: {
+  onClose: () => void;
+  onApply: (type: string, reason?: string) => void;
+}) {
+  const [view, setView] = React.useState<"main" | "special">("main");
+  if (typeof document === "undefined") return null;
+  return createPortal(
+    <>
+      <button type="button" aria-label="Close cell actions" className="fixed inset-0 z-[99] bg-slate-950/35 backdrop-blur-[2px]" onClick={onClose} />
+      <div className="fixed inset-x-0 bottom-0 z-[100] rounded-t-2xl border border-slate-200 bg-white p-3 shadow-2xl shadow-slate-950/25 dark:border-slate-700 dark:bg-slate-900">
+        <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />
+        {view === "main" ? (
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" className={sheetActionClass()} onClick={() => onApply("normal")}>Normal</button>
+            <button type="button" className={sheetActionClass()} onClick={() => onApply("vacation")}>Vacation CO</button>
+            <button type="button" className={sheetActionClass()} onClick={() => onApply("medical")}>Medical CM</button>
+            <button type="button" className={sheetActionClass()} onClick={() => onApply("absence")}>Absence</button>
+            <button type="button" className={sheetActionClass("col-span-2")} onClick={() => setView("special")}>Special Event</button>
+            <button type="button" className={sheetActionClass("text-rose-700 dark:text-rose-300")} onClick={() => onApply("clear")}>Clear</button>
+            <button type="button" className={sheetActionClass("text-slate-500 dark:text-slate-400")} onClick={onClose}>Close</button>
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2">
+              <button type="button" className={sheetActionClass("h-9 px-3")} onClick={() => setView("main")}>Back</button>
+              <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Special Event</span>
+            </div>
+            <div className="grid max-h-[52vh] grid-cols-2 gap-2 overflow-y-auto pb-1">
+              {SPECIAL_EVENT_REASONS.map((reason) => (
+                <button key={reason} type="button" className={sheetActionClass()} onClick={() => onApply("special_event", reason)}>{reason}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </>,
     document.body
@@ -1477,6 +1564,10 @@ function tableInputClass(extra = "") {
   return `h-8 w-full rounded-md bg-transparent px-2 text-xs font-semibold text-slate-950 outline-none placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-teal-600 dark:text-white dark:placeholder:text-slate-500 dark:focus:bg-slate-950 ${extra}`;
 }
 
+function employeeNameInputClass(extra = "") {
+  return `h-8 w-full rounded-md bg-transparent px-2 text-[15px] font-black leading-none text-slate-950 outline-none placeholder:text-slate-400 focus:bg-white focus:ring-1 focus:ring-teal-600 dark:text-white dark:placeholder:text-slate-500 dark:focus:bg-slate-950 ${extra}`;
+}
+
 function tinyActionClass(extra = "") {
   return `rounded-md px-1.5 py-1 text-[10px] font-black uppercase tracking-[0.08em] hover:bg-slate-100 dark:hover:bg-slate-800 ${extra}`;
 }
@@ -1486,7 +1577,11 @@ function compactToggleClass(extra = "") {
 }
 
 function menuItemClass(extra = "") {
-  return `block w-full rounded-md px-2 py-1 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+  return `block w-full rounded-md px-2 py-0.5 text-left text-[11px] font-bold leading-5 text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+}
+
+function sheetActionClass(extra = "") {
+  return `inline-flex min-h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-xs font-black text-slate-700 shadow-sm shadow-slate-200/60 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:shadow-black/20 dark:hover:bg-slate-800 ${extra}`;
 }
 
 function dayHeaderClass(tone: "workday" | "weekend" | "holiday") {
