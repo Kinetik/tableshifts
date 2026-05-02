@@ -924,7 +924,7 @@ function DesktopIndividualTable({
                 <tr key={row.id} className="group border-b border-slate-100 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
                   <td className="sticky left-0 z-20 border-r border-slate-200 bg-white px-2 py-1 shadow-[12px_0_18px_-18px_rgba(15,23,42,.7)] group-hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:group-hover:bg-slate-800">
                     <input
-                      className={tableInputClass("font-black")}
+                      className={tableInputClass("text-sm font-black")}
                       value={row.name}
                       placeholder="Employee name"
                       onChange={(event) => onUpdateRow(row.id, { name: event.target.value })}
@@ -1087,7 +1087,7 @@ function MobileIndividualTable({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-slate-100 px-1.5 text-[10px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-300">{index + 1}</span>
-                  <span className="truncate text-sm font-black text-slate-950 dark:text-white">{row.name || "Employee name"}</span>
+                  <span className="truncate text-base font-black text-slate-950 dark:text-white">{row.name || "Employee name"}</span>
                 </div>
                 <p className="mt-0.5 truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
                   {[row.department, row.position].filter(Boolean).join(" / ") || row.company || row.identificationNumber || "No details yet"}
@@ -1325,14 +1325,14 @@ function CellActionPopover({
   onClose: () => void;
   onApply: (type: string, reason?: string) => void;
 }) {
-  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 196));
-  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 340));
+  const left = typeof window === "undefined" ? x : Math.max(8, Math.min(x, window.innerWidth - 164));
+  const top = typeof window === "undefined" ? y : Math.max(8, Math.min(y, window.innerHeight - 290));
   if (typeof document === "undefined") return null;
   return createPortal(
     <>
       <button type="button" aria-label="Close cell menu" className="fixed inset-0 z-[99] cursor-default bg-transparent" onClick={onClose} />
       <div
-        className="fixed z-[100] w-44 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
+        className="fixed z-[100] w-36 rounded-lg border border-slate-200 bg-white p-1 text-left shadow-2xl shadow-slate-950/20 dark:border-slate-700 dark:bg-slate-900"
         style={{ left, top }}
         onClick={(event) => event.stopPropagation()}
       >
@@ -1341,10 +1341,10 @@ function CellActionPopover({
         <button type="button" className={menuItemClass()} onClick={() => onApply("medical")}>Medical CM</button>
         <button type="button" className={menuItemClass()} onClick={() => onApply("absence")}>Absence</button>
         <details className="group">
-          <summary className="cursor-pointer rounded-md px-2 py-1.5 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800">Special Event</summary>
+          <summary className="cursor-pointer rounded-md px-2 py-1 text-[11px] font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800">Special Event</summary>
           <div className="mt-1 grid gap-0.5 border-t border-slate-100 pt-1 dark:border-slate-800">
             {SPECIAL_EVENT_REASONS.map((reason) => (
-              <button key={reason} type="button" className={menuItemClass("pl-4 text-[11px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
+              <button key={reason} type="button" className={menuItemClass("pl-4 text-[10px]")} onClick={() => onApply("special_event", reason)}>{reason}</button>
             ))}
           </div>
         </details>
@@ -1486,7 +1486,7 @@ function compactToggleClass(extra = "") {
 }
 
 function menuItemClass(extra = "") {
-  return `block w-full rounded-md px-2 py-1.5 text-left text-xs font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
+  return `block w-full rounded-md px-2 py-1 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800 ${extra}`;
 }
 
 function dayHeaderClass(tone: "workday" | "weekend" | "holiday") {
