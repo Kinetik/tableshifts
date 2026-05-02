@@ -1305,9 +1305,12 @@ function ExpiryBadge({ expiresAt }: { expiresAt?: string }) {
   const days = Math.floor(remaining / 86400000);
   const hours = Math.floor((remaining % 86400000) / 3600000);
   const tone = days <= 7 ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300" : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300";
+  const valueTone = days <= 7 ? "text-rose-900 dark:text-rose-100" : "text-slate-950 dark:text-white";
   return (
-    <span className={`inline-flex h-6 items-center rounded-full border px-2.5 text-[10px] font-black uppercase tracking-[0.12em] ${tone}`}>
-      Expires {days}d {hours}h
+    <span className={`inline-flex h-6 items-center gap-1.5 rounded-full border px-2.5 text-[11px] font-semibold tracking-normal ${tone}`}>
+      <span>Expires</span>
+      <strong className={`font-black tabular-nums ${valueTone}`}>{days}d</strong>
+      <strong className={`font-black tabular-nums ${valueTone}`}>{hours}h</strong>
     </span>
   );
 }
@@ -1742,13 +1745,9 @@ function MobileIndividualTable({
   const companyName = company?.name || DEFAULT_COMPANY_NAME;
   const departments = company?.departments.length ? company.departments : [defaultIndividualDepartment(DEFAULT_DEPARTMENT_NAME, 0)];
   const visibleRows = table.rows.filter((row) => row.company === companyName);
-  const [openRowId, setOpenRowId] = React.useState(visibleRows[0]?.id || "");
+  const [openRowId, setOpenRowId] = React.useState("");
   React.useEffect(() => {
-    if (!visibleRows.length) {
-      setOpenRowId("");
-      return;
-    }
-    if (!visibleRows.some((row) => row.id === openRowId)) setOpenRowId(visibleRows[0].id);
+    if (openRowId && !visibleRows.some((row) => row.id === openRowId)) setOpenRowId("");
   }, [openRowId, visibleRows]);
 
   return (
@@ -1786,7 +1785,7 @@ function MobileIndividualTable({
                     <button
                       type="button"
                       className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition ${expanded ? "bg-teal-50/70 dark:bg-teal-950/30" : "bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800/70"}`}
-                      onClick={() => setOpenRowId(row.id)}
+                      onClick={() => setOpenRowId(expanded ? "" : row.id)}
                       aria-expanded={expanded}
                     >
                       <div className="min-w-0">
@@ -2176,7 +2175,6 @@ function TotalCell({ children, tone = "neutral" }: { children: React.ReactNode; 
 function individualHeaderStats(table: IndividualTableData) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-  const rowsWithChartInput = table.rows.filter((row) => individualRowHasContent(row) || days.some((day) => table.entries[row.id]?.[day.iso]));
   const totals = table.rows.reduce(
     (sum, row) => {
       const rowTotals = individualTotals(row, table);
@@ -2205,12 +2203,19 @@ function individualHeaderStats(table: IndividualTableData) {
     daily: days
       .filter((day) => isIndividualWorkDay(day, holidaysByDate))
       .map((day) => {
-        const worked = rowsWithChartInput.reduce((sum, row) => {
+        const chartTotals = table.rows.reduce((sum, row) => {
           const entry = table.entries[row.id]?.[day.iso];
-          return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
-        }, 0);
-        const norm = rowsWithChartInput.reduce((sum, row) => sum + individualRowNormalHours(row, table), 0);
-        return { day: day.day, worked, variance: worked - norm };
+          if (!entry) return sum;
+          const normalHours = individualRowNormalHours(row, table);
+          if (["normal", "overtime"].includes(entry.type)) {
+            return { worked: sum.worked + Number(entry.hours || 0), norm: sum.norm + normalHours };
+          }
+          if (["vacation", "medical", "special_event", "absence"].includes(entry.type)) {
+            return { worked: sum.worked + normalHours, norm: sum.norm + normalHours };
+          }
+          return sum;
+        }, { worked: 0, norm: 0 });
+        return { day: day.day, worked: chartTotals.worked, variance: chartTotals.worked - chartTotals.norm };
       })
   };
 }
