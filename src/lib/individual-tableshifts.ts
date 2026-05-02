@@ -20,6 +20,7 @@ export type IndividualDepartmentGroup = {
   id: string;
   name: string;
   order: number;
+  normalHours?: number;
 };
 
 export type IndividualCompanyGroup = {
@@ -50,6 +51,7 @@ export type IndividualTableData = {
   createdAt?: string;
   expiresAt?: string;
   speedDialSpotlightSeenAt?: string;
+  speedDialSpotlightSeenVersion?: number;
   organizations?: IndividualCompanyGroup[];
   rows: IndividualRow[];
   employeePool?: IndividualRow[];
@@ -181,6 +183,7 @@ export function migrateIndividualTable(raw: unknown, id: string): IndividualTabl
     createdAt,
     expiresAt: typeof data.expiresAt === "string" && Number.isFinite(Date.parse(data.expiresAt)) ? data.expiresAt : individualExpiryFromCreatedAt(createdAt),
     speedDialSpotlightSeenAt: typeof data.speedDialSpotlightSeenAt === "string" && Number.isFinite(Date.parse(data.speedDialSpotlightSeenAt)) ? data.speedDialSpotlightSeenAt : undefined,
+    speedDialSpotlightSeenVersion: Number.isFinite(Number(data.speedDialSpotlightSeenVersion)) ? Number(data.speedDialSpotlightSeenVersion) : undefined,
     organizations: sanitizeIndividualOrganizations(organizations, normalizedRows),
     rows: normalizedRows,
     employeePool: Array.isArray(data.employeePool) ? data.employeePool.map(sanitizeIndividualRow) : normalizedRows.filter(individualRowHasContent),
@@ -284,15 +287,27 @@ function sanitizeIndividualCompany(company: Partial<IndividualCompanyGroup>, ind
 }
 
 function sanitizeIndividualDepartment(department: Partial<IndividualDepartmentGroup>, index: number): IndividualDepartmentGroup {
+  const normalHours = Number(department.normalHours);
   return {
     id: department.id || makeIndividualId("dept"),
     name: typeof department.name === "string" && department.name.trim() ? department.name.trim() : `${DEFAULT_DEPARTMENT_NAME} ${index + 1}`,
-    order: Number.isFinite(Number(department.order)) ? Number(department.order) : index
+    order: Number.isFinite(Number(department.order)) ? Number(department.order) : index,
+    normalHours: Number.isFinite(normalHours) ? sanitizeIndividualNormalHours(normalHours) : undefined
   };
 }
 
 export function individualNormalHours(table: Pick<IndividualTableData, "normalHours">) {
   return sanitizeIndividualNormalHours(table.normalHours);
+}
+
+export function individualDepartmentNormalHours(department: Pick<IndividualDepartmentGroup, "normalHours"> | undefined, table: Pick<IndividualTableData, "normalHours">) {
+  return sanitizeIndividualNormalHours(department?.normalHours ?? table.normalHours);
+}
+
+export function individualRowNormalHours(row: IndividualRow, table: IndividualTableData) {
+  const company = table.organizations?.find((item) => item.name === row.company);
+  const department = company?.departments.find((item) => item.name === row.department);
+  return individualDepartmentNormalHours(department, table);
 }
 
 export function isIndividualWorkDay(day: ReturnType<typeof daysInMonth>[number], holidaysByDate: Map<string, IndividualHoliday>) {
@@ -301,7 +316,7 @@ export function isIndividualWorkDay(day: ReturnType<typeof daysInMonth>[number],
 
 export function individualTotals(row: IndividualRow, table: IndividualTableData) {
   const holidays = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-  const normal = individualNormalHours(table);
+  const normal = individualRowNormalHours(row, table);
   const totals = daysInMonth(table.month).reduce((acc, day) => {
     const entry = table.entries[row.id]?.[day.iso];
     if (isIndividualWorkDay(day, holidays)) acc.norm += normal;

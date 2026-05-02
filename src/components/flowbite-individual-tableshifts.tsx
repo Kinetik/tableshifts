@@ -3,6 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { Monitor, Moon, Sun } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { daysInMonth, formatNumber, monthOptions } from "@/lib/tableshifts";
 import {
@@ -23,9 +24,10 @@ import {
   defaultIndividualRow,
   downloadIndividualTemplate,
   exportIndividualXlsx,
+  individualDepartmentNormalHours,
   individualEntryCode,
-  individualNormalHours,
   individualRowHasContent,
+  individualRowNormalHours,
   individualRowsFromMatrix,
   individualTooltipText,
   individualTotals,
@@ -41,6 +43,7 @@ type Props = {
 
 type ThemeMode = "light" | "dark" | "auto";
 type LayoutMode = "desktop" | "mobile";
+const SPEED_DIAL_SPOTLIGHT_VERSION = 2;
 
 export function FlowbiteIndividualTableShiftsApp({ supabaseUrl, supabaseAnonKey }: Props) {
   const supabase = React.useMemo<SupabaseClient | null>(() => {
@@ -214,10 +217,12 @@ function PremiumCalmLogin({
               </div>
               <button
                 type="button"
-                className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 onClick={() => setTheme(nextThemeMode(theme))}
+                title={`Theme: ${themeLabel(theme)}`}
+                aria-label={`Theme: ${themeLabel(theme)}`}
               >
-                {themeLabel(theme)}
+                <ThemeModeIcon theme={theme} />
               </button>
             </div>
 
@@ -357,10 +362,14 @@ function IndividualTableWorkspace({
   }, [activeCompanyId, organizations]);
 
   React.useEffect(() => {
-    if (table.speedDialSpotlightSeenAt || markedSpotlightTableRef.current === table.id) return;
+    if (table.speedDialSpotlightSeenVersion === SPEED_DIAL_SPOTLIGHT_VERSION || markedSpotlightTableRef.current === table.id) return;
     markedSpotlightTableRef.current = table.id;
     setSpeedDialSpotlightTableId(table.id);
-    onSave({ ...table, speedDialSpotlightSeenAt: new Date().toISOString() });
+    onSave({
+      ...table,
+      speedDialSpotlightSeenAt: new Date().toISOString(),
+      speedDialSpotlightSeenVersion: SPEED_DIAL_SPOTLIGHT_VERSION
+    });
   }, [table, onSave]);
 
   function updateTable(patch: Partial<IndividualTableData>) {
@@ -409,7 +418,7 @@ function IndividualTableWorkspace({
 
   function fillRow(row: IndividualRow) {
     const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-    const normal = individualNormalHours(table);
+    const normal = individualRowNormalHours(row, table);
     const rowEntries = { ...(table.entries[row.id] || {}) };
     days.forEach((day) => {
       if (isIndividualWorkDay(day, holidaysByDate) && !rowEntries[day.iso]) rowEntries[day.iso] = { type: "normal", hours: normal };
@@ -523,6 +532,17 @@ function IndividualTableWorkspace({
     onSave({ ...table, organizations: nextOrganizations, rows, employeePool });
   }
 
+  function updateDepartmentHours(companyId: string, departmentId: string, normalHours: number) {
+    const nextHours = Math.max(1, Math.min(24, Math.round(Number(normalHours) || 8)));
+    onSave({
+      ...table,
+      organizations: organizations.map((company) => company.id === companyId ? {
+        ...company,
+        departments: company.departments.map((department) => department.id === departmentId ? { ...department, normalHours: nextHours } : department)
+      } : company)
+    });
+  }
+
   function moveRowToDepartment(rowId: string, companyName: string, departmentName: string, beforeRowId?: string) {
     const row = table.rows.find((item) => item.id === rowId);
     if (!row) return;
@@ -632,8 +652,14 @@ function IndividualTableWorkspace({
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className={secondaryButtonClass()} onClick={copyLink}>Copy Link</button>
-              <button type="button" className={secondaryButtonClass()} onClick={() => setTheme(nextThemeMode(theme))}>
-                {themeLabel(theme)}
+              <button
+                type="button"
+                className={secondaryButtonClass("h-9 w-9 px-0")}
+                onClick={() => setTheme(nextThemeMode(theme))}
+                title={`Theme: ${themeLabel(theme)}`}
+                aria-label={`Theme: ${themeLabel(theme)}`}
+              >
+                <ThemeModeIcon theme={theme} />
               </button>
               <button type="button" className={primaryDarkButtonClass()} onClick={onBack}>
                 Login
@@ -649,13 +675,6 @@ function IndividualTableWorkspace({
                 <CompactField label="Month" className="w-[152px]">
                   <select className={centeredSelectClass()} value={table.month} onChange={(event) => updateTable({ month: event.target.value })}>
                     {monthOptions(table.month).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                </CompactField>
-                <CompactField label="Shift" className="w-[74px]">
-                  <select className={centeredSelectClass()} value={individualNormalHours(table)} onChange={(event) => updateTable({ normalHours: Number(event.target.value) })}>
-                    {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
-                      <option key={hour} value={hour}>{hour}h</option>
-                    ))}
                   </select>
                 </CompactField>
                 <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
@@ -741,6 +760,7 @@ function IndividualTableWorkspace({
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
               onRenameDepartment={renameDepartment}
+              onUpdateDepartmentHours={updateDepartmentHours}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
               onSetEntry={setEntry}
               onFillRow={fillRow}
@@ -753,6 +773,7 @@ function IndividualTableWorkspace({
               onUpdateRow={updateRow}
               onRemoveRow={removeRow}
               onRenameDepartment={renameDepartment}
+              onUpdateDepartmentHours={updateDepartmentHours}
               onMoveRowToDepartment={moveRowToDepartment}
               onAddRowToDepartment={(companyName, departmentName) => addBlankRow(companyName, departmentName)}
               onSetEntry={setEntry}
@@ -1069,13 +1090,14 @@ function OrganizationSpeedDial({
   return (
     <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
       {spotlight ? (
-        <span
-          className="pointer-events-none absolute bottom-0 right-0 h-16 w-16 rounded-full bg-teal-400/35 blur-sm"
-          style={{ animation: "speedDialSpotlight 2s ease-out forwards" }}
-        />
+        <>
+          <span className="speed-dial-stage-light pointer-events-none fixed inset-0" />
+          <span className="speed-dial-ring pointer-events-none absolute bottom-0 right-0 h-16 w-16 rounded-full" />
+          <span className="speed-dial-ring speed-dial-ring-delay pointer-events-none absolute bottom-0 right-0 h-16 w-16 rounded-full" />
+        </>
       ) : null}
       {open ? (
-        <div className="flex flex-col items-end gap-2">
+        <div className="relative z-10 flex flex-col items-end gap-2">
           <SpeedDialAction label="Company" onClick={() => {
             onAddCompany();
             setOpen(false);
@@ -1095,7 +1117,7 @@ function OrganizationSpeedDial({
         type="button"
         aria-label="Organization actions"
         aria-expanded={open}
-        className="relative inline-flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 text-4xl font-light leading-none text-white shadow-2xl shadow-teal-950/30 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-200 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 dark:focus:ring-teal-900"
+        className="relative z-10 inline-flex h-16 w-16 items-center justify-center rounded-full bg-teal-700 text-4xl font-light leading-none text-white shadow-2xl shadow-teal-950/30 transition hover:bg-teal-800 focus:outline-none focus:ring-4 focus:ring-teal-200 dark:bg-teal-500 dark:text-slate-950 dark:hover:bg-teal-400 dark:focus:ring-teal-900"
         style={spotlight ? { animation: "speedDialEntrance 2s ease-out forwards" } : undefined}
         onClick={() => setOpen((value) => !value)}
       >
@@ -1103,15 +1125,39 @@ function OrganizationSpeedDial({
       </button>
       <style jsx global>{`
         @keyframes speedDialEntrance {
-          0% { transform: scale(0.92); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.55); }
-          35% { transform: scale(1.08); box-shadow: 0 0 0 18px rgba(20, 184, 166, 0.18); }
-          70% { transform: scale(1); box-shadow: 0 0 0 34px rgba(20, 184, 166, 0.06); }
+          0% { transform: scale(0.88); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.65); }
+          30% { transform: scale(1.14); box-shadow: 0 0 0 20px rgba(20, 184, 166, 0.24); }
+          62% { transform: scale(1); box-shadow: 0 0 0 42px rgba(20, 184, 166, 0.08); }
           100% { transform: scale(1); box-shadow: 0 24px 42px rgba(15, 118, 110, 0.3); }
         }
-        @keyframes speedDialSpotlight {
-          0% { opacity: 0; transform: scale(0.6); }
-          25% { opacity: 1; transform: scale(1.6); }
-          100% { opacity: 0; transform: scale(3.2); }
+        .speed-dial-stage-light {
+          z-index: 0;
+          background:
+            radial-gradient(circle at calc(100% - 3.25rem) calc(100% - 3.25rem), rgba(45, 212, 191, 0.34), rgba(45, 212, 191, 0.15) 9rem, rgba(15, 23, 42, 0.08) 18rem, transparent 30rem);
+          animation: speedDialStageLight 2s ease-out forwards;
+        }
+        .dark .speed-dial-stage-light {
+          background:
+            radial-gradient(circle at calc(100% - 3.25rem) calc(100% - 3.25rem), rgba(94, 234, 212, 0.42), rgba(20, 184, 166, 0.22) 10rem, rgba(15, 23, 42, 0.42) 20rem, transparent 32rem);
+        }
+        .speed-dial-ring {
+          border: 2px solid rgba(45, 212, 191, 0.75);
+          box-shadow: 0 0 36px rgba(20, 184, 166, 0.42);
+          animation: speedDialRing 2s ease-out forwards;
+        }
+        .speed-dial-ring-delay {
+          animation-delay: 0.28s;
+        }
+        @keyframes speedDialStageLight {
+          0% { opacity: 0; }
+          18% { opacity: 1; }
+          72% { opacity: 0.72; }
+          100% { opacity: 0; }
+        }
+        @keyframes speedDialRing {
+          0% { opacity: 0; transform: scale(0.75); }
+          22% { opacity: 1; transform: scale(1.3); }
+          100% { opacity: 0; transform: scale(3.8); }
         }
       `}</style>
     </div>
@@ -1197,7 +1243,21 @@ function CompanyTab({
   );
 }
 
-function EditableLabelInput({ value, onCommit, className = "" }: { value: string; onCommit: (value: string) => void; className?: string }) {
+function EditableLabelInput({
+  value,
+  onCommit,
+  className = "",
+  autoSize = false,
+  minCh = 8,
+  maxCh = 24
+}: {
+  value: string;
+  onCommit: (value: string) => void;
+  className?: string;
+  autoSize?: boolean;
+  minCh?: number;
+  maxCh?: number;
+}) {
   const [draft, setDraft] = React.useState(value);
   React.useEffect(() => setDraft(value), [value]);
   function commit() {
@@ -1211,6 +1271,7 @@ function EditableLabelInput({ value, onCommit, className = "" }: { value: string
   return (
     <input
       className={inputClass(`h-8 text-center font-black ${className}`)}
+      style={autoSize ? { width: `${Math.max(minCh, Math.min(maxCh, draft.length + 2))}ch` } : undefined}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
@@ -1222,6 +1283,22 @@ function EditableLabelInput({ value, onCommit, className = "" }: { value: string
         }
       }}
     />
+  );
+}
+
+function DepartmentShiftSelect({ value, onChange }: { value: number; onChange: (value: number) => void }) {
+  return (
+    <select
+      className={centeredSelectClass("h-8 w-[68px] shrink-0 border-slate-200 bg-white px-2 text-sm font-black shadow-sm shadow-slate-200/40 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/20")}
+      value={value}
+      title="Department shift"
+      aria-label="Department shift"
+      onChange={(event) => onChange(Number(event.target.value))}
+    >
+      {Array.from({ length: 24 }, (_, index) => index + 1).map((hour) => (
+        <option key={hour} value={hour}>{hour}h</option>
+      ))}
+    </select>
   );
 }
 
@@ -1318,6 +1395,7 @@ function DesktopIndividualTable({
   onUpdateRow,
   onRemoveRow,
   onRenameDepartment,
+  onUpdateDepartmentHours,
   onMoveRowToDepartment,
   onAddRowToDepartment,
   onSetEntry,
@@ -1334,6 +1412,7 @@ function DesktopIndividualTable({
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onUpdateDepartmentHours: (companyId: string, departmentId: string, normalHours: number) => void;
   onMoveRowToDepartment: (rowId: string, companyName: string, departmentName: string, beforeRowId?: string) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
@@ -1459,13 +1538,20 @@ function DesktopIndividualTable({
                     onDrop={(event) => dropOnDepartment(event, department.name)}
                   >
                     <td colSpan={colSpan} className="px-3 py-2">
-                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(190px,240px)_1fr_minmax(190px,240px)] items-center gap-2">
+                      <div className="sticky left-0 grid w-[calc(100vw-4rem)] max-w-[calc(100vw-4rem)] grid-cols-[minmax(280px,420px)_1fr_minmax(190px,240px)] items-center gap-2">
                         <div className="relative z-10 flex min-w-0 items-center gap-2">
                           <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                           <EditableLabelInput
                             value={department.name}
-                            className="w-[120px] min-w-[120px] max-w-[120px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                            autoSize
+                            minCh={12}
+                            maxCh={28}
+                            className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                             onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                          />
+                          <DepartmentShiftSelect
+                            value={individualDepartmentNormalHours(department, table)}
+                            onChange={(hours) => company && onUpdateDepartmentHours(company.id, department.id, hours)}
                           />
                           <span className="whitespace-nowrap rounded-full bg-white px-2 py-1 text-[10px] font-black tracking-normal text-slate-500 dark:bg-slate-900 dark:text-slate-400">
                             {departmentRows.length} Employees
@@ -1641,6 +1727,7 @@ function MobileIndividualTable({
   onUpdateRow,
   onRemoveRow,
   onRenameDepartment,
+  onUpdateDepartmentHours,
   onAddRowToDepartment,
   onSetEntry,
   onFillRow,
@@ -1651,6 +1738,7 @@ function MobileIndividualTable({
   onUpdateRow: (rowId: string, patch: Partial<IndividualRow>) => void;
   onRemoveRow: (rowId: string) => void;
   onRenameDepartment: (companyId: string, departmentId: string, name: string) => void;
+  onUpdateDepartmentHours: (companyId: string, departmentId: string, normalHours: number) => void;
   onAddRowToDepartment: (companyName: string, departmentName: string) => void;
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
   onFillRow: (row: IndividualRow) => void;
@@ -1681,8 +1769,15 @@ function MobileIndividualTable({
                 <span className="h-2 w-2 rounded-full bg-teal-600 dark:bg-teal-300" />
                 <EditableLabelInput
                   value={department.name}
-                  className="w-[130px] border-transparent bg-transparent text-left focus:bg-white dark:focus:bg-slate-900"
+                  autoSize
+                  minCh={10}
+                  maxCh={22}
+                  className="shrink-0 border-transparent bg-white text-left shadow-sm shadow-slate-200/40 focus:bg-white dark:bg-slate-900 dark:shadow-black/20 dark:focus:bg-slate-900"
                   onCommit={(name) => company && onRenameDepartment(company.id, department.id, name)}
+                />
+                <DepartmentShiftSelect
+                  value={individualDepartmentNormalHours(department, table)}
+                  onChange={(hours) => company && onUpdateDepartmentHours(company.id, department.id, hours)}
                 />
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -1792,7 +1887,7 @@ function MobileDayButton({
   const [actionSheetOpen, setActionSheetOpen] = React.useState(false);
   const longPressTimer = React.useRef<number | null>(null);
   const longPressTriggered = React.useRef(false);
-  const normalHours = individualNormalHours(table);
+  const normalHours = individualRowNormalHours(row, table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const type = entry?.type || (holiday ? "holiday" : workDay ? "empty" : "weekend");
 
@@ -1879,7 +1974,7 @@ function DayCell({
   onSetEntry: (rowId: string, iso: string, entry: IndividualEntry | null) => void;
 }) {
   const [menuPosition, setMenuPosition] = React.useState<{ x: number; y: number } | null>(null);
-  const normalHours = individualNormalHours(table);
+  const normalHours = individualRowNormalHours(row, table);
   const workDay = isIndividualWorkDay(day, new Map(table.holidays.map((item) => [item.date, item])));
   const numeric = !entry || ["normal", "overtime"].includes(entry.type);
   const value = numeric && entry ? String(formatNumber(entry.hours)) : "";
@@ -2088,7 +2183,6 @@ function TotalCell({ children, tone = "neutral" }: { children: React.ReactNode; 
 function individualHeaderStats(table: IndividualTableData) {
   const days = daysInMonth(table.month);
   const holidaysByDate = new Map(table.holidays.map((holiday) => [holiday.date, holiday]));
-  const normal = individualNormalHours(table);
   const rowsWithChartInput = table.rows.filter((row) => individualRowHasContent(row) || days.some((day) => table.entries[row.id]?.[day.iso]));
   const totals = table.rows.reduce(
     (sum, row) => {
@@ -2122,7 +2216,7 @@ function individualHeaderStats(table: IndividualTableData) {
           const entry = table.entries[row.id]?.[day.iso];
           return sum + (entry && ["normal", "overtime"].includes(entry.type) ? Number(entry.hours || 0) : 0);
         }, 0);
-        const norm = rowsWithChartInput.length * normal;
+        const norm = rowsWithChartInput.reduce((sum, row) => sum + individualRowNormalHours(row, table), 0);
         return { day: day.day, worked, variance: worked - norm };
       })
   };
@@ -2215,6 +2309,11 @@ function nextThemeMode(theme: ThemeMode): ThemeMode {
 function themeLabel(theme: ThemeMode) {
   if (theme === "auto") return "Auto";
   return theme === "dark" ? "Dark" : "Light";
+}
+
+function ThemeModeIcon({ theme }: { theme: ThemeMode }) {
+  const Icon = theme === "auto" ? Monitor : theme === "dark" ? Moon : Sun;
+  return <Icon className="h-4 w-4" aria-hidden="true" strokeWidth={2.4} />;
 }
 
 function inputClass(extra = "") {
